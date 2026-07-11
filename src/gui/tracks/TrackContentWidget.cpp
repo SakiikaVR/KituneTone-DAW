@@ -26,8 +26,13 @@
 
 #include <QApplication>
 #include <QContextMenuEvent>
+#include <QFileInfo>
 #include <QMenu>
+#include <QMimeData>
 #include <QPainter>
+#include <QUrl>
+
+#include <algorithm>
 
 #include "AutomationClip.h"
 #include "Clipboard.h"
@@ -37,6 +42,8 @@
 #include "GuiApplication.h"
 #include "PatternEditor.h"
 #include "PatternStore.h"
+#include "SampleClip.h"
+#include "SampleDecoder.h"
 #include "Song.h"
 #include "SongEditor.h"
 #include "StringPairDrag.h"
@@ -46,6 +53,27 @@
 
 namespace lmms::gui
 {
+
+//! Extract local audio files (wav, mp3, ogg, ...) from an external drag,
+//! e.g. from a file manager
+static QStringList localAudioFiles(const QMimeData* md)
+{
+	QStringList files;
+	if (md == nullptr || !md->hasUrls()) { return files; }
+
+	const auto& types = SampleDecoder::supportedAudioTypes();
+	for (const auto& url : md->urls())
+	{
+		if (!url.isLocalFile()) { continue; }
+		const QString file = url.toLocalFile();
+		const QString ext = QFileInfo(file).suffix().toLower();
+		const bool supported = std::any_of(types.begin(), types.end(),
+				[&](const auto& type) { return ext == QString::fromStdString(type.extension); });
+		if (supported) { files << file; }
+	}
+	return files;
+}
+
 
 /*! Alternate between a darker and a lighter background color every 4 bars
  */
@@ -322,6 +350,15 @@ TimePos TrackContentWidget::getPosition( int mouseX )
  */
 void TrackContentWidget::dragEnterEvent( QDragEnterEvent * dee )
 {
+	// audio files dragged in from outside (e.g. a file manager) can be
+	// dropped onto sample tracks
+	if (getTrack()->type() == Track::Type::Sample
+			&& !localAudioFiles(dee->mimeData()).isEmpty())
+	{
+		dee->acceptProposedAction();
+		return;
+	}
+
 	TimePos clipPos = getPosition(position(dee).x());
 	if( canPasteSelection( clipPos, dee ) == false )
 	{
@@ -559,6 +596,29 @@ bool TrackContentWidget::pasteSelection( TimePos clipPos, const QMimeData * md, 
 void TrackContentWidget::dropEvent( QDropEvent * de )
 {
 	const auto pos = position(de);
+
+	// place audio files dropped from outside as sample clips
+	const QStringList audioFiles = localAudioFiles(de->mimeData());
+	if (getTrack()->type() == Track::Type::Sample && !audioFiles.isEmpty())
+	{
+		const float snapSize = getGUI()->songEditor()->m_editor->getSnapSize();
+		TimePos insertPos = m_trackView->trackContainerView()->fixedClips()
+				? TimePos(0)
+				: TimePos(getPosition(pos.x())).quantize(snapSize, true);
+
+		for (const QString& file : audioFiles)
+		{
+			auto clip = dynamic_cast<SampleClip*>(getTrack()->createClip(insertPos));
+			if (clip == nullptr) { break; }
+			clip->setSampleFile(file);
+			// put any additional files one after another
+			insertPos = clip->startPosition() + clip->length();
+		}
+
+		Engine::getSong()->setModified();
+		de->accept();
+		return;
+	}
 
 	TimePos clipPos = TimePos(getPosition(pos.x()));
 	if( pasteSelection( clipPos, de ) == true )

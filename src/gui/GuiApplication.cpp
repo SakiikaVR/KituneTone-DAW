@@ -43,6 +43,7 @@
 #include <QApplication>
 #include <QDebug>
 #include <QDir>
+#include <QFontDatabase>
 #include <QtGlobal>
 #include <QHBoxLayout>
 #include <QLabel>
@@ -106,6 +107,19 @@ GuiApplication::GuiApplication()
 	QDir::addSearchPath("artwork", ConfigManager::inst()->themeDir());
 	QDir::addSearchPath("artwork", ConfigManager::inst()->defaultThemeDir());
 	QDir::addSearchPath("artwork", ":/artwork");
+
+	// Register bundled Noto Sans fonts and use them for the whole UI
+	const QString fontDir = ConfigManager::inst()->dataDir() + "fonts/";
+	for (const auto& fontFile : {"NotoSans-Regular.ttf", "NotoSans-Bold.ttf",
+			"NotoSans-Italic.ttf", "NotoSans-BoldItalic.ttf",
+			"NotoSansJP-Regular.otf", "NotoSansJP-Bold.otf"})
+	{
+		QFontDatabase::addApplicationFont(fontDir + fontFile);
+	}
+	QFont defaultFont("Noto Sans");
+	defaultFont.setFamilies({QStringLiteral("Noto Sans"), QStringLiteral("Noto Sans JP")});
+	defaultFont.setPointSize(9);
+	QApplication::setFont(defaultFont);
 
 	auto lmmsstyle = new LmmsStyle();
 	QApplication::setStyle(lmmsstyle);

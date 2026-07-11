@@ -44,6 +44,12 @@ public:
 	EffectControlDialog(EffectControls* controls);
 	~EffectControlDialog() override = default;
 
+	//! Dialogs for plugins with their own native editor window can return
+	//! true here; the effect's "UI" button then calls toggleExternalUi()
+	//! instead of showing this dialog.
+	virtual bool togglesExternalUi() const { return false; }
+	virtual void toggleExternalUi() {}
+
 protected:
 	EffectControls* m_effectControls;
 };

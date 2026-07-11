@@ -34,6 +34,8 @@
 #include <QMessageBox>
 #include <QShortcut>
 #include <QSplitter>
+#include <QMdiSubWindow>
+#include <QTimer>
 
 #include "AboutDialog.h"
 #include "AutomationEditor.h"
@@ -501,6 +503,18 @@ void MainWindow::finalize()
 	getGUI()->pianoRoll()->parentWidget()->hide();
 	getGUI()->songEditor()->parentWidget()->move(5, 5);
 	getGUI()->songEditor()->parentWidget()->show();
+
+	// maximize the Song Editor once the main window is laid out - doing it
+	// here (during startup, while the splash screen is up) would use the
+	// wrong workspace size
+	QMdiSubWindow* songSubWin = qobject_cast<QMdiSubWindow*>(
+			getGUI()->songEditor()->parentWidget());
+	if (songSubWin != nullptr)
+	{
+		// wait until the main window has been shown and laid out
+		QTimer::singleShot(250, songSubWin, [songSubWin]
+				{ songSubWin->showMaximized(); });
+	}
 
 	// reset window title every time we change the state of a subwindow to show the correct title
 	for( const QMdiSubWindow * subWindow : workspace()->subWindowList() )

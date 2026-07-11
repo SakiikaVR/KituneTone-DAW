@@ -672,7 +672,7 @@ void CompressorControlDialog::drawGraph()
 	m_p.setPen(QPen(m_textColor, 1));
 
 	// Arbitrary formula for increasing font size when window size increases
-	m_p.setFont(QFont("Arial", qMax(int(m_windowSizeY / 1080.f * 24), 12)));
+	m_p.setFont(QFont("Noto Sans", qMax(int(m_windowSizeY / 1080.f * 24), 12)));
 
 	// Redraw graph
 	m_p.setPen(QPen(m_graphColor, 1));

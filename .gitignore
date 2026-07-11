@@ -12,3 +12,8 @@
 Brewfile.lock.json
 /.cache/
 compile_commands.json
+
+# Local build artifacts (fork)
+/install/
+/vcpkg_installed/
+aqtinstall.log

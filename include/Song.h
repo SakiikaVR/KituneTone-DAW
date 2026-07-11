@@ -420,6 +420,7 @@ private:
 	bool m_loadOnLaunch;
 
 	volatile bool m_recording;
+	TimePos m_recordStartPos = TimePos(0);  //!< song position where recording began
 	volatile bool m_exporting;
 	volatile bool m_exportLoop;
 	volatile bool m_renderBetweenMarkers;

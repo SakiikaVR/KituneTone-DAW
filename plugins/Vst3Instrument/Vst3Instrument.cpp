@@ -1,0 +1,365 @@
+/*
+ * Vst3Instrument.cpp - instrument plugin hosting native VST3 instruments
+ *
+ * This file is part of LMMS - https://lmms.io
+ *
+ * This program is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU General Public
+ * License as published by the Free Software Foundation; either
+ * version 2 of the License, or (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public
+ * License along with this program (see COPYING); if not, write to the
+ * Free Software Foundation, Inc., 51 Franklin Street, Fifth Floor,
+ * Boston, MA 02110-1301 USA.
+ *
+ */
+
+#include "Vst3Instrument.h"
+
+#include <QDomDocument>
+#include <QDomElement>
+#include <QFileInfo>
+#include <QInputDialog>
+#include <QLabel>
+#include <QMutexLocker>
+#include <QPushButton>
+#include <QVBoxLayout>
+
+#include "AudioEngine.h"
+#include "Engine.h"
+#include "FileDialog.h"
+#include "InstrumentPlayHandle.h"
+#include "InstrumentTrack.h"
+#include "PathUtil.h"
+#include "SampleFrame.h"
+#include "Song.h"
+#include "Vst3Plugin.h"
+
+#include "embed.h"
+#include "plugin_export.h"
+
+namespace lmms
+{
+
+
+extern "C"
+{
+
+Plugin::Descriptor PLUGIN_EXPORT vst3instrument_plugin_descriptor =
+{
+	LMMS_STRINGIFY( PLUGIN_NAME ),
+	"VST3",
+	QT_TRANSLATE_NOOP( "PluginBrowser",
+			"plugin for using native VST3 instruments inside LMMS." ),
+	"LMMS Developers",
+	0x0100,
+	Plugin::Type::Instrument,
+	new PluginPixmapLoader("logo"),
+	"vst3",
+	nullptr,
+} ;
+
+}
+
+
+
+
+Vst3Instrument::Vst3Instrument(InstrumentTrack* track) :
+	Instrument(track, &vst3instrument_plugin_descriptor, nullptr,
+			Flag::IsSingleStreamed | Flag::IsMidiBased)
+{
+	// we need a play-handle which cares for calling play()
+	auto iph = new InstrumentPlayHandle(this, track);
+	Engine::audioEngine()->addPlayHandle(iph);
+}
+
+
+
+
+Vst3Instrument::~Vst3Instrument()
+{
+	Engine::audioEngine()->removePlayHandlesOfTypes(instrumentTrack(),
+			PlayHandle::Type::NotePlayHandle | PlayHandle::Type::InstrumentPlayHandle);
+	closePlugin();
+}
+
+
+
+
+void Vst3Instrument::closePlugin()
+{
+	QMutexLocker lock(&m_pluginMutex);
+	m_plugin.reset();
+	m_pluginFile.clear();
+}
+
+
+
+
+void Vst3Instrument::loadFile(const QString& file)
+{
+	{
+		QMutexLocker lock(&m_pluginMutex);
+		m_plugin.reset();
+
+		bool error = false;
+		QString absFile = PathUtil::toAbsolute(file, &error);
+		if (error) { absFile = file; }
+
+		auto plugin = std::make_unique<Vst3Plugin>(absFile, Vst3Plugin::Kind::Instrument);
+		if (plugin->failed())
+		{
+			collectErrorForUI(Vst3Plugin::tr("The VST3 plugin %1 could not be loaded: %2")
+					.arg(file, plugin->errorString()));
+		}
+		else
+		{
+			m_plugin = std::move(plugin);
+			m_pluginFile = PathUtil::toShortestRelative(absFile);
+		}
+	}
+
+	if (m_plugin && m_plugin->hasEditor() && instrumentTrack() != nullptr
+			&& !instrumentTrack()->isPreviewMode())
+	{
+		m_plugin->showEditor();
+	}
+
+	emit pluginChanged();
+	emit dataChanged();
+}
+
+
+
+
+void Vst3Instrument::play(SampleFrame* workingBuffer)
+{
+	const f_cnt_t frames = Engine::audioEngine()->framesPerPeriod();
+
+	if (m_pluginMutex.tryLock(Engine::getSong()->isExporting() ? -1 : 0))
+	{
+		if (m_plugin != nullptr)
+		{
+			m_plugin->process(nullptr, workingBuffer, frames);
+		}
+		else
+		{
+			zeroSampleFrames(workingBuffer, frames);
+		}
+		m_pluginMutex.unlock();
+	}
+	else
+	{
+		zeroSampleFrames(workingBuffer, frames);
+	}
+}
+
+
+
+
+bool Vst3Instrument::handleMidiEvent(const MidiEvent& event, const TimePos&, f_cnt_t offset)
+{
+	if (m_pluginMutex.tryLock(10))
+	{
+		if (m_plugin != nullptr) { m_plugin->queueMidiEvent(event, offset); }
+		m_pluginMutex.unlock();
+	}
+	return true;
+}
+
+
+
+
+void Vst3Instrument::saveSettings(QDomDocument& doc, QDomElement& element)
+{
+	QMutexLocker lock(&m_pluginMutex);
+	if (m_plugin == nullptr) { return; }
+
+	element.setAttribute("plugin", m_pluginFile);
+	element.setAttribute("guivisible", m_plugin->editorVisible() ? 1 : 0);
+	m_plugin->saveState(doc, element);
+}
+
+
+
+
+void Vst3Instrument::loadSettings(const QDomElement& element)
+{
+	const QString file = element.attribute("plugin");
+	if (file.isEmpty()) { return; }
+
+	loadFile(file);
+
+	QMutexLocker lock(&m_pluginMutex);
+	if (m_plugin == nullptr) { return; }
+
+	m_plugin->loadState(element);
+
+	const bool showGui = element.attribute("guivisible").toInt() != 0
+			&& (instrumentTrack() == nullptr || !instrumentTrack()->isPreviewMode());
+	if (showGui) { m_plugin->showEditor(); }
+	else { m_plugin->hideEditor(); }
+}
+
+
+
+
+QString Vst3Instrument::nodeName() const
+{
+	return vst3instrument_plugin_descriptor.name;
+}
+
+
+
+
+gui::PluginView* Vst3Instrument::instantiateView(QWidget* parent)
+{
+	return new gui::Vst3InstrumentView(this, parent);
+}
+
+
+
+
+namespace gui
+{
+
+
+Vst3InstrumentView::Vst3InstrumentView(Vst3Instrument* instrument, QWidget* parent) :
+	InstrumentViewFixedSize(instrument, parent)
+{
+	auto layout = new QVBoxLayout(this);
+	layout->setContentsMargins(16, 16, 16, 16);
+	layout->setSpacing(8);
+
+	auto title = new QLabel(tr("VST3 Host"), this);
+	QFont titleFont = title->font();
+	titleFont.setBold(true);
+	title->setFont(titleFont);
+	layout->addWidget(title);
+
+	m_nameLabel = new QLabel(tr("No plugin loaded"), this);
+	m_nameLabel->setWordWrap(true);
+	layout->addWidget(m_nameLabel);
+
+	layout->addStretch();
+
+	m_openButton = new QPushButton(tr("Open VST3 plugin..."), this);
+	connect(m_openButton, &QPushButton::clicked, this, &Vst3InstrumentView::openPlugin);
+	layout->addWidget(m_openButton);
+
+	m_guiButton = new QPushButton(tr("Show/hide GUI"), this);
+	connect(m_guiButton, &QPushButton::clicked, this, &Vst3InstrumentView::toggleGui);
+	layout->addWidget(m_guiButton);
+
+	updateName();
+}
+
+
+
+
+void Vst3InstrumentView::modelChanged()
+{
+	auto m = castModel<Vst3Instrument>();
+	connect(m, &Vst3Instrument::pluginChanged, this, &Vst3InstrumentView::updateName);
+	updateName();
+}
+
+
+
+
+void Vst3InstrumentView::updateName()
+{
+	auto m = castModel<Vst3Instrument>();
+	if (m != nullptr && m->plugin() != nullptr)
+	{
+		m_nameLabel->setText(m->plugin()->name() + "\n" + m->plugin()->vendor());
+		m_guiButton->setEnabled(true);
+	}
+	else
+	{
+		m_nameLabel->setText(tr("No plugin loaded"));
+		m_guiButton->setEnabled(false);
+	}
+}
+
+
+
+
+void Vst3InstrumentView::openPlugin()
+{
+	auto m = castModel<Vst3Instrument>();
+	if (m == nullptr) { return; }
+
+	// list all installed VST3 modules from the standard locations
+	QStringList paths;
+	for (const auto& path : Vst3Plugin::modulePaths())
+	{
+		paths << QString::fromStdString(path);
+	}
+
+	QStringList names;
+	for (const QString& p : paths)
+	{
+		names << QFileInfo(p).completeBaseName();
+	}
+	names << tr("[ Browse for file... ]");
+
+	bool ok = false;
+	const QString chosen = QInputDialog::getItem(this, tr("Open VST3 plugin"),
+			tr("Installed VST3 plugins:"), names, 0, false, &ok);
+	if (!ok || chosen.isEmpty()) { return; }
+
+	QString file;
+	const int index = names.indexOf(chosen);
+	if (index >= 0 && index < paths.size())
+	{
+		file = paths[index];
+	}
+	else
+	{
+		FileDialog ofd(nullptr, tr("Open VST3 plugin"));
+		ofd.setNameFilters({tr("VST3 plugins (*.vst3)")});
+		if (ofd.exec() != QDialog::Accepted || ofd.selectedFiles().isEmpty()) { return; }
+		file = ofd.selectedFiles()[0];
+	}
+
+	Engine::audioEngine()->requestChangeInModel();
+	m->loadFile(file);
+	Engine::audioEngine()->doneChangeInModel();
+}
+
+
+
+
+void Vst3InstrumentView::toggleGui()
+{
+	auto m = castModel<Vst3Instrument>();
+	if (m != nullptr && m->plugin() != nullptr)
+	{
+		m->plugin()->toggleEditor();
+	}
+}
+
+
+} // namespace gui
+
+
+extern "C"
+{
+
+// necessary for getting instance out of shared lib
+PLUGIN_EXPORT Plugin* lmms_plugin_main(Model* m, void*)
+{
+	return new Vst3Instrument(static_cast<InstrumentTrack*>(m));
+}
+
+}
+
+
+} // namespace lmms

@@ -16139,4 +16139,96 @@ Latency: %2 ms</source>
         <translation>GUIを表示</translation>
     </message>
 </context>
+<context>
+    <name>lmms::gui::Vst3InstrumentView</name>
+    <message>
+        <source>VST3 Host</source>
+        <translation>VST3ホスト</translation>
+    </message>
+    <message>
+        <source>No plugin loaded</source>
+        <translation>プラグインが読み込まれていません</translation>
+    </message>
+    <message>
+        <source>Open VST3 plugin...</source>
+        <translation>VST3プラグインを開く...</translation>
+    </message>
+    <message>
+        <source>Show/hide GUI</source>
+        <translation>GUIを表示/非表示</translation>
+    </message>
+    <message>
+        <source>Open VST3 plugin</source>
+        <translation>VST3プラグインを開く</translation>
+    </message>
+    <message>
+        <source>Installed VST3 plugins:</source>
+        <translation>インストール済みVST3プラグイン:</translation>
+    </message>
+    <message>
+        <source>[ Browse for file... ]</source>
+        <translation>[ ファイルを参照... ]</translation>
+    </message>
+    <message>
+        <source>VST3 plugins (*.vst3)</source>
+        <translation>VST3プラグイン (*.vst3)</translation>
+    </message>
+</context>
+<context>
+    <name>lmms::gui::Vst3EffectControlDialog</name>
+    <message>
+        <source>No plugin loaded</source>
+        <translation>プラグインが読み込まれていません</translation>
+    </message>
+    <message>
+        <source>Show/hide GUI</source>
+        <translation>GUIを表示/非表示</translation>
+    </message>
+</context>
+<context>
+    <name>lmms::Vst3Plugin</name>
+    <message>
+        <source>Always on top</source>
+        <translation>常に最前面</translation>
+    </message>
+    <message>
+        <source>Keep this window above all others</source>
+        <translation>このウィンドウを常に手前に表示します</translation>
+    </message>
+    <message>
+        <source>The VST3 plugin %1 could not be loaded: %2</source>
+        <translation>VST3プラグイン %1 を読み込めませんでした: %2</translation>
+    </message>
+    <message>
+        <source>No suitable VST3 audio class found in %1</source>
+        <translation>%1 に適切なVST3オーディオクラスが見つかりません</translation>
+    </message>
+    <message>
+        <source>Failed to initialize VST3 plugin %1</source>
+        <translation>VST3プラグイン %1 の初期化に失敗しました</translation>
+    </message>
+    <message>
+        <source>VST3 plugin %1 has no audio processor</source>
+        <translation>VST3プラグイン %1 にオーディオプロセッサがありません</translation>
+    </message>
+    <message>
+        <source>VST3 plugin %1 has no audio output</source>
+        <translation>VST3プラグイン %1 にオーディオ出力がありません</translation>
+    </message>
+    <message>
+        <source>Failed to set up processing for VST3 plugin %1</source>
+        <translation>VST3プラグイン %1 の処理設定に失敗しました</translation>
+    </message>
+</context>
+<context>
+    <name>PluginBrowser</name>
+    <message>
+        <source>plugin for using native VST3 instruments inside LMMS.</source>
+        <translation>ネイティブVST3インストゥルメントをLMMSで使用するためのプラグインです。</translation>
+    </message>
+    <message>
+        <source>plugin for using native VST3 effects inside LMMS.</source>
+        <translation>ネイティブVST3エフェクトをLMMSで使用するためのプラグインです。</translation>
+    </message>
+</context>
 </TS>

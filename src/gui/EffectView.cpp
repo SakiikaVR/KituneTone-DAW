@@ -79,7 +79,7 @@ EffectView::EffectView( Effect * _model, QWidget * _parent ) :
 
 	if( effect()->controls()->controlCount() > 0 )
 	{
-		auto ctls_btn = new QPushButton(tr("Controls"), this);
+		auto ctls_btn = new QPushButton(tr("UI"), this);
 		QFont f = ctls_btn->font();
 		ctls_btn->setFont(adjustedToPixelSize(f, DEFAULT_FONT_SIZE));
 		ctls_btn->setGeometry( 150, 14, 50, 20 );
@@ -117,6 +117,12 @@ EffectView::~EffectView()
 
 void EffectView::editControls()
 {
+	if (m_controlView && m_controlView->togglesExternalUi())
+	{
+		m_controlView->toggleExternalUi();
+		return;
+	}
+
 	if( m_subWindow )
 	{
 		if (!m_controlView->isVisible())

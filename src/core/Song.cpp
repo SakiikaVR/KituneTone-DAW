@@ -32,9 +32,11 @@
 #include <algorithm>
 #include <cmath>
 
+#include "AudioRecorder.h"
 #include "AutomationTrack.h"
 #include "AutomationEditor.h"
 #include "ConfigManager.h"
+#include "SampleClip.h"
 #include "ControllerRackView.h"
 #include "ControllerConnection.h"
 #include "EnvelopeAndLfoParameters.h"
@@ -521,8 +523,15 @@ void Song::playSong()
 
 void Song::record()
 {
-	m_recording = true;
-	// TODO: Implement
+	if (AudioRecorder::instance().isRecording())
+	{
+		// pressing record again finishes the take
+		stop();
+		return;
+	}
+
+	m_recordStartPos = TimePos(getPlayPos(PlayMode::Song).getTicks());
+	m_recording = AudioRecorder::instance().start();
 }
 
 
@@ -531,7 +540,12 @@ void Song::record()
 void Song::playAndRecord()
 {
 	playSong();
-	m_recording = true;
+
+	m_recordStartPos = TimePos(getPlayPos(PlayMode::Song).getTicks());
+	if (AudioRecorder::instance().start())
+	{
+		m_recording = true;
+	}
 }
 
 
@@ -640,6 +654,23 @@ void Song::togglePause()
 
 void Song::stop()
 {
+	// finish a running recording and place the result on a new sample track
+	if (AudioRecorder::instance().isRecording())
+	{
+		const QString recordedFile = AudioRecorder::instance().stopAndSave();
+		m_recording = false;
+		if (!recordedFile.isEmpty())
+		{
+			Engine::audioEngine()->requestChangeInModel();
+			auto track = Track::create(Track::Type::Sample, this);
+			track->setName(tr("Recording"));
+			auto clip = dynamic_cast<SampleClip*>(track->createClip(m_recordStartPos));
+			if (clip != nullptr) { clip->setSampleFile(recordedFile); }
+			Engine::audioEngine()->doneChangeInModel();
+			setModified();
+		}
+	}
+
 	// do not stop/reset things again if we're stopped already
 	if( m_playMode == PlayMode::None )
 	{

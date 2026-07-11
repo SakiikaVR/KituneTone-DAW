@@ -1,57 +1,118 @@
-<div align="center">
-	<h1>
-	<img src="https://raw.githubusercontent.com/LMMS/artwork/master/Icon%20%26%20Mimetypes/lmms-64x64.svg" alt="LMMS Logo"><br>LMMS
-	</h1>
-	<p>Cross-platform music production software</p>
-	<p>
-		<a href="https://lmms.io/">Website</a>
-		⦁︎
-		<a href="https://github.com/LMMS/lmms/releases">Releases</a>
-		⦁︎
-		<a href="https://github.com/LMMS/lmms/wiki">Developer wiki</a>
-		⦁︎
-		<a href="https://lmms.io/documentation">User manual</a>
-		⦁︎
-		<a href="https://lmms.io/showcase/">Showcase</a>
-		⦁︎
-		<a href="https://lmms.io/lsp/">Sharing platform</a>
-	</p>
-	<p>
-		<a href="https://github.com/LMMS/lmms/actions/workflows/build.yml"><img src="https://github.com/LMMS/lmms/actions/workflows/build.yml/badge.svg" alt="Build status"></a>
-		<a href="https://lmms.io/download"><img src="https://img.shields.io/github/release/LMMS/lmms.svg?maxAge=3600" 	alt="Latest stable release"></a>
-		<a href="https://github.com/LMMS/lmms/releases"><img src="https://img.shields.io/github/downloads/LMMS/lmms/total.svg?maxAge=3600" alt="Overall downloads on Github"></a>
-		<a href="https://discord.gg/3sc5su7"><img src="https://img.shields.io/badge/chat-on%20discord-7289DA.svg" alt="Join the chat at Discord"></a>
-		<a href="https://www.transifex.com/lmms/lmms/"><img src="https://img.shields.io/badge/localise-on_transifex-green.svg"></a>
-	</p>
-</div>
+# LMMS (VST3 / 録音 / 日本語対応 改造版)
 
-What is LMMS?
---------------
+このリポジトリは、オープンソースの DAW（デジタル・オーディオ・ワークステーション）である
+[LMMS](https://lmms.io) を **個人的に実験目的で改造** したフォークです。
+本家 LMMS に対して、ネイティブ VST3 対応・録音機能・フォントや日本語まわりの改善などを加えています。
 
-LMMS is an open-source cross-platform digital audio workstation designed for music production. It includes an advanced Piano Roll, Beat Sequencer, Song Editor, and Mixer for composing, arranging, and mixing music. It comes with 15+ synthesizer plugins by default, along with VST2 and SoundFont2 support.
+> **⚠️ 実験的に作りました**
+> このフォークは学習・実験目的で作成したものです。動作は無保証で、不安定な部分や未完成の機能が含まれます。
+> 業務や重要な制作には本家の安定版をご利用ください。
 
-Features
----------
+---
 
-* Song-Editor for arranging melodies, samples, patterns, and automation
-* Pattern-Editor for creating beats and patterns
-* An easy-to-use Piano-Roll for editing patterns and melodies
-* A Mixer with unlimited mixer channels and arbitrary number of effects
-* Many powerful instrument and effect-plugins out of the box
-* Full user-defined track-based automation and computer-controlled automation sources
-* Compatible with many standards such as SoundFont2, VST2 (instruments and effects), LADSPA, LV2, GUS Patches, and full MIDI support
-* MIDI file importing and exporting
+## 🎯 追加した主な機能
 
-Building
----------
+### 1. ネイティブ VST3 対応（インストゥルメント & エフェクト）
+本家 LMMS は VST2 を外部プロセスでホストしますが、本フォークでは **Steinberg VST3 SDK を用いたネイティブ VST3 ホスティング** をプロセス内で実装しました。
 
-See [Compiling LMMS](https://github.com/LMMS/lmms/wiki/Compiling)
+- **VST3 インストゥルメント（音源）** — インストゥルメント一覧の「VST3」をトラックへドラッグして使用。Vital などの VST3 シンセをプラグインのネイティブ GUI 付きでロードできます。
+- **VST3 エフェクト** — エフェクトチェインの「エフェクトを追加」→「VST」タブから、システムにインストール済みの VST3 エフェクト（例: iZotope Ozone）を選択して使用できます。
+- **MIDI 対応** — ノート／ベロシティ／CC／ピッチベンド／アフタータッチを VST3 イベントへ変換して送信します。
+- **状態保存** — プラグインの状態はプロジェクトファイルに保存されます。
+- **ネイティブ GUI** — エフェクトの「UI」ボタン、またはインストゥルメントの「GUI を表示/非表示」で、プラグイン本来の画面を開けます。
+- **常に最前面（📌）** — プラグイン GUI ウィンドウ上部のピンボタンで、ウィンドウを常に手前に固定できます。
 
-Join LMMS-development
-----------------------
+### 2. 録音機能
+トランスポートの録音ボタンで、**マイク／ライン入力などのシステム標準入力デバイスから録音**できます。
+録音を停止すると、WAV ファイルとして保存され、新しいサンプルトラックに自動配置されます。
+（録音ファイルの保存先: ユーザーのサンプルフォルダ内 `recordings/`）
 
-If you are interested in LMMS, its programming, artwork, testing, writing demo songs, (and improving this README...) or something like that, you're welcome to participate in the development of LMMS!
+### 3. エクスプローラーからのドラッグ&ドロップ
+Windows のエクスプローラーなどから **wav / mp3 / ogg / flac などのオーディオファイルを、サンプルトラックへ直接ドラッグ&ドロップ** して配置できます。複数ファイルの同時ドロップにも対応しています。
 
-Information about what you can do and how can be found in the [wiki](https://github.com/LMMS/lmms/wiki).
+### 4. フォントを Noto Sans に統一
+UI 全体のフォントを **Noto Sans**（日本語は Noto Sans JP）に変更し、フォントを同梱しました。
 
-Before coding a new big feature, please _always_ [file an issue](https://github.com/LMMS/lmms/issues/new) for your idea and suggestions about your feature and about the intended implementation on GitHub, or ask in one of the tech channels on Discord and wait for replies! Maybe there are different ideas, improvements, or hints, or maybe your feature is not welcome/needed at the moment.
+### 5. 日本語 UI
+Qt の翻訳ファイル生成を修正し、システムロケールが日本語の環境では **UI が日本語で表示** されるようにしました。追加機能の文言も日本語化しています。
+
+### 6. ソングエディタの初期最大化
+起動時にソングエディタが最大化された状態で開くようにしました。
+
+### 7. ARA2 検出（実験的）
+ARA（Audio Random Access）対応プラグイン（例: Melodyne）を VST3 エフェクトとしてロードした際に、**ARA ファクトリの有無を検出して表示** します。
+
+> **⚠️ ARA について**: 現状は「ARA 対応プラグインの検出」までの**実験的な実装**です。オーディオソース解析やプレイバックリージョンといった ARA の完全なホスト機能（Melodyne でピッチ編集を反映する等）は**まだ実装されていません**。
+
+---
+
+## 💾 ダウンロード
+
+ビルド済みの Windows 版（64bit）は下記のリリースページから入手できます。
+
+**➡️ [最新リリースをダウンロード](../../releases/latest)**
+
+`lmms-vst3-jp-win64.zip` を任意の場所に展開し、`lmms.exe` を実行してください。
+インストール不要のポータブル版です。
+
+### 動作環境
+- Windows 10 / 11（64bit）
+- VST3 プラグインは `C:\Program Files\Common Files\VST3` などの標準フォルダを自動で検索します。
+
+---
+
+## 🔨 ソースからのビルド（Windows / MSVC）
+
+<details>
+<summary>ビルド手順を表示</summary>
+
+### 必要なもの
+- Visual Studio 2022（C++ デスクトップ開発ワークロード）
+- [Qt 6.8.x](https://www.qt.io/)（`msvc2022_64`）
+- [vcpkg](https://github.com/microsoft/vcpkg)
+
+### 手順
+```bat
+:: 1. 依存関係を vcpkg で用意
+vcpkg install --triplet x64-windows
+
+:: 2. 構成（Qt と vcpkg のパスは環境に合わせて変更）
+cmake -S . -B build -G Ninja ^
+  -DCMAKE_BUILD_TYPE=RelWithDebInfo -DWANT_QT6=ON ^
+  -DCMAKE_PREFIX_PATH=C:/Qt/6.8.3/msvc2022_64 ^
+  -DCMAKE_TOOLCHAIN_FILE=C:/vcpkg/scripts/buildsystems/vcpkg.cmake ^
+  -DVCPKG_TARGET_TRIPLET=x64-windows ^
+  -DCMAKE_CXX_FLAGS_RELWITHDEBINFO="/MD /Zi /O2 /Ob1 /DNDEBUG"
+
+:: 3. ビルド
+cmake --build build
+```
+（開発者コマンドプロンプト `vcvars64` 環境で実行してください）
+
+</details>
+
+---
+
+## 📄 ライセンス
+
+本プロジェクトは本家 LMMS と同じく **GNU General Public License v2.0 or later（GPLv2+）** で公開されます。
+全文は [LICENSE.txt](LICENSE.txt) を参照してください。
+
+同梱・利用している主なサードパーティ:
+
+| コンポーネント | ライセンス | 用途 |
+|---|---|---|
+| [LMMS](https://lmms.io) | GPLv2+ | 本体 |
+| [Steinberg VST3 SDK](https://github.com/steinbergmedia/vst3sdk) | GPLv3 / Steinberg Dual License | VST3 ホスティング |
+| [ARA SDK](https://github.com/Celemony/ARA_SDK) | Apache License 2.0 | ARA 検出（実験的） |
+| [Noto Sans / Noto Sans JP](https://fonts.google.com/noto) | SIL Open Font License 1.1 | UI フォント |
+
+各サードパーティのライセンス条項に従ってご利用ください。VST3 SDK は GPLv3 と Steinberg 独自ライセンスのデュアルライセンスであり、本フォークは GPL の条件下で利用しています。
+
+---
+
+## 🙏 謝辞
+
+本家 [LMMS](https://lmms.io) 開発者の皆さま、および上記サードパーティの開発者の皆さまに深く感謝します。
+
+これは LMMS の非公式な実験的フォークであり、本家 LMMS プロジェクトとは関係ありません。
