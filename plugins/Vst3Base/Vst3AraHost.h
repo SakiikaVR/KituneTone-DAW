@@ -60,6 +60,10 @@ public:
 
 	bool isValid() const { return m_playbackRenderer != nullptr; }
 
+	//! Must be called regularly on the GUI thread so the plug-in can process
+	//! deferred model updates (e.g. finishing audio analysis).
+	void notifyModelUpdates();
+
 private:
 	void teardown();
 
@@ -68,6 +72,8 @@ private:
 
 	ARA::Host::DocumentController* m_documentController = nullptr;
 	std::unique_ptr<ARA::Host::PlaybackRenderer> m_playbackRenderer;
+	std::unique_ptr<ARA::Host::EditorRenderer> m_editorRenderer;
+	std::unique_ptr<ARA::Host::EditorView> m_editorView;
 
 	ARA::ARAMusicalContextRef m_musicalContext = nullptr;
 	ARA::ARARegionSequenceRef m_regionSequence = nullptr;

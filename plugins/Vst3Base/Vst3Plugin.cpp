@@ -522,6 +522,12 @@ void Vst3Plugin::process(const SampleFrame* in, SampleFrame* out, f_cnt_t frames
 		m_processContext.timeSigNumerator = song->getTimeSigModel().getNumerator();
 		m_processContext.timeSigDenominator = song->getTimeSigModel().getDenominator();
 		if (song->isPlaying()) { m_processContext.state |= Vst::ProcessContext::kPlaying; }
+
+		// musical position in quarter notes (needed for the plug-in's beat-based
+		// ruler / playhead, e.g. Vovious "Use DAW Tempo / Beat")
+		const double seconds = static_cast<double>(m_processContext.projectTimeSamples) / m_sampleRate;
+		m_processContext.projectTimeMusic = seconds * m_processContext.tempo / 60.0;
+		m_processContext.state |= Vst::ProcessContext::kProjectTimeMusicValid;
 	}
 	else
 	{
@@ -855,6 +861,11 @@ void Vst3Plugin::destroyEditor()
 
 void Vst3Plugin::syncOutputParameters()
 {
+#ifdef LMMS_HAVE_ARA
+	// let the ARA plug-in process deferred model updates (analysis etc.)
+	if (m_araDocument) { m_araDocument->notifyModelUpdates(); }
+#endif
+
 	std::map<Steinberg::Vst::ParamID, double> params;
 	{
 		QMutexLocker lock(&m_outputParamMutex);

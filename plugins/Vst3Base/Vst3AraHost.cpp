@@ -319,11 +319,20 @@ bool Vst3AraDocument::setup(const ARAFactory* araFactory,
 	// allow the plug-in to read the audio source samples
 	dc->enableAudioSourceSamplesAccess(m_audioSource, true);
 
-	// --- bind the VST3 instance as ARA playback renderer / editor view ---
+	// ask the plug-in to analyse the audio so its editor shows notes/waveform
+	if (araFactory->analyzeableContentTypesCount > 0
+			&& araFactory->analyzeableContentTypes != nullptr)
+	{
+		dc->requestAudioSourceContentAnalysis(m_audioSource,
+				araFactory->analyzeableContentTypesCount,
+				araFactory->analyzeableContentTypes);
+	}
+
+	// --- bind the VST3 instance with all three ARA roles ---
 	const ARAPlugInInstanceRoleFlags knownRoles =
 			kARAPlaybackRendererRole | kARAEditorRendererRole | kARAEditorViewRole;
 	const ARAPlugInInstanceRoleFlags assignedRoles =
-			kARAPlaybackRendererRole | kARAEditorViewRole;
+			kARAPlaybackRendererRole | kARAEditorRendererRole | kARAEditorViewRole;
 
 	const ARAPlugInExtensionInstance* ext = entryPoint->bindToDocumentControllerWithRoles(
 			m_impl->dcInstance->documentControllerRef, knownRoles, assignedRoles);
@@ -333,8 +342,23 @@ bool Vst3AraDocument::setup(const ARAFactory* araFactory,
 		return false;
 	}
 
+	// playback renderer: produces the modified audio during playback
 	m_playbackRenderer = std::make_unique<Host::PlaybackRenderer>(ext);
 	m_playbackRenderer->addPlaybackRegion(m_playbackRegion);
+
+	// editor renderer: previews audio while the user edits in the plug-in UI
+	m_editorRenderer = std::make_unique<Host::EditorRenderer>(ext);
+	m_editorRenderer->addPlaybackRegion(m_playbackRegion);
+
+	// editor view: tell the plug-in which region is selected so it displays it
+	m_editorView = std::make_unique<Host::EditorView>(ext);
+	auto selection = makeProps<ARAViewSelection>();
+	selection.playbackRegionRefsCount = 1;
+	selection.playbackRegionRefs = &m_playbackRegion;
+	selection.regionSequenceRefsCount = 0;
+	selection.regionSequenceRefs = nullptr;
+	selection.timeRange = nullptr;
+	m_editorView->notifySelection(&selection);
 
 	return true;
 }
@@ -342,8 +366,25 @@ bool Vst3AraDocument::setup(const ARAFactory* araFactory,
 
 
 
+void Vst3AraDocument::notifyModelUpdates()
+{
+	if (m_documentController != nullptr)
+	{
+		m_documentController->notifyModelUpdates();
+	}
+}
+
+
+
+
 void Vst3AraDocument::teardown()
 {
+	if (m_editorView) { m_editorView.reset(); }
+	if (m_editorRenderer && m_playbackRegion)
+	{
+		m_editorRenderer->removePlaybackRegion(m_playbackRegion);
+	}
+	m_editorRenderer.reset();
 	if (m_playbackRenderer && m_playbackRegion)
 	{
 		m_playbackRenderer->removePlaybackRegion(m_playbackRegion);
