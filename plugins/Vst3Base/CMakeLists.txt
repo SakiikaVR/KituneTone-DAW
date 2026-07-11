@@ -90,10 +90,16 @@ ELSEIF(LMMS_BUILD_APPLE)
 ENDIF()
 
 # --- the LMMS shared base library ---
+SET(VST3BASE_ARA_SRC "")
+IF(EXISTS "${ARA_SDK_DIR}/ARA_API/ARAVST3.h")
+	SET(VST3BASE_ARA_SRC Vst3AraHost.cpp Vst3AraHost.h)
+ENDIF()
+
 BUILD_PLUGIN(vst3base
 	vst3_base.cpp
 	Vst3Plugin.cpp
 	Vst3Plugin.h
+	${VST3BASE_ARA_SRC}
 	MOCFILES Vst3Plugin.h
 	EXPORT_BASE_NAME vst3base
 	LINK SHARED

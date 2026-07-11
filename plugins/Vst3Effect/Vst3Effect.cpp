@@ -24,9 +24,14 @@
 
 #include <QDomDocument>
 #include <QDomElement>
+#include <QFileInfo>
 #include <QHideEvent>
 #include <QLabel>
+#include <QPushButton>
 #include <QShowEvent>
+
+#include "ConfigManager.h"
+#include "FileDialog.h"
 #include <QMutexLocker>
 #include <QPushButton>
 #include <QVBoxLayout>
@@ -209,7 +214,35 @@ Vst3EffectControlDialog::Vst3EffectControlDialog(Vst3EffectControls* controls) :
 	});
 	layout->addWidget(guiButton);
 
-	setFixedSize(240, 100);
+	// experimental ARA: let the user pick the audio file this effect should
+	// analyse/re-render (e.g. for Melodyne / Vovious), then bind it as an ARA
+	// playback renderer placed at the start of the song.
+	if (plugin != nullptr && plugin->hasAra())
+	{
+		auto araButton = new QPushButton(tr("Enable ARA (choose audio)..."), this);
+		connect(araButton, &QPushButton::clicked, this, [this, controls, araButton]
+		{
+			auto p = controls->m_effect->plugin();
+			if (p == nullptr) { return; }
+
+			FileDialog ofd(nullptr, tr("Choose audio file for ARA"));
+			ofd.setFileMode(FileDialog::ExistingFile);
+			ofd.setNameFilters({tr("Audio files (*.wav *.flac *.ogg *.mp3 *.aiff)")});
+			ofd.setDirectory(ConfigManager::inst()->userSamplesDir());
+			if (ofd.exec() != QDialog::Accepted || ofd.selectedFiles().isEmpty()) { return; }
+
+			const bool ok = p->enableAra(ofd.selectedFiles()[0], 0.0, 0.0);
+			araButton->setText(ok ? tr("ARA active: %1").arg(p->araName())
+					: tr("ARA setup failed"));
+			araButton->setEnabled(!ok);
+		});
+		layout->addWidget(araButton);
+		setFixedSize(260, 140);
+	}
+	else
+	{
+		setFixedSize(240, 100);
+	}
 }
 
 

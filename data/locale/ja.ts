@@ -16175,7 +16175,31 @@ Latency: %2 ms</source>
     </message>
 </context>
 <context>
-    <name>lmms::gui::Vst3EffectControlDialog</name>
+    <name>lmms::gui::Vst3EffectControlDialog</name>    <message>
+        <source>ARA: %1 (experimental)</source>
+        <translation>ARA: %1（実験的）</translation>
+    </message>
+    <message>
+        <source>Enable ARA (choose audio)...</source>
+        <translation>ARAを有効化（音声を選択）...</translation>
+    </message>
+    <message>
+        <source>Choose audio file for ARA</source>
+        <translation>ARA用の音声ファイルを選択</translation>
+    </message>
+    <message>
+        <source>Audio files (*.wav *.flac *.ogg *.mp3 *.aiff)</source>
+        <translation>音声ファイル (*.wav *.flac *.ogg *.mp3 *.aiff)</translation>
+    </message>
+    <message>
+        <source>ARA active: %1</source>
+        <translation>ARA有効: %1</translation>
+    </message>
+    <message>
+        <source>ARA setup failed</source>
+        <translation>ARAの設定に失敗しました</translation>
+    </message>
+
     <message>
         <source>No plugin loaded</source>
         <translation>プラグインが読み込まれていません</translation>

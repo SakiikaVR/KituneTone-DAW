@@ -44,10 +44,13 @@
 #include "public.sdk/source/common/memorystream.h"
 #ifdef LMMS_HAVE_ARA
 #include "ARA_API/ARAVST3.h"
-// provide the definition for the ARA VST3 interface IID we reference
+#include "Vst3AraHost.h"
+// provide the definitions for the ARA VST3 interface IIDs we reference
 namespace ARA
 {
 DEF_CLASS_IID(IMainFactory)
+DEF_CLASS_IID(IPlugInEntryPoint)
+DEF_CLASS_IID(IPlugInEntryPoint2)
 }
 #endif
 #include "pluginterfaces/vst/ivstcomponent.h"
@@ -346,6 +349,7 @@ bool Vst3Plugin::load(const QString& path, const QString& uid)
 			{
 				m_hasAra = true;
 				m_araName = QString::fromUtf8(araFactory->plugInName);
+				m_araFactory = araFactory; // owned by the module, valid while loaded
 			}
 		}
 		break;
@@ -498,8 +502,20 @@ void Vst3Plugin::process(const SampleFrame* in, SampleFrame* out, f_cnt_t frames
 	auto* song = Engine::getSong();
 	m_processContext = {};
 	m_processContext.sampleRate = m_sampleRate;
-	m_processContext.projectTimeSamples = m_projectTimeSamples;
-	m_processContext.state = Vst::ProcessContext::kTempoValid | Vst::ProcessContext::kTimeSigValid;
+	// ARA playback rendering needs the process time to follow the real song
+	// timeline so the playback region maps to the correct position; otherwise
+	// a free-running counter is fine.
+	if (araActive() && song != nullptr)
+	{
+		// follow the real song timeline (in output-rate frames) so the ARA
+		// playback region maps to the correct position
+		m_processContext.projectTimeSamples = static_cast<Steinberg::int64>(song->getFrames());
+	}
+	else
+	{
+		m_processContext.projectTimeSamples = m_projectTimeSamples;
+	}
+	m_processContext.state |= Vst::ProcessContext::kTempoValid | Vst::ProcessContext::kTimeSigValid;
 	if (song)
 	{
 		m_processContext.tempo = song->getTempo();
@@ -938,6 +954,44 @@ Steinberg::tresult PLUGIN_API Vst3Plugin::queryInterface(const Steinberg::TUID _
 std::vector<std::string> Vst3Plugin::modulePaths()
 {
 	return VST3::Hosting::Module::getModulePaths();
+}
+
+
+
+
+bool Vst3Plugin::enableAra(const QString& file, double startInSongSeconds, double durationSeconds)
+{
+#ifdef LMMS_HAVE_ARA
+	if (!m_hasAra || m_araFactory == nullptr || !m_component) { return false; }
+
+	// the audio processor component also implements the ARA VST3 entry point
+	auto entryPoint = U::cast<ARA::IPlugInEntryPoint2>(m_component);
+	if (!entryPoint) { return false; }
+
+	auto doc = std::make_unique<Vst3AraDocument>();
+	if (!doc->setup(static_cast<const ARA::ARAFactory*>(m_araFactory),
+			entryPoint.get(), file, startInSongSeconds, durationSeconds))
+	{
+		return false;
+	}
+	m_araDocument = std::move(doc);
+	return true;
+#else
+	Q_UNUSED(file) Q_UNUSED(startInSongSeconds) Q_UNUSED(durationSeconds)
+	return false;
+#endif
+}
+
+
+
+
+bool Vst3Plugin::araActive() const
+{
+#ifdef LMMS_HAVE_ARA
+	return m_araDocument != nullptr && m_araDocument->isValid();
+#else
+	return false;
+#endif
 }
 
 

@@ -78,9 +78,14 @@ public:
 	QString path() const { return m_path; }
 
 	//! whether the plug-in exposes an ARA factory (e.g. Melodyne).
-	//! ARA hosting is experimental and currently limited to detection.
 	bool hasAra() const { return m_hasAra; }
 	QString araName() const { return m_araName; }
+
+	//! Experimental: bind this plug-in instance to an ARA document backed by
+	//! the given audio file, placed at startInSongSeconds on the timeline.
+	//! Returns true if ARA rendering was set up.
+	bool enableAra(const QString& file, double startInSongSeconds, double durationSeconds);
+	bool araActive() const;
 
 	//! Process one block on the audio thread. For instruments pass in = nullptr.
 	//! in/out may alias. frames <= MAXIMUM_BUFFER_SIZE.
@@ -138,6 +143,8 @@ private:
 	QString m_uid;
 	bool m_hasAra = false;
 	QString m_araName;
+	const void* m_araFactory = nullptr;       //!< const ARA::ARAFactory*
+	std::unique_ptr<class Vst3AraDocument> m_araDocument;
 
 	VST3::Hosting::Module::Ptr m_module;
 	Steinberg::IPtr<Steinberg::Vst::PlugProvider> m_provider;

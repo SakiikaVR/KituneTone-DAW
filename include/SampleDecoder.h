@@ -31,9 +31,10 @@
 #include <vector>
 
 #include "SampleFrame.h"
+#include "lmms_export.h"
 
 namespace lmms {
-class SampleDecoder
+class LMMS_EXPORT SampleDecoder
 {
 public:
 	struct Result
