@@ -504,17 +504,10 @@ void MainWindow::finalize()
 	getGUI()->songEditor()->parentWidget()->move(5, 5);
 	getGUI()->songEditor()->parentWidget()->show();
 
-	// maximize the Song Editor once the main window is laid out - doing it
-	// here (during startup, while the splash screen is up) would use the
-	// wrong workspace size
-	QMdiSubWindow* songSubWin = qobject_cast<QMdiSubWindow*>(
-			getGUI()->songEditor()->parentWidget());
-	if (songSubWin != nullptr)
-	{
-		// wait until the main window has been shown and laid out
-		QTimer::singleShot(250, songSubWin, [songSubWin]
-				{ songSubWin->showMaximized(); });
-	}
+	// the Song Editor starts maximized: the default project template
+	// (data/projects/templates/default.mpt) sets maximized="1" on the song
+	// track container, so it is restored maximized as part of the initial
+	// layout without any post-startup resizing.
 
 	// reset window title every time we change the state of a subwindow to show the correct title
 	for( const QMdiSubWindow * subWindow : workspace()->subWindowList() )
