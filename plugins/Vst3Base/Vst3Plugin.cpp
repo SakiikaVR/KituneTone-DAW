@@ -38,6 +38,7 @@
 #endif
 
 #include <algorithm>
+#include <cmath>
 #include <cstring>
 
 #include "public.sdk/source/vst/hosting/hostclasses.h"
@@ -516,6 +517,10 @@ void Vst3Plugin::process(const SampleFrame* in, SampleFrame* out, f_cnt_t frames
 		m_processContext.projectTimeSamples = m_projectTimeSamples;
 	}
 	m_processContext.state |= Vst::ProcessContext::kTempoValid | Vst::ProcessContext::kTimeSigValid;
+	// continuous (free-running) time always advances, even when stopped
+	// (note: the SDK field is spelled "continous")
+	m_processContext.continousTimeSamples = m_projectTimeSamples;
+	m_processContext.state |= Vst::ProcessContext::kContTimeValid;
 	if (song)
 	{
 		m_processContext.tempo = song->getTempo();
@@ -526,8 +531,14 @@ void Vst3Plugin::process(const SampleFrame* in, SampleFrame* out, f_cnt_t frames
 		// musical position in quarter notes (needed for the plug-in's beat-based
 		// ruler / playhead, e.g. Vovious "Use DAW Tempo / Beat")
 		const double seconds = static_cast<double>(m_processContext.projectTimeSamples) / m_sampleRate;
-		m_processContext.projectTimeMusic = seconds * m_processContext.tempo / 60.0;
-		m_processContext.state |= Vst::ProcessContext::kProjectTimeMusicValid;
+		const double quartersPerBar = 4.0 * m_processContext.timeSigNumerator
+				/ m_processContext.timeSigDenominator;
+		const double quarters = seconds * m_processContext.tempo / 60.0;
+		m_processContext.projectTimeMusic = quarters;
+		m_processContext.barPositionMusic = quartersPerBar > 0.0
+				? std::floor(quarters / quartersPerBar) * quartersPerBar : 0.0;
+		m_processContext.state |= Vst::ProcessContext::kProjectTimeMusicValid
+				| Vst::ProcessContext::kBarPositionValid;
 	}
 	else
 	{

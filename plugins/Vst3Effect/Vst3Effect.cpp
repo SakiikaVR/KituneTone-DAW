@@ -336,7 +336,18 @@ bool Vst3EffectControlDialog::togglesExternalUi() const
 
 void Vst3EffectControlDialog::toggleExternalUi()
 {
-	if (auto p = plugin()) { p->toggleEditor(); }
+	auto p = plugin();
+	if (p == nullptr) { return; }
+
+	// pick up audio clips that were added after the plug-in was loaded:
+	// (re-)build the ARA document from the track's current clips before showing
+	// the editor, unless ARA is already active
+	if (p->hasAra() && !p->araActive())
+	{
+		static_cast<Vst3EffectControls*>(m_effectControls)->m_effect->syncAraFromTrack();
+	}
+
+	p->toggleEditor();
 }
 
 
