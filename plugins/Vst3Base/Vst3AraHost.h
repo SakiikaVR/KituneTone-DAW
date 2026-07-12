@@ -34,6 +34,8 @@
 #include "ARA_API/ARAVST3.h"
 #include "ARA_Library/Dispatch/ARAHostDispatch.h"
 
+#include "Vst3Plugin.h"
+
 namespace lmms
 {
 
@@ -48,15 +50,17 @@ public:
 	Vst3AraDocument();
 	~Vst3AraDocument();
 
-	//! Build the ARA document model for the given audio file and bind the plug-in.
-	//! - araFactory:   the plug-in's ARA factory (from IMainFactory::getFactory())
-	//! - entryPoint:   the VST3 IPlugInEntryPoint2 of the audio processor component
-	//! - file:         path to the audio file backing the audio source
-	//! - startInSongSeconds / durationSeconds: placement of the region on the timeline
+	//! Build the ARA document model for the given audio regions and bind the
+	//! plug-in as ARA playback renderer / editor renderer / editor view.
+	//! - araFactory:  the plug-in's ARA factory (from IMainFactory::getFactory())
+	//! - entryPoint:  the VST3 IPlugInEntryPoint2 of the audio processor component
+	//! - sources:     the audio files/regions to expose (e.g. the track's clips)
+	//! - tempo / timeSigNum / timeSigDen: the song's musical context
 	//! Returns true on success.
 	bool setup(const ARA::ARAFactory* araFactory,
 			ARA::IPlugInEntryPoint2* entryPoint,
-			const QString& file, double startInSongSeconds, double durationSeconds);
+			const std::vector<Vst3Plugin::AraSource>& sources,
+			double tempo, int timeSigNum, int timeSigDen);
 
 	bool isValid() const { return m_playbackRenderer != nullptr; }
 
@@ -77,9 +81,15 @@ private:
 
 	ARA::ARAMusicalContextRef m_musicalContext = nullptr;
 	ARA::ARARegionSequenceRef m_regionSequence = nullptr;
-	ARA::ARAAudioSourceRef m_audioSource = nullptr;
-	ARA::ARAAudioModificationRef m_audioModification = nullptr;
-	ARA::ARAPlaybackRegionRef m_playbackRegion = nullptr;
+
+	struct SourceGraph
+	{
+		ARA::ARAAudioSourceRef audioSource = nullptr;
+		ARA::ARAAudioModificationRef audioModification = nullptr;
+		ARA::ARAPlaybackRegionRef playbackRegion = nullptr;
+	};
+	std::vector<SourceGraph> m_sources;
+	std::vector<ARA::ARAPlaybackRegionRef> m_regions;
 };
 
 

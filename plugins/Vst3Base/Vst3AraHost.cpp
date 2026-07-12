@@ -24,11 +24,14 @@
 
 #include "Vst3AraHost.h"
 
+#include <QByteArray>
 #include <QDebug>
 
 #include <cstring>
+#include <memory>
 #include <set>
 #include <string>
+#include <vector>
 
 #include "SampleDecoder.h"
 
@@ -87,19 +90,29 @@ void araEnsureFactoryInitialized(const ARAFactory* factory)
 // Host controller interface implementations
 // ---------------------------------------------------------------------------
 
-//! Serves decoded audio samples to the plug-in.
+//! Decoded audio for one ARA audio source; the host ref of the audio source
+//! points to an instance of this so readers can find their data.
+struct AraAudioData
+{
+	std::vector<float> left;
+	std::vector<float> right;
+	double sampleRate = 44100.0;
+	ARASampleCount frames = 0;
+	std::string persistentID;
+};
+
+
+//! Serves decoded audio samples to the plug-in (random access).
 class AraAudioAccessController : public Host::AudioAccessControllerInterface
 {
 public:
-	std::vector<float> left;
-	std::vector<float> right;
-
-	struct Reader { bool use64; };
+	struct Reader { AraAudioData* data; bool use64; };
 
 	ARAAudioReaderHostRef createAudioReaderForSource(
-			ARAAudioSourceHostRef, bool use64BitSamples) noexcept override
+			ARAAudioSourceHostRef sourceRef, bool use64BitSamples) noexcept override
 	{
-		auto reader = new Reader{use64BitSamples};
+		auto data = reinterpret_cast<AraAudioData*>(sourceRef);
+		auto reader = new Reader{data, use64BitSamples};
 		return reinterpret_cast<ARAAudioReaderHostRef>(reader);
 	}
 
@@ -107,22 +120,24 @@ public:
 			ARASampleCount samplesPerChannel, void* const buffers[]) noexcept override
 	{
 		auto reader = reinterpret_cast<Reader*>(readerRef);
-		const auto total = static_cast<ARASampleCount>(left.size());
+		if (reader == nullptr || reader->data == nullptr) { return false; }
+		const AraAudioData* d = reader->data;
+		const auto total = static_cast<ARASampleCount>(d->left.size());
 		for (ARASampleCount i = 0; i < samplesPerChannel; ++i)
 		{
 			const ARASamplePosition pos = samplePosition + i;
 			const bool valid = pos >= 0 && pos < total;
-			const float l = valid ? left[static_cast<size_t>(pos)] : 0.f;
-			const float r = valid ? right[static_cast<size_t>(pos)] : 0.f;
-			if (reader != nullptr && reader->use64)
+			const float l = valid ? d->left[static_cast<size_t>(pos)] : 0.f;
+			const float r = valid ? d->right[static_cast<size_t>(pos)] : 0.f;
+			if (reader->use64)
 			{
 				static_cast<double*>(buffers[0])[i] = l;
-				static_cast<double*>(buffers[1])[i] = r;
+				if (buffers[1]) { static_cast<double*>(buffers[1])[i] = r; }
 			}
 			else
 			{
 				static_cast<float*>(buffers[0])[i] = l;
-				static_cast<float*>(buffers[1])[i] = r;
+				if (buffers[1]) { static_cast<float*>(buffers[1])[i] = r; }
 			}
 		}
 		return true;
@@ -150,26 +165,83 @@ public:
 };
 
 
-//! Minimal content access controller (no musical context content provided).
+//! Content access controller providing the song tempo and bar signature so the
+//! plug-in can align to the DAW timeline ("Use DAW Tempo / Beat").
 class AraContentAccessController : public Host::ContentAccessControllerInterface
 {
 public:
-	bool isMusicalContextContentAvailable(ARAMusicalContextHostRef, ARAContentType) noexcept override
-	{ return false; }
+	double tempo = 120.0;
+	int timeSigNum = 4;
+	int timeSigDen = 4;
+
+	// a content reader is a small object holding the events it will hand out
+	struct Reader
+	{
+		ARAContentType type;
+		std::vector<ARAContentTempoEntry> tempo;
+		std::vector<ARAContentBarSignature> bars;
+		ARAContentTempoEntry tempoScratch{};
+		ARAContentBarSignature barScratch{};
+	};
+
+	bool isMusicalContextContentAvailable(ARAMusicalContextHostRef, ARAContentType type) noexcept override
+	{
+		return type == kARAContentTypeTempoEntries || type == kARAContentTypeBarSignatures;
+	}
 	ARAContentGrade getMusicalContextContentGrade(ARAMusicalContextHostRef, ARAContentType) noexcept override
-	{ return kARAContentGradeInitial; }
-	ARAContentReaderHostRef createMusicalContextContentReader(ARAMusicalContextHostRef, ARAContentType,
-			const ARAContentTimeRange*) noexcept override { return nullptr; }
+	{
+		return kARAContentGradeAdjusted;
+	}
+	ARAContentReaderHostRef createMusicalContextContentReader(ARAMusicalContextHostRef,
+			ARAContentType type, const ARAContentTimeRange*) noexcept override
+	{
+		auto reader = new Reader();
+		reader->type = type;
+		if (type == kARAContentTypeTempoEntries)
+		{
+			// constant tempo: two anchor points one quarter note apart
+			const double secondsPerQuarter = 60.0 / (tempo > 0.0 ? tempo : 120.0);
+			reader->tempo.push_back(ARAContentTempoEntry{0.0, 0.0});
+			reader->tempo.push_back(ARAContentTempoEntry{secondsPerQuarter, 1.0});
+		}
+		else if (type == kARAContentTypeBarSignatures)
+		{
+			reader->bars.push_back(ARAContentBarSignature{timeSigNum, timeSigDen, 0.0});
+		}
+		return reinterpret_cast<ARAContentReaderHostRef>(reader);
+	}
 	bool isAudioSourceContentAvailable(ARAAudioSourceHostRef, ARAContentType) noexcept override
 	{ return false; }
 	ARAContentGrade getAudioSourceContentGrade(ARAAudioSourceHostRef, ARAContentType) noexcept override
 	{ return kARAContentGradeInitial; }
 	ARAContentReaderHostRef createAudioSourceContentReader(ARAAudioSourceHostRef, ARAContentType,
 			const ARAContentTimeRange*) noexcept override { return nullptr; }
-	ARAInt32 getContentReaderEventCount(ARAContentReaderHostRef) noexcept override { return 0; }
-	const void* getContentReaderDataForEvent(ARAContentReaderHostRef, ARAInt32) noexcept override
-	{ return nullptr; }
-	void destroyContentReader(ARAContentReaderHostRef) noexcept override {}
+	ARAInt32 getContentReaderEventCount(ARAContentReaderHostRef readerRef) noexcept override
+	{
+		auto reader = reinterpret_cast<Reader*>(readerRef);
+		if (reader == nullptr) { return 0; }
+		return reader->type == kARAContentTypeTempoEntries
+				? static_cast<ARAInt32>(reader->tempo.size())
+				: static_cast<ARAInt32>(reader->bars.size());
+	}
+	const void* getContentReaderDataForEvent(ARAContentReaderHostRef readerRef, ARAInt32 eventIndex) noexcept override
+	{
+		auto reader = reinterpret_cast<Reader*>(readerRef);
+		if (reader == nullptr) { return nullptr; }
+		if (reader->type == kARAContentTypeTempoEntries)
+		{
+			if (eventIndex < 0 || eventIndex >= static_cast<ARAInt32>(reader->tempo.size())) { return nullptr; }
+			reader->tempoScratch = reader->tempo[static_cast<size_t>(eventIndex)];
+			return &reader->tempoScratch;
+		}
+		if (eventIndex < 0 || eventIndex >= static_cast<ARAInt32>(reader->bars.size())) { return nullptr; }
+		reader->barScratch = reader->bars[static_cast<size_t>(eventIndex)];
+		return &reader->barScratch;
+	}
+	void destroyContentReader(ARAContentReaderHostRef readerRef) noexcept override
+	{
+		delete reinterpret_cast<Reader*>(readerRef);
+	}
 };
 
 
@@ -211,6 +283,9 @@ struct Vst3AraDocument::Impl
 	AraModelUpdateController modelUpdate;
 	AraPlaybackController playback;
 
+	// decoded audio, one entry per source (pointers are stable while alive)
+	std::vector<std::unique_ptr<AraAudioData>> audioData;
+
 	std::unique_ptr<Host::DocumentControllerHostInstance> hostInstance;
 	const ARADocumentControllerInstance* dcInstance = nullptr;
 	std::unique_ptr<Host::DocumentController> controller;
@@ -237,31 +312,21 @@ Vst3AraDocument::~Vst3AraDocument()
 
 bool Vst3AraDocument::setup(const ARAFactory* araFactory,
 		IPlugInEntryPoint2* entryPoint,
-		const QString& file, double startInSongSeconds, double durationSeconds)
+		const std::vector<Vst3Plugin::AraSource>& sources,
+		double tempo, int timeSigNum, int timeSigDen)
 {
-	if (araFactory == nullptr || entryPoint == nullptr) { return false; }
+	if (araFactory == nullptr || entryPoint == nullptr || sources.empty()) { return false; }
 
-	// decode the whole audio file into memory
-	auto decoded = SampleDecoder::decode(file);
-	if (!decoded || decoded->data.empty()) { return false; }
-
-	const auto frameCount = static_cast<ARASampleCount>(decoded->data.size());
-	m_impl->audioAccess.left.resize(decoded->data.size());
-	m_impl->audioAccess.right.resize(decoded->data.size());
-	for (size_t i = 0; i < decoded->data.size(); ++i)
-	{
-		m_impl->audioAccess.left[i] = decoded->data[i].left();
-		m_impl->audioAccess.right[i] = decoded->data[i].right();
-	}
+	m_impl->content.tempo = tempo;
+	m_impl->content.timeSigNum = timeSigNum;
+	m_impl->content.timeSigDen = timeSigDen;
 
 	araEnsureFactoryInitialized(araFactory);
 
-	// host instance carrying our controller interfaces
 	m_impl->hostInstance = std::make_unique<Host::DocumentControllerHostInstance>(
 			&m_impl->audioAccess, &m_impl->archiving, &m_impl->content,
 			&m_impl->modelUpdate, &m_impl->playback);
 
-	// create the document controller
 	auto docProps = makeProps<ARADocumentProperties>();
 	docProps.name = "LMMS ARA Document";
 	m_impl->dcInstance = araFactory->createDocumentControllerWithDocument(
@@ -269,10 +334,8 @@ bool Vst3AraDocument::setup(const ARAFactory* araFactory,
 	if (m_impl->dcInstance == nullptr) { return false; }
 	m_impl->controller = std::make_unique<Host::DocumentController>(m_impl->dcInstance);
 	m_documentController = m_impl->controller.get();
-
 	auto* dc = m_documentController;
 
-	// --- build the model graph ---
 	dc->beginEditing();
 
 	auto musicalCtxProps = makeProps<ARAMusicalContextProperties>();
@@ -286,78 +349,105 @@ bool Vst3AraDocument::setup(const ARAFactory* araFactory,
 	regionSeqProps.musicalContextRef = m_musicalContext;
 	m_regionSequence = dc->createRegionSequence(nullptr, &regionSeqProps);
 
-	auto sourceProps = makeProps<ARAAudioSourceProperties>();
-	sourceProps.name = "LMMS Audio";
-	sourceProps.persistentID = "lmms-audio-source-1";
-	sourceProps.sampleCount = frameCount;
-	sourceProps.sampleRate = static_cast<ARASampleRate>(decoded->sampleRate);
-	sourceProps.channelCount = 2;
-	sourceProps.merits64BitSamples = kARAFalse;
-	m_audioSource = dc->createAudioSource(nullptr, &sourceProps);
+	int index = 0;
+	for (const auto& src : sources)
+	{
+		auto decoded = SampleDecoder::decode(src.file);
+		if (!decoded || decoded->data.empty()) { ++index; continue; }
 
-	auto modProps = makeProps<ARAAudioModificationProperties>();
-	modProps.name = "LMMS Modification";
-	modProps.persistentID = "lmms-audio-mod-1";
-	m_audioModification = dc->createAudioModification(m_audioSource, nullptr, &modProps);
+		auto data = std::make_unique<AraAudioData>();
+		data->sampleRate = decoded->sampleRate;
+		data->frames = static_cast<ARASampleCount>(decoded->data.size());
+		data->persistentID = "lmms-src-" + std::to_string(index);
+		data->left.resize(decoded->data.size());
+		data->right.resize(decoded->data.size());
+		for (size_t i = 0; i < decoded->data.size(); ++i)
+		{
+			data->left[i] = decoded->data[i].left();
+			data->right[i] = decoded->data[i].right();
+		}
+		AraAudioData* dataPtr = data.get();
+		m_impl->audioData.push_back(std::move(data));
 
-	const double srcDuration = static_cast<double>(frameCount) / decoded->sampleRate;
-	const double dur = durationSeconds > 0.0 ? durationSeconds : srcDuration;
+		SourceGraph g;
 
-	auto regionProps = makeProps<ARAPlaybackRegionProperties>();
-	regionProps.transformationFlags = kARAPlaybackTransformationNoChanges;
-	regionProps.startInModificationTime = 0.0;
-	regionProps.durationInModificationTime = dur;
-	regionProps.startInPlaybackTime = startInSongSeconds;
-	regionProps.durationInPlaybackTime = dur;
-	regionProps.musicalContextRef = m_musicalContext;
-	regionProps.regionSequenceRef = m_regionSequence;
-	regionProps.name = "LMMS Region";
-	m_playbackRegion = dc->createPlaybackRegion(m_audioModification, nullptr, &regionProps);
+		auto sourceProps = makeProps<ARAAudioSourceProperties>();
+		sourceProps.name = "LMMS Audio";
+		sourceProps.persistentID = dataPtr->persistentID.c_str();
+		sourceProps.sampleCount = dataPtr->frames;
+		sourceProps.sampleRate = static_cast<ARASampleRate>(dataPtr->sampleRate);
+		sourceProps.channelCount = 2;
+		sourceProps.merits64BitSamples = kARAFalse;
+		// the audio source's host ref points to its decoded data
+		g.audioSource = dc->createAudioSource(
+				reinterpret_cast<ARAAudioSourceHostRef>(dataPtr), &sourceProps);
+
+		const std::string modID = "lmms-mod-" + std::to_string(index);
+		auto modProps = makeProps<ARAAudioModificationProperties>();
+		modProps.name = "LMMS Modification";
+		modProps.persistentID = modID.c_str();
+		g.audioModification = dc->createAudioModification(g.audioSource, nullptr, &modProps);
+
+		const double srcDuration = static_cast<double>(dataPtr->frames) / dataPtr->sampleRate;
+		const double dur = src.durationSeconds > 0.0 ? src.durationSeconds : srcDuration;
+
+		auto regionProps = makeProps<ARAPlaybackRegionProperties>();
+		regionProps.transformationFlags = kARAPlaybackTransformationNoChanges;
+		regionProps.startInModificationTime = src.offsetInSourceSeconds;
+		regionProps.durationInModificationTime = dur;
+		regionProps.startInPlaybackTime = src.startInSongSeconds;
+		regionProps.durationInPlaybackTime = dur;
+		regionProps.musicalContextRef = m_musicalContext;
+		regionProps.regionSequenceRef = m_regionSequence;
+		regionProps.name = "LMMS Region";
+		g.playbackRegion = dc->createPlaybackRegion(g.audioModification, nullptr, &regionProps);
+
+		m_sources.push_back(g);
+		m_regions.push_back(g.playbackRegion);
+		++index;
+	}
 
 	dc->endEditing();
 
-	// allow the plug-in to read the audio source samples
-	dc->enableAudioSourceSamplesAccess(m_audioSource, true);
+	if (m_sources.empty()) { return false; }
 
-	// ask the plug-in to analyse the audio so its editor shows notes/waveform
-	if (araFactory->analyzeableContentTypesCount > 0
-			&& araFactory->analyzeableContentTypes != nullptr)
+	// enable sample access and request analysis for every source
+	for (const auto& g : m_sources)
 	{
-		dc->requestAudioSourceContentAnalysis(m_audioSource,
-				araFactory->analyzeableContentTypesCount,
-				araFactory->analyzeableContentTypes);
+		dc->enableAudioSourceSamplesAccess(g.audioSource, true);
+		if (araFactory->analyzeableContentTypesCount > 0
+				&& araFactory->analyzeableContentTypes != nullptr)
+		{
+			dc->requestAudioSourceContentAnalysis(g.audioSource,
+					araFactory->analyzeableContentTypesCount,
+					araFactory->analyzeableContentTypes);
+		}
 	}
 
 	// --- bind the VST3 instance with all three ARA roles ---
-	const ARAPlugInInstanceRoleFlags knownRoles =
+	const ARAPlugInInstanceRoleFlags roles =
 			kARAPlaybackRendererRole | kARAEditorRendererRole | kARAEditorViewRole;
-	const ARAPlugInInstanceRoleFlags assignedRoles =
-			kARAPlaybackRendererRole | kARAEditorRendererRole | kARAEditorViewRole;
-
 	const ARAPlugInExtensionInstance* ext = entryPoint->bindToDocumentControllerWithRoles(
-			m_impl->dcInstance->documentControllerRef, knownRoles, assignedRoles);
+			m_impl->dcInstance->documentControllerRef, roles, roles);
 	if (ext == nullptr)
 	{
 		qWarning() << "Vst3AraDocument: bindToDocumentControllerWithRoles failed";
 		return false;
 	}
 
-	// playback renderer: produces the modified audio during playback
 	m_playbackRenderer = std::make_unique<Host::PlaybackRenderer>(ext);
-	m_playbackRenderer->addPlaybackRegion(m_playbackRegion);
-
-	// editor renderer: previews audio while the user edits in the plug-in UI
 	m_editorRenderer = std::make_unique<Host::EditorRenderer>(ext);
-	m_editorRenderer->addPlaybackRegion(m_playbackRegion);
-
-	// editor view: tell the plug-in which region is selected so it displays it
 	m_editorView = std::make_unique<Host::EditorView>(ext);
+
+	for (auto region : m_regions)
+	{
+		m_playbackRenderer->addPlaybackRegion(region);
+		m_editorRenderer->addPlaybackRegion(region);
+	}
+
 	auto selection = makeProps<ARAViewSelection>();
-	selection.playbackRegionRefsCount = 1;
-	selection.playbackRegionRefs = &m_playbackRegion;
-	selection.regionSequenceRefsCount = 0;
-	selection.regionSequenceRefs = nullptr;
-	selection.timeRange = nullptr;
+	selection.playbackRegionRefsCount = m_regions.size();
+	selection.playbackRegionRefs = m_regions.data();
 	m_editorView->notifySelection(&selection);
 
 	return true;
@@ -379,15 +469,15 @@ void Vst3AraDocument::notifyModelUpdates()
 
 void Vst3AraDocument::teardown()
 {
-	if (m_editorView) { m_editorView.reset(); }
-	if (m_editorRenderer && m_playbackRegion)
+	m_editorView.reset();
+	if (m_editorRenderer)
 	{
-		m_editorRenderer->removePlaybackRegion(m_playbackRegion);
+		for (auto region : m_regions) { m_editorRenderer->removePlaybackRegion(region); }
 	}
 	m_editorRenderer.reset();
-	if (m_playbackRenderer && m_playbackRegion)
+	if (m_playbackRenderer)
 	{
-		m_playbackRenderer->removePlaybackRegion(m_playbackRegion);
+		for (auto region : m_regions) { m_playbackRenderer->removePlaybackRegion(region); }
 	}
 	m_playbackRenderer.reset();
 
@@ -395,12 +485,15 @@ void Vst3AraDocument::teardown()
 	{
 		auto* dc = m_documentController;
 		dc->beginEditing();
-		if (m_playbackRegion) { dc->destroyPlaybackRegion(m_playbackRegion); }
-		if (m_audioModification) { dc->destroyAudioModification(m_audioModification); }
-		if (m_audioSource)
+		for (auto it = m_sources.rbegin(); it != m_sources.rend(); ++it)
 		{
-			dc->enableAudioSourceSamplesAccess(m_audioSource, false);
-			dc->destroyAudioSource(m_audioSource);
+			if (it->playbackRegion) { dc->destroyPlaybackRegion(it->playbackRegion); }
+			if (it->audioModification) { dc->destroyAudioModification(it->audioModification); }
+			if (it->audioSource)
+			{
+				dc->enableAudioSourceSamplesAccess(it->audioSource, false);
+				dc->destroyAudioSource(it->audioSource);
+			}
 		}
 		if (m_regionSequence) { dc->destroyRegionSequence(m_regionSequence); }
 		if (m_musicalContext) { dc->destroyMusicalContext(m_musicalContext); }
@@ -408,9 +501,8 @@ void Vst3AraDocument::teardown()
 		dc->destroyDocumentController();
 	}
 
-	m_playbackRegion = nullptr;
-	m_audioModification = nullptr;
-	m_audioSource = nullptr;
+	m_sources.clear();
+	m_regions.clear();
 	m_regionSequence = nullptr;
 	m_musicalContext = nullptr;
 	m_documentController = nullptr;
@@ -420,6 +512,7 @@ void Vst3AraDocument::teardown()
 		m_impl->controller.reset();
 		m_impl->dcInstance = nullptr;
 		m_impl->hostInstance.reset();
+		m_impl->audioData.clear();
 	}
 }
 

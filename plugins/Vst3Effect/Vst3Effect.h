@@ -79,6 +79,10 @@ public:
 
 	Vst3Plugin* plugin() const { return m_plugin.get(); }
 
+	//! Locate the sample track this effect is on and expose its clips to the
+	//! plug-in via ARA. Returns the number of audio regions set up (0 = failed).
+	int syncAraFromTrack();
+
 private:
 	bool openPlugin(const QString& file, const QString& uid);
 

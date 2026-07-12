@@ -27,6 +27,7 @@
 
 #include <memory>
 #include "Clip.h"
+#include "lmms_export.h"
 #include "Sample.h"
 
 namespace lmms
@@ -42,7 +43,7 @@ class SampleClipView;
 } // namespace gui
 
 
-class SampleClip : public Clip
+class LMMS_EXPORT SampleClip : public Clip
 {
 	Q_OBJECT
 	mapPropertyFromModel(bool,isRecord,setRecord,m_recordModel);

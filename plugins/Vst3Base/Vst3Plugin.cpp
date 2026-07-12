@@ -970,25 +970,33 @@ std::vector<std::string> Vst3Plugin::modulePaths()
 
 
 
-bool Vst3Plugin::enableAra(const QString& file, double startInSongSeconds, double durationSeconds)
+bool Vst3Plugin::enableAra(const std::vector<AraSource>& sources)
 {
 #ifdef LMMS_HAVE_ARA
-	if (!m_hasAra || m_araFactory == nullptr || !m_component) { return false; }
+	if (!m_hasAra || m_araFactory == nullptr || !m_component || sources.empty()) { return false; }
 
 	// the audio processor component also implements the ARA VST3 entry point
 	auto entryPoint = U::cast<ARA::IPlugInEntryPoint2>(m_component);
 	if (!entryPoint) { return false; }
 
+	// rebuild any previous ARA document
+	m_araDocument.reset();
+
+	auto* song = Engine::getSong();
+	const double tempo = song ? static_cast<double>(song->getTempo()) : 120.0;
+	const int tsNum = song ? song->getTimeSigModel().getNumerator() : 4;
+	const int tsDen = song ? song->getTimeSigModel().getDenominator() : 4;
+
 	auto doc = std::make_unique<Vst3AraDocument>();
 	if (!doc->setup(static_cast<const ARA::ARAFactory*>(m_araFactory),
-			entryPoint.get(), file, startInSongSeconds, durationSeconds))
+			entryPoint.get(), sources, tempo, tsNum, tsDen))
 	{
 		return false;
 	}
 	m_araDocument = std::move(doc);
 	return true;
 #else
-	Q_UNUSED(file) Q_UNUSED(startInSongSeconds) Q_UNUSED(durationSeconds)
+	Q_UNUSED(sources)
 	return false;
 #endif
 }

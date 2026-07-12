@@ -81,10 +81,20 @@ public:
 	bool hasAra() const { return m_hasAra; }
 	QString araName() const { return m_araName; }
 
-	//! Experimental: bind this plug-in instance to an ARA document backed by
-	//! the given audio file, placed at startInSongSeconds on the timeline.
-	//! Returns true if ARA rendering was set up.
-	bool enableAra(const QString& file, double startInSongSeconds, double durationSeconds);
+	//! One audio region to expose to ARA: an audio file placed on the song
+	//! timeline. offsetInSourceSeconds is where in the file the region starts.
+	struct AraSource
+	{
+		QString file;
+		double startInSongSeconds = 0.0;
+		double durationSeconds = 0.0;      //!< 0 = whole file
+		double offsetInSourceSeconds = 0.0;
+	};
+
+	//! Bind this plug-in instance to an ARA document exposing the given audio
+	//! sources/regions (typically the sample clips of the track the effect is
+	//! on). Rebuilds any previous ARA document. Returns true on success.
+	bool enableAra(const std::vector<AraSource>& sources);
 	bool araActive() const;
 
 	//! Process one block on the audio thread. For instruments pass in = nullptr.

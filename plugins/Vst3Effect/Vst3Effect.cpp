@@ -39,10 +39,17 @@
 #include <array>
 #include <cstring>
 
+#include "AudioBusHandle.h"
 #include "AudioEngine.h"
+#include "Clip.h"
+#include "EffectChain.h"
 #include "Engine.h"
+#include "SampleClip.h"
 #include "SampleFrame.h"
+#include "SampleTrack.h"
 #include "Song.h"
+#include "TimePos.h"
+#include "Track.h"
 #include "Vst3Plugin.h"
 #include "Vst3SubPluginFeatures.h"
 
@@ -111,6 +118,53 @@ bool Vst3Effect::openPlugin(const QString& file, const QString& uid)
 	m_key.attributes["file"] = file;
 	m_key.attributes["uid"] = m_plugin->uidString();
 	return true;
+}
+
+
+
+
+int Vst3Effect::syncAraFromTrack()
+{
+	if (m_plugin == nullptr || !m_plugin->hasAra()) { return 0; }
+
+	// EffectChain has no parent pointer, so find the sample track whose effect
+	// chain contains this effect
+	SampleTrack* owner = nullptr;
+	auto* song = Engine::getSong();
+	if (song == nullptr) { return 0; }
+	for (Track* t : song->tracks())
+	{
+		if (t->type() != Track::Type::Sample) { continue; }
+		auto st = dynamic_cast<SampleTrack*>(t);
+		if (st != nullptr && st->audioBusHandle()->effects() == effectChain())
+		{
+			owner = st;
+			break;
+		}
+	}
+	if (owner == nullptr) { return 0; }
+
+	const auto bpm = song->getTempo();
+
+	std::vector<Vst3Plugin::AraSource> sources;
+	for (Clip* c : owner->getClips())
+	{
+		auto sc = dynamic_cast<SampleClip*>(c);
+		if (sc == nullptr || sc->sampleFile().isEmpty()) { continue; }
+
+		Vst3Plugin::AraSource src;
+		src.file = sc->sampleFile();
+		src.startInSongSeconds = sc->startPosition().getTimeInMilliseconds(bpm) / 1000.0;
+		src.durationSeconds = sc->length().getTimeInMilliseconds(bpm) / 1000.0;
+		src.offsetInSourceSeconds = sc->startTimeOffset().getTimeInMilliseconds(bpm) / 1000.0;
+		sources.push_back(src);
+	}
+	if (sources.empty()) { return 0; }
+
+	Engine::audioEngine()->requestChangeInModel();
+	const bool ok = m_plugin->enableAra(sources);
+	Engine::audioEngine()->doneChangeInModel();
+	return ok ? static_cast<int>(sources.size()) : 0;
 }
 
 
@@ -214,30 +268,29 @@ Vst3EffectControlDialog::Vst3EffectControlDialog(Vst3EffectControls* controls) :
 	});
 	layout->addWidget(guiButton);
 
-	// experimental ARA: let the user pick the audio file this effect should
-	// analyse/re-render (e.g. for Melodyne / Vovious), then bind it as an ARA
-	// playback renderer placed at the start of the song.
+	// experimental ARA: automatically expose the track's audio clips to the
+	// plug-in (e.g. Melodyne / Vovious) and offer a button to re-sync after the
+	// clips on the track change.
 	if (plugin != nullptr && plugin->hasAra())
 	{
-		auto araButton = new QPushButton(tr("Enable ARA (choose audio)..."), this);
-		connect(araButton, &QPushButton::clicked, this, [this, controls, araButton]
+		auto araLabel = new QLabel(this);
+		auto araButton = new QPushButton(tr("Sync track audio to ARA"), this);
+
+		auto doSync = [controls, araLabel]
 		{
-			auto p = controls->m_effect->plugin();
-			if (p == nullptr) { return; }
-
-			FileDialog ofd(nullptr, tr("Choose audio file for ARA"));
-			ofd.setFileMode(FileDialog::ExistingFile);
-			ofd.setNameFilters({tr("Audio files (*.wav *.flac *.ogg *.mp3 *.aiff)")});
-			ofd.setDirectory(ConfigManager::inst()->userSamplesDir());
-			if (ofd.exec() != QDialog::Accepted || ofd.selectedFiles().isEmpty()) { return; }
-
-			const bool ok = p->enableAra(ofd.selectedFiles()[0], 0.0, 0.0);
-			araButton->setText(ok ? tr("ARA active: %1").arg(p->araName())
-					: tr("ARA setup failed"));
-			araButton->setEnabled(!ok);
-		});
+			int n = controls->m_effect->syncAraFromTrack();
+			araLabel->setText(n > 0
+					? tr("ARA: %1 region(s) from track").arg(n)
+					: tr("ARA: no audio clips on this track"));
+		};
+		connect(araButton, &QPushButton::clicked, this, doSync);
+		layout->addWidget(araLabel);
 		layout->addWidget(araButton);
-		setFixedSize(260, 140);
+
+		// try once immediately so it "just works" when the track already has clips
+		doSync();
+
+		setFixedSize(280, 150);
 	}
 	else
 	{
