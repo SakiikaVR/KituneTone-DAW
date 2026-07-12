@@ -25,14 +25,20 @@
 #include "Vst3AraHost.h"
 
 #include <QByteArray>
+#include <QDateTime>
 #include <QDebug>
+#include <QDir>
+#include <QFile>
+#include <QTextStream>
 
+#include <atomic>
 #include <cstring>
 #include <memory>
 #include <set>
 #include <string>
 #include <vector>
 
+#include "ConfigManager.h"
 #include "SampleDecoder.h"
 
 using namespace ARA;
@@ -53,7 +59,31 @@ T makeProps()
 	return props;
 }
 
+std::atomic<long> g_audioReadCount{0};
+
 } // anonymous namespace
+
+
+
+
+void araDebugLog(const QString& message)
+{
+	const QString path = ConfigManager::inst()->workingDir() + "lmms_ara_debug.log";
+	QFile file(path);
+	if (file.open(QIODevice::Append | QIODevice::Text))
+	{
+		QTextStream ts(&file);
+		ts << QDateTime::currentDateTime().toString("hh:mm:ss.zzz") << "  " << message << "\n";
+	}
+}
+
+
+
+
+long araAudioReadCount()
+{
+	return g_audioReadCount.load();
+}
 
 
 
@@ -112,6 +142,8 @@ public:
 			ARAAudioSourceHostRef sourceRef, bool use64BitSamples) noexcept override
 	{
 		auto data = reinterpret_cast<AraAudioData*>(sourceRef);
+		araDebugLog(QString("createAudioReaderForSource: use64=%1 frames=%2")
+				.arg(use64BitSamples).arg(data ? static_cast<long long>(data->frames) : -1));
 		auto reader = new Reader{data, use64BitSamples};
 		return reinterpret_cast<ARAAudioReaderHostRef>(reader);
 	}
@@ -119,6 +151,7 @@ public:
 	bool readAudioSamples(ARAAudioReaderHostRef readerRef, ARASamplePosition samplePosition,
 			ARASampleCount samplesPerChannel, void* const buffers[]) noexcept override
 	{
+		g_audioReadCount.fetch_add(1);
 		auto reader = reinterpret_cast<Reader*>(readerRef);
 		if (reader == nullptr || reader->data == nullptr) { return false; }
 		const AraAudioData* d = reader->data;
@@ -349,11 +382,23 @@ bool Vst3AraDocument::setup(const ARAFactory* araFactory,
 	regionSeqProps.musicalContextRef = m_musicalContext;
 	m_regionSequence = dc->createRegionSequence(nullptr, &regionSeqProps);
 
+	araDebugLog(QString("setup: %1 source(s), tempo=%2 %3/%4, analyzeableTypes=%5")
+			.arg(sources.size()).arg(tempo).arg(timeSigNum).arg(timeSigDen)
+			.arg(araFactory->analyzeableContentTypesCount));
+
 	int index = 0;
 	for (const auto& src : sources)
 	{
 		auto decoded = SampleDecoder::decode(src.file);
-		if (!decoded || decoded->data.empty()) { ++index; continue; }
+		if (!decoded || decoded->data.empty())
+		{
+			araDebugLog(QString("  decode FAILED: %1").arg(src.file));
+			++index;
+			continue;
+		}
+		araDebugLog(QString("  decoded %1: %2 frames @ %3 Hz, startSong=%4s dur=%5s off=%6s")
+				.arg(src.file).arg(decoded->data.size()).arg(decoded->sampleRate)
+				.arg(src.startInSongSeconds).arg(src.durationSeconds).arg(src.offsetInSourceSeconds));
 
 		auto data = std::make_unique<AraAudioData>();
 		data->sampleRate = decoded->sampleRate;
@@ -431,9 +476,14 @@ bool Vst3AraDocument::setup(const ARAFactory* araFactory,
 			m_impl->dcInstance->documentControllerRef, roles, roles);
 	if (ext == nullptr)
 	{
-		qWarning() << "Vst3AraDocument: bindToDocumentControllerWithRoles failed";
+		araDebugLog("bindToDocumentControllerWithRoles FAILED (null extension)");
 		return false;
 	}
+	araDebugLog(QString("bound OK: %1 region(s), plugRef=%2 editRef=%3 viewRef=%4")
+			.arg(m_regions.size())
+			.arg(ext->playbackRendererRef != nullptr)
+			.arg(ext->editorRendererRef != nullptr)
+			.arg(ext->editorViewRef != nullptr));
 
 	m_playbackRenderer = std::make_unique<Host::PlaybackRenderer>(ext);
 	m_editorRenderer = std::make_unique<Host::EditorRenderer>(ext);

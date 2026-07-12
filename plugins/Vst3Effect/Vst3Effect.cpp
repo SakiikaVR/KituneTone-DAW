@@ -50,6 +50,7 @@
 #include "Song.h"
 #include "TimePos.h"
 #include "Track.h"
+#include "Vst3AraHost.h"
 #include "Vst3Plugin.h"
 #include "Vst3SubPluginFeatures.h"
 
@@ -142,15 +143,22 @@ int Vst3Effect::syncAraFromTrack()
 			break;
 		}
 	}
+	araDebugLog(QString("syncAraFromTrack: owner track=%1").arg(owner ? "found" : "NOT FOUND"));
 	if (owner == nullptr) { return 0; }
 
 	const auto bpm = song->getTempo();
 
 	std::vector<Vst3Plugin::AraSource> sources;
+	araDebugLog(QString("  track has %1 clip(s)").arg(owner->getClips().size()));
 	for (Clip* c : owner->getClips())
 	{
 		auto sc = dynamic_cast<SampleClip*>(c);
-		if (sc == nullptr || sc->sampleFile().isEmpty()) { continue; }
+		if (sc == nullptr || sc->sampleFile().isEmpty())
+		{
+			araDebugLog(QString("  clip skipped (sampleClip=%1 file=%2)")
+					.arg(sc != nullptr).arg(sc ? sc->sampleFile() : "n/a"));
+			continue;
+		}
 
 		Vst3Plugin::AraSource src;
 		src.file = sc->sampleFile();
@@ -187,6 +195,14 @@ Effect::ProcessStatus Vst3Effect::processImpl(SampleFrame* buf, const f_cnt_t fr
 	{
 		buf[f][0] = w * tempBuf[f][0] + d * buf[f][0];
 		buf[f][1] = w * tempBuf[f][1] + d * buf[f][1];
+	}
+
+	// While ARA is active, keep processing every period (even during silence /
+	// when the transport is stopped) so the plug-in keeps receiving the current
+	// transport state and its playhead follows the DAW's stop as well as play.
+	if (m_plugin != nullptr && m_plugin->araActive())
+	{
+		return ProcessStatus::Continue;
 	}
 
 	return ProcessStatus::ContinueIfNotQuiet;

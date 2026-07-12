@@ -35,6 +35,7 @@
 #include "ARA_Library/Dispatch/ARAHostDispatch.h"
 
 #include "Vst3Plugin.h"
+#include "vst3base_export.h"
 
 namespace lmms
 {
@@ -96,6 +97,13 @@ private:
 //! One-time global initialization of an ARA factory (initializeARAWithConfiguration).
 //! Safe to call repeatedly; only the first call per factory performs the init.
 void araEnsureFactoryInitialized(const ARA::ARAFactory* factory);
+
+//! Append a diagnostic line to <workingDir>/lmms_ara_debug.log (experimental).
+VST3BASE_EXPORT void araDebugLog(const QString& message);
+
+//! Number of times the plug-in has read audio samples from our host (for
+//! diagnosing whether ARA audio access is happening).
+VST3BASE_EXPORT long araAudioReadCount();
 
 
 } // namespace lmms

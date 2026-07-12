@@ -863,7 +863,17 @@ void Vst3Plugin::syncOutputParameters()
 {
 #ifdef LMMS_HAVE_ARA
 	// let the ARA plug-in process deferred model updates (analysis etc.)
-	if (m_araDocument) { m_araDocument->notifyModelUpdates(); }
+	if (m_araDocument)
+	{
+		m_araDocument->notifyModelUpdates();
+		// log audio-read progress roughly every 2s (40 * 50ms timer)
+		static int s_tick = 0;
+		if (++s_tick >= 40)
+		{
+			s_tick = 0;
+			araDebugLog(QString("audio reads so far: %1").arg(araAudioReadCount()));
+		}
+	}
 #endif
 
 	std::map<Steinberg::Vst::ParamID, double> params;
