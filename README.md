@@ -4,7 +4,7 @@
   <img src=".github/assets/kitsunetone-logo.png" alt="狐Toneロゴ" width="480">
 </p>
 
-**狐Tone** は、オープンソース[LMMS](https://lmms.io/) をフォークして生まれた、独自拡張を持つオリジナルDAWです。
+**狐Tone** は、[LMMS](https://lmms.io/) (オープンソース)をフォークして生まれた、独自拡張を持つオリジナルDAWです。
 VST3,ARA2,マルチトラック録音、日本語環境向けの改善などを独自に追加しています。
 
 > [!IMPORTANT]
