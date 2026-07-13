@@ -145,6 +145,7 @@ private:
 	static void elideText( QLabel *label, QString text );
 	void adjustTitleBar();
 	void setPinned(bool on);
+	void updatePinIcon(bool on);	//!< recolour the pin button to show its state
 
 private slots:
 	void focusChanged( QMdiSubWindow * subWindow );

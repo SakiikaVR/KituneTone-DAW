@@ -98,6 +98,8 @@ SubWindow::SubWindow(QWidget* parent, Qt::WindowFlags windowFlags)
 	m_pinBtn = createButton("pin", tr("Always on top"));
 	m_pinBtn->setCheckable(true);
 	connect(m_pinBtn, &QPushButton::toggled, this, &SubWindow::setPinned);
+	// show the un-pinned state from the start (dimmed pin)
+	updatePinIcon(false);
 
 	// QLabel for the window title and the shadow effect
 	m_shadow = new QGraphicsDropShadowEffect();
@@ -379,8 +381,24 @@ void SubWindow::detach()
 	adjustTitleBar();
 }
 
+void SubWindow::updatePinIcon(bool on)
+{
+	// recolour the pin so its on/off state is obvious: a bright amber pin
+	// when pinned (always-on-top), a dim grey pin when not
+	QPixmap icon = embed::getIconPixmap("pin");
+	QPainter p(&icon);
+	p.setCompositionMode(QPainter::CompositionMode_SourceIn);
+	p.fillRect(icon.rect(), on ? QColor(255, 176, 32) : QColor(130, 130, 130));
+	p.end();
+	m_pinBtn->setIcon(icon);
+}
+
 void SubWindow::setPinned(bool on)
 {
+	// reflect the state on the button regardless of whether the change to the
+	// actual window flag below applies
+	updatePinIcon(on);
+
 	if (!isDetached()) { return; }
 
 #ifdef LMMS_BUILD_WIN32
