@@ -25,6 +25,7 @@
 
 #ifdef LMMS_HAVE_ARA
 
+#include <QByteArray>
 #include <QString>
 
 #include <memory>
@@ -72,6 +73,14 @@ public:
 
 	bool isValid() const { return m_playbackRenderer != nullptr; }
 
+	//! Store the plug-in's ARA state (analysis, edits) for all objects into a
+	//! byte buffer, for saving inside the project. Empty on failure.
+	QByteArray storeArchive();
+
+	//! Restore a previously stored ARA archive onto the current objects
+	//! (matched by persistent ID). Call after the sources have been built.
+	bool restoreArchive(const QByteArray& archive);
+
 	//! Must be called regularly on the GUI thread so the plug-in can process
 	//! deferred model updates (e.g. finishing audio analysis).
 	void notifyModelUpdates();
@@ -105,10 +114,11 @@ private:
 		ARA::ARAAudioSourceRef audioSource = nullptr;
 		ARA::ARAAudioModificationRef audioModification = nullptr;
 		ARA::ARAPlaybackRegionRef playbackRegion = nullptr;
+		QString file;                    //!< source audio file, to detect changes
+		double srcDurationSeconds = 0.0; //!< full decoded length, for default region duration
 	};
 	std::vector<SourceGraph> m_sources;
 	std::vector<ARA::ARAPlaybackRegionRef> m_regions;
-	int m_sourceIdCounter = 0;	//!< monotonic, for unique persistent IDs
 };
 
 

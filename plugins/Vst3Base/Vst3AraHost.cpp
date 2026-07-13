@@ -185,18 +185,52 @@ public:
 };
 
 
-//! Minimal archiving controller (no persistency support).
+//! An in-memory ARA archive; the archive reader/writer host refs point to one
+//! of these. Writing may target arbitrary offsets, so the buffer grows on demand.
+struct AraArchive
+{
+	std::vector<ARAByte> data;
+	std::string documentArchiveID;
+};
+
+
+//! Archiving controller backed by AraArchive buffers, enabling ARA persistency
+//! (the plug-in's analysis/edits are stored into / restored from the project).
 class AraArchivingController : public Host::ArchivingControllerInterface
 {
 public:
-	ARASize getArchiveSize(ARAArchiveReaderHostRef) noexcept override { return 0; }
-	bool readBytesFromArchive(ARAArchiveReaderHostRef, ARASize, ARASize,
-			ARAByte[]) noexcept override { return false; }
-	bool writeBytesToArchive(ARAArchiveWriterHostRef, ARASize, ARASize,
-			const ARAByte[]) noexcept override { return true; }
+	ARASize getArchiveSize(ARAArchiveReaderHostRef readerRef) noexcept override
+	{
+		auto archive = reinterpret_cast<const AraArchive*>(readerRef);
+		return archive ? static_cast<ARASize>(archive->data.size()) : 0;
+	}
+
+	bool readBytesFromArchive(ARAArchiveReaderHostRef readerRef, ARASize position,
+			ARASize length, ARAByte buffer[]) noexcept override
+	{
+		auto archive = reinterpret_cast<const AraArchive*>(readerRef);
+		if (archive == nullptr || position + length > archive->data.size()) { return false; }
+		std::memcpy(buffer, archive->data.data() + position, length);
+		return true;
+	}
+
+	bool writeBytesToArchive(ARAArchiveWriterHostRef writerRef, ARASize position,
+			ARASize length, const ARAByte buffer[]) noexcept override
+	{
+		auto archive = reinterpret_cast<AraArchive*>(writerRef);
+		if (archive == nullptr) { return false; }
+		if (position + length > archive->data.size()) { archive->data.resize(position + length); }
+		std::memcpy(archive->data.data() + position, buffer, length);
+		return true;
+	}
+
 	void notifyDocumentArchivingProgress(float) noexcept override {}
 	void notifyDocumentUnarchivingProgress(float) noexcept override {}
-	ARAPersistentID getDocumentArchiveID(ARAArchiveReaderHostRef) noexcept override { return ""; }
+	ARAPersistentID getDocumentArchiveID(ARAArchiveReaderHostRef readerRef) noexcept override
+	{
+		auto archive = reinterpret_cast<const AraArchive*>(readerRef);
+		return archive ? archive->documentArchiveID.c_str() : "";
+	}
 };
 
 
@@ -483,9 +517,9 @@ bool Vst3AraDocument::buildSources(const std::vector<Vst3Plugin::AraSource>& sou
 		auto data = std::make_unique<AraAudioData>();
 		data->sampleRate = decoded->sampleRate;
 		data->frames = static_cast<ARASampleCount>(decoded->data.size());
-		// unique persistent IDs across the whole document lifetime so that
-		// re-created sources never collide with ones the plug-in is retiring
-		data->persistentID = "lmms-src-" + std::to_string(m_sourceIdCounter);
+		// deterministic persistent IDs (per clip order) so a saved ARA
+		// archive can be matched back to the same sources on project reload
+		data->persistentID = "lmms-src-" + std::to_string(index);
 		data->left.resize(decoded->data.size());
 		data->right.resize(decoded->data.size());
 		for (size_t i = 0; i < decoded->data.size(); ++i)
@@ -509,7 +543,7 @@ bool Vst3AraDocument::buildSources(const std::vector<Vst3Plugin::AraSource>& sou
 		g.audioSource = dc->createAudioSource(
 				reinterpret_cast<ARAAudioSourceHostRef>(dataPtr), &sourceProps);
 
-		const std::string modID = "lmms-mod-" + std::to_string(m_sourceIdCounter);
+		const std::string modID = "lmms-mod-" + std::to_string(index);
 		auto modProps = makeProps<ARAAudioModificationProperties>();
 		modProps.name = "LMMS Modification";
 		modProps.persistentID = modID.c_str();
@@ -517,6 +551,8 @@ bool Vst3AraDocument::buildSources(const std::vector<Vst3Plugin::AraSource>& sou
 
 		const double srcDuration = static_cast<double>(dataPtr->frames) / dataPtr->sampleRate;
 		const double dur = src.durationSeconds > 0.0 ? src.durationSeconds : srcDuration;
+		g.file = src.file;
+		g.srcDurationSeconds = srcDuration;
 
 		auto regionProps = makeProps<ARAPlaybackRegionProperties>();
 		regionProps.transformationFlags = kARAPlaybackTransformationNoChanges;
@@ -532,7 +568,6 @@ bool Vst3AraDocument::buildSources(const std::vector<Vst3Plugin::AraSource>& sou
 		m_sources.push_back(g);
 		m_regions.push_back(g.playbackRegion);
 		++index;
-		++m_sourceIdCounter;
 	}
 	return !m_sources.empty();
 }
@@ -594,15 +629,52 @@ bool Vst3AraDocument::updateRegions(const std::vector<Vst3Plugin::AraSource>& so
 	m_impl->content.timeSigNum = timeSigNum;
 	m_impl->content.timeSigDen = timeSigDen;
 
-	// detach the old regions from the renderers before they are destroyed
+	// Decide whether the audio content is unchanged and only region
+	// placement moved. If the source files match one-for-one, we update the
+	// existing playback regions in place - this keeps the audio sources and
+	// modifications (and therefore the plug-in's edits) alive. Only when the
+	// set of files actually changes do we rebuild from scratch.
+	bool sameFiles = (sources.size() == m_sources.size());
+	if (sameFiles)
+	{
+		for (size_t i = 0; i < sources.size(); ++i)
+		{
+			if (sources[i].file != m_sources[i].file) { sameFiles = false; break; }
+		}
+	}
+
+	if (sameFiles)
+	{
+		dc->beginEditing();
+		for (size_t i = 0; i < sources.size(); ++i)
+		{
+			const auto& src = sources[i];
+			const double dur = src.durationSeconds > 0.0
+					? src.durationSeconds : m_sources[i].srcDurationSeconds;
+			auto regionProps = makeProps<ARAPlaybackRegionProperties>();
+			regionProps.transformationFlags = kARAPlaybackTransformationNoChanges;
+			regionProps.startInModificationTime = src.offsetInSourceSeconds;
+			regionProps.durationInModificationTime = dur;
+			regionProps.startInPlaybackTime = src.startInSongSeconds;
+			regionProps.durationInPlaybackTime = dur;
+			regionProps.musicalContextRef = m_musicalContext;
+			regionProps.regionSequenceRef = m_regionSequence;
+			regionProps.name = "LMMS Region";
+			dc->updatePlaybackRegionProperties(m_sources[i].playbackRegion, &regionProps);
+		}
+		dc->endEditing();
+		dc->notifyModelUpdates();
+		araDebugLog("updateRegions: in-place region update (edits preserved)");
+		return true;
+	}
+
+	// files changed: detach old regions, rebuild the whole content
 	for (auto region : m_regions)
 	{
 		m_editorRenderer->removePlaybackRegion(region);
 		m_playbackRenderer->removePlaybackRegion(region);
 	}
 
-	// swap the document content for the new clip set, keeping the binding,
-	// the musical context and the region sequence intact
 	dc->beginEditing();
 	destroySources();
 	buildSources(sources);
@@ -623,6 +695,46 @@ bool Vst3AraDocument::updateRegions(const std::vector<Vst3Plugin::AraSource>& so
 
 	dc->notifyModelUpdates();
 	return true;
+}
+
+
+
+
+QByteArray Vst3AraDocument::storeArchive()
+{
+	auto* dc = m_documentController;
+	if (dc == nullptr) { return {}; }
+
+	AraArchive archive;
+	// nullptr filter = store every object; the plug-in writes its per-object
+	// data keyed by our persistent IDs through writeBytesToArchive()
+	const bool ok = dc->storeObjectsToArchive(
+			reinterpret_cast<ARAArchiveWriterHostRef>(&archive), nullptr);
+	araDebugLog(QString("storeArchive: ok=%1 bytes=%2").arg(ok).arg(archive.data.size()));
+	if (!ok) { return {}; }
+	return QByteArray(reinterpret_cast<const char*>(archive.data.data()),
+			static_cast<int>(archive.data.size()));
+}
+
+
+
+
+bool Vst3AraDocument::restoreArchive(const QByteArray& bytes)
+{
+	auto* dc = m_documentController;
+	if (dc == nullptr || bytes.isEmpty()) { return false; }
+
+	AraArchive archive;
+	archive.data.assign(reinterpret_cast<const ARAByte*>(bytes.constData()),
+			reinterpret_cast<const ARAByte*>(bytes.constData()) + bytes.size());
+
+	// nullptr filter = restore all objects, matched to the current model by
+	// persistent ID (the sources must already exist with the same IDs)
+	const bool ok = dc->restoreObjectsFromArchive(
+			reinterpret_cast<ARAArchiveReaderHostRef>(&archive), nullptr);
+	araDebugLog(QString("restoreArchive: ok=%1 bytes=%2").arg(ok).arg(bytes.size()));
+	dc->notifyModelUpdates();
+	return ok;
 }
 
 

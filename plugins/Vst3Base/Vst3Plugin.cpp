@@ -1096,13 +1096,41 @@ bool Vst3Plugin::enableAra(const std::vector<AraSource>& sources)
 	auto doc = std::make_unique<Vst3AraDocument>();
 	const bool ok = doc->setup(static_cast<const ARA::ARAFactory*>(m_araFactory),
 			entryPoint.get(), sources, tempo, tsNum, tsDen);
-	if (ok) { m_araDocument = std::move(doc); }
+	if (ok)
+	{
+		m_araDocument = std::move(doc);
+		// restore any ARA state saved with the project (analysis, edits);
+		// the sources now exist with the persistent IDs the archive expects
+		if (!m_pendingAraArchive.isEmpty())
+		{
+			m_araDocument->restoreArchive(m_pendingAraArchive);
+			m_pendingAraArchive.clear();
+		}
+	}
 
 	if (restoreEditor) { showEditor(); }
 	return ok;
 #else
 	Q_UNUSED(sources)
 	return false;
+#endif
+}
+
+
+
+
+QByteArray Vst3Plugin::saveAraArchive()
+{
+#ifdef LMMS_HAVE_ARA
+	if (m_araDocument && m_araDocument->isValid())
+	{
+		return m_araDocument->storeArchive();
+	}
+	// not bound yet (e.g. project saved without opening the editor): keep any
+	// archive that is still pending restore so it survives a resave
+	return m_pendingAraArchive;
+#else
+	return {};
 #endif
 }
 

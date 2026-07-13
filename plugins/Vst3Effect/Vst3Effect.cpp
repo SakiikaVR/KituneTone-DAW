@@ -305,6 +305,15 @@ void Vst3EffectControls::saveSettings(QDomDocument& doc, QDomElement& element)
 	if (m_effect->m_plugin != nullptr)
 	{
 		m_effect->m_plugin->saveState(doc, element);
+
+		// persist the plug-in's ARA state (analysis / edits) as base64 so
+		// they survive a project save/reload
+		const QByteArray araArchive = m_effect->m_plugin->saveAraArchive();
+		if (!araArchive.isEmpty())
+		{
+			element.setAttribute("ara-archive",
+					QString::fromLatin1(araArchive.toBase64()));
+		}
 	}
 }
 
@@ -317,6 +326,15 @@ void Vst3EffectControls::loadSettings(const QDomElement& element)
 	if (m_effect->m_plugin != nullptr)
 	{
 		m_effect->m_plugin->loadState(element);
+
+		// stage any saved ARA archive; it is restored once the ARA document
+		// is (re)bound from the track's clips
+		const QString araArchive = element.attribute("ara-archive");
+		if (!araArchive.isEmpty())
+		{
+			m_effect->m_plugin->setPendingAraArchive(
+					QByteArray::fromBase64(araArchive.toLatin1()));
+		}
 	}
 }
 

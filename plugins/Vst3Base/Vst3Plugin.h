@@ -98,6 +98,13 @@ public:
 	bool enableAra(const std::vector<AraSource>& sources);
 	bool araActive() const;
 
+	//! Serialize the plug-in's ARA state (analysis/edits) for the project.
+	//! Empty if ARA is not active.
+	QByteArray saveAraArchive();
+	//! Provide an ARA archive to restore the next time the document is bound
+	//! (used on project load, before the sources exist).
+	void setPendingAraArchive(const QByteArray& archive) { m_pendingAraArchive = archive; }
+
 	//! Process one block on the audio thread. For instruments pass in = nullptr.
 	//! in/out may alias. frames <= MAXIMUM_BUFFER_SIZE.
 	void process(const SampleFrame* in, SampleFrame* out, f_cnt_t frames);
@@ -164,6 +171,7 @@ private:
 	QString m_araName;
 	const void* m_araFactory = nullptr;       //!< const ARA::ARAFactory*
 	std::unique_ptr<class Vst3AraDocument> m_araDocument;
+	QByteArray m_pendingAraArchive;           //!< restored on the next bind
 
 	VST3::Hosting::Module::Ptr m_module;
 	Steinberg::IPtr<Steinberg::Vst::PlugProvider> m_provider;
