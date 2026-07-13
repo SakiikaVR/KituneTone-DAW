@@ -25,8 +25,16 @@
 #include "SampleClipView.h"
 
 #include <QApplication>
+#include <QDialog>
+#include <QDialogButtonBox>
+#include <QDoubleSpinBox>
+#include <QFormLayout>
+#include <QHBoxLayout>
+#include <QLabel>
 #include <QMenu>
 #include <QPainter>
+#include <QPushButton>
+#include <QSpinBox>
 
 #include "FileDialog.h"
 #include "GuiApplication.h"
@@ -99,6 +107,13 @@ void SampleClipView::constructContextMenu(QMenu* cm)
 		tr("Set as ghost in automation editor"),
 		this,
 		SLOT(setAutomationGhost())
+	);
+
+	cm->addAction(
+		embed::getIconPixmap("timeline"),
+		tr("タイムストレッチ..."),
+		this,
+		SLOT(openTimeStretchDialog())
 	);
 
 }
@@ -370,6 +385,75 @@ void SampleClipView::setAutomationGhost()
 	aEditor->parentWidget()->show();
 	aEditor->show();
 	aEditor->setFocus();
+}
+
+
+
+
+void SampleClipView::openTimeStretchDialog()
+{
+	QDialog dialog(this);
+	dialog.setWindowTitle(tr("タイムストレッチ"));
+	auto form = new QFormLayout(&dialog);
+
+	// stretch amount as a percentage of the original length (pitch preserved)
+	auto stretchBox = new QDoubleSpinBox(&dialog);
+	stretchBox->setRange(25.0, 400.0);
+	stretchBox->setSuffix(" %");
+	stretchBox->setValue(m_clip->stretchFactor() * 100.0);
+	form->addRow(tr("長さ（伸縮率）:"), stretchBox);
+
+	// quick ratio buttons: half length (2x speed) and double length (1/2 speed)
+	auto ratioRow = new QHBoxLayout();
+	auto halfBtn = new QPushButton(tr("½倍（速く）"), &dialog);
+	auto doubleBtn = new QPushButton(tr("2倍（遅く）"), &dialog);
+	auto resetBtn = new QPushButton(tr("等倍"), &dialog);
+	ratioRow->addWidget(halfBtn);
+	ratioRow->addWidget(doubleBtn);
+	ratioRow->addWidget(resetBtn);
+	form->addRow(QString(), ratioRow);
+	// these set an absolute length ratio and clear any BPM sync
+	auto bpmBoxPtr = new QSpinBox(&dialog);   // declared here so buttons can reset it
+	connect(halfBtn, &QPushButton::clicked, &dialog, [=] { bpmBoxPtr->setValue(0); stretchBox->setValue(50.0); });
+	connect(doubleBtn, &QPushButton::clicked, &dialog, [=] { bpmBoxPtr->setValue(0); stretchBox->setValue(200.0); });
+	connect(resetBtn, &QPushButton::clicked, &dialog, [=] { bpmBoxPtr->setValue(0); stretchBox->setValue(100.0); });
+
+	// optional: original tempo of the material; when > 0 the clip is stretched
+	// to the current song tempo (and follows tempo changes)
+	auto bpmBox = bpmBoxPtr;
+	bpmBox->setRange(0, 400);
+	bpmBox->setSpecialValueText(tr("オフ"));
+	bpmBox->setValue(m_clip->sourceBpm());
+	form->addRow(tr("素材のテンポ (BPM):"), bpmBox);
+	auto bpmHint = new QLabel(tr("曲のテンポ: %1 BPM").arg(Engine::getSong()->getTempo()), &dialog);
+	form->addRow(QString(), bpmHint);
+
+	// keep the two inputs consistent: entering a BPM computes the stretch
+	// (material faster than the song is lengthened to slow it down)
+	connect(bpmBox, QOverload<int>::of(&QSpinBox::valueChanged), &dialog, [&](int bpm) {
+		if (bpm > 0)
+		{
+			stretchBox->setValue(static_cast<double>(bpm) / Engine::getSong()->getTempo() * 100.0);
+		}
+	});
+
+	auto buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &dialog);
+	form->addRow(buttons);
+	connect(buttons, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
+	connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
+
+	if (dialog.exec() != QDialog::Accepted) { return; }
+
+	if (bpmBox->value() > 0)
+	{
+		m_clip->setSourceBpm(bpmBox->value());
+	}
+	else
+	{
+		m_clip->setSourceBpm(0);
+		m_clip->setStretchFactor(static_cast<float>(stretchBox->value() / 100.0));
+	}
+	update();
 }
 
 } // namespace lmms::gui

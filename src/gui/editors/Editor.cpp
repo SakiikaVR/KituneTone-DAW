@@ -124,7 +124,8 @@ Editor::Editor(bool record, bool stepRecord) :
 	addButton(m_playAction, "playButton");
 	if (record)
 	{
-		addButton(m_recordAction, "recordButton");
+		// single record button: records while playing, capturing each
+		// record-armed track (mic for sample tracks, MIDI for instrument tracks)
 		addButton(m_recordAccompanyAction, "recordAccompanyButton");
 	}
 	if(stepRecord)

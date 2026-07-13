@@ -49,7 +49,8 @@ class TrackContainerView;
 
 
 const int DEFAULT_SETTINGS_WIDGET_WIDTH = 260;
-const int TRACK_OP_WIDTH = 78;
+// wide enough for gear + mute + solo + record buttons, with right padding
+const int TRACK_OP_WIDTH = 100;
 // This shaves 150-ish pixels off track buttons,
 // ruled from config: ui.compacttrackbuttons
 const int DEFAULT_SETTINGS_WIDGET_WIDTH_COMPACT = 136;

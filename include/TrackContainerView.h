@@ -159,6 +159,13 @@ public slots:
 	void dropEvent( QDropEvent * _de ) override;
 	void dragEnterEvent( QDragEnterEvent * _dee ) override;
 
+	//! import dropped MIDI files. If target is non-null (the file was dropped
+	//! onto an existing instrument track), the notes are played with that
+	//! instrument and no new tracks are kept; otherwise the user is asked
+	//! whether to keep the automation tracks the importer generates.
+	void importMidiFiles( const QStringList& files, InstrumentTrack* target = nullptr,
+			TimePos dropStart = TimePos( 0 ) );
+
 	///
 	/// \brief stopRubberBand
 	/// Removes the rubber band from display when finished with.
@@ -186,6 +193,10 @@ private:
 
 	} ;
 	friend class TrackContainerView::scrollArea;
+
+	//! remove a track the MIDI importer created, destroying its view before
+	//! its model so no dangling TrackView is left behind
+	void removeTrackSafely( Track* track );
 
 	TrackContainer* m_tc;
 	using trackViewList = QList<TrackView*>;

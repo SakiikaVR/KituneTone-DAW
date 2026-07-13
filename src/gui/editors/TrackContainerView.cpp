@@ -26,11 +26,21 @@
 
 
 #include <QLayout>
+#include <QMessageBox>
+#include <QMimeData>
 #include <QScrollBar>
+#include <QTimer>
+#include <QUrl>
 #include <QWheelEvent>
+
+#include <set>
+#include <vector>
 
 #include "TrackContainer.h"
 #include "AudioEngine.h"
+#include "Engine.h"
+#include "MidiClip.h"
+#include "Note.h"
 #include "DataFile.h"
 #include "MainWindow.h"
 #include "FileBrowser.h"
@@ -365,8 +375,32 @@ void TrackContainerView::clearAllTracks()
 
 
 
+//! true if the drop carries a file from a file manager with one of the given
+//! (case-insensitive) extensions
+static bool hasExternalFileWithExtension(const QMimeData* mime, const QStringList& extensions)
+{
+	if (mime == nullptr || !mime->hasUrls()) { return false; }
+	for (const QUrl& url : mime->urls())
+	{
+		const QString path = url.toLocalFile();
+		for (const QString& ext : extensions)
+		{
+			if (path.endsWith(ext, Qt::CaseInsensitive)) { return true; }
+		}
+	}
+	return false;
+}
+
+
 void TrackContainerView::dragEnterEvent( QDragEnterEvent * _dee )
 {
+	// MIDI files dragged in from a file manager (Explorer, Finder, ...)
+	if (hasExternalFileWithExtension(_dee->mimeData(), {".mid", ".midi"}))
+	{
+		_dee->acceptProposedAction();
+		return;
+	}
+
 	StringPairDrag::processDragEnterEvent( _dee,
 		QString( "presetfile,pluginpresetfile,samplefile,instrument,"
 				"importedproject,soundfontfile,patchfile,vstpluginfile,projectfile,"
@@ -389,6 +423,63 @@ void TrackContainerView::stopRubberBand()
 
 void TrackContainerView::dropEvent( QDropEvent * _de )
 {
+	// external MIDI file(s) dropped from a file manager: import them as tracks
+	if (hasExternalFileWithExtension(_de->mimeData(), {".mid", ".midi"}))
+	{
+		QStringList midiFiles;
+		for (const QUrl& url : _de->mimeData()->urls())
+		{
+			const QString path = url.toLocalFile();
+			if (path.endsWith(".mid", Qt::CaseInsensitive)
+					|| path.endsWith(".midi", Qt::CaseInsensitive))
+			{
+				midiFiles << path;
+			}
+		}
+		_de->accept();
+
+		// if the file was dropped onto an existing instrument track, play the
+		// MIDI with that instrument instead of creating new tracks
+		InstrumentTrack* target = nullptr;
+		TrackView* hitView = nullptr;
+		const QPoint global = mapToGlobal(_de->position().toPoint());
+		for (TrackView* tv : trackViews())
+		{
+			const QRect r(tv->mapToGlobal(QPoint(0, 0)), tv->size());
+			if (r.contains(global))
+			{
+				hitView = tv;
+				target = dynamic_cast<InstrumentTrack*>(tv->getTrack());
+				break;
+			}
+		}
+
+		// translate the horizontal drop position into a song position so the
+		// imported notes land where the file was dropped (quantised to a bar)
+		TimePos dropStart(0);
+		TrackView* refView = hitView != nullptr
+				? hitView
+				: (trackViews().isEmpty() ? nullptr : trackViews().first());
+		if (refView != nullptr)
+		{
+			const int localX = refView->getTrackContentWidget()->mapFromGlobal(global).x();
+			if (localX > 0)
+			{
+				dropStart = TimePos(currentPosition()
+						+ localX * TimePos::ticksPerBar() / static_cast<int>(pixelsPerBar()));
+				dropStart = TimePos(dropStart.getBar(), 0);
+			}
+		}
+
+		// defer the actual import: doing heavy model changes synchronously
+		// inside the drop event (while Qt's drag loop is still unwinding)
+		// crashes in Qt's event handling
+		QTimer::singleShot(0, this, [this, midiFiles, target, dropStart]() {
+			importMidiFiles(midiFiles, target, dropStart);
+		});
+		return;
+	}
+
 	QString type = StringPairDrag::decodeKey( _de );
 	QString value = StringPairDrag::decodeValue( _de );
 	if( type == "instrument" )
@@ -441,6 +532,147 @@ void TrackContainerView::dropEvent( QDropEvent * _de )
 		Track::create( dataFile.content().firstChild().toElement(), m_tc );
 		_de->accept();
 	}
+}
+
+
+
+
+void TrackContainerView::importMidiFiles( const QStringList& files,
+		InstrumentTrack* target, TimePos dropStart )
+{
+	if (files.isEmpty()) { return; }
+
+	// Serialise imports: the automation dialog below spins a nested event loop,
+	// during which another queued drop's importMidiFiles could re-enter and
+	// corrupt the track bookkeeping. If one is already running, retry shortly.
+	static bool s_importing = false;
+	if (s_importing)
+	{
+		QTimer::singleShot(50, this, [this, files, target, dropStart]() {
+			importMidiFiles(files, target, dropStart);
+		});
+		return;
+	}
+	s_importing = true;
+	struct Guard { ~Guard() { s_importing = false; } } guard;
+
+	// Ask whether to also keep the automation (tempo/BPM, time signature, CC,
+	// pitch bend) the importer generates -- shown whether or not the file is
+	// dropped onto an existing instrument track.
+	auto answer = QMessageBox::question(this, tr("MIDIインポート"),
+			tr("テンポ（BPM）やオートメーション（CC・ピッチベンドなど）も取り込みますか？"),
+			QMessageBox::Yes | QMessageBox::No | QMessageBox::Cancel, QMessageBox::Yes);
+	if (answer == QMessageBox::Cancel) { return; }
+	const bool keepAutomation = (answer == QMessageBox::Yes);
+
+	// remember the existing tracks so we can identify what the import adds
+	const auto existing = std::set<Track*>(m_tc->tracks().begin(), m_tc->tracks().end());
+
+	for (const QString& path : files) { ImportFilter::import(path, m_tc); }
+
+	std::vector<Track*> addedInstruments;
+	std::vector<Track*> addedAutomation;
+	for (Track* t : m_tc->tracks())
+	{
+		if (existing.find(t) != existing.end()) { continue; }
+		if (t->type() == Track::Type::Instrument) { addedInstruments.push_back(t); }
+		else if (t->type() == Track::Type::Automation
+				|| t->type() == Track::Type::HiddenAutomation)
+		{
+			addedAutomation.push_back(t);
+		}
+	}
+
+	// earliest note position across the import, so the whole sequence can be
+	// shifted to the drop point while keeping its internal timing intact
+	TimePos minStart = -1;
+	for (Track* t : addedInstruments)
+	{
+		for (Clip* c : t->getClips())
+		{
+			auto mc = dynamic_cast<MidiClip*>(c);
+			if (mc == nullptr || mc->notes().empty()) { continue; }
+			if (minStart < 0 || mc->startPosition() < minStart)
+			{
+				minStart = mc->startPosition();
+			}
+		}
+	}
+	if (minStart < 0) { minStart = 0; }
+
+	Engine::audioEngine()->requestChangeInModel();
+	if (target != nullptr)
+	{
+		// play the imported notes with the existing instrument: copy each clip
+		// (the whole Note is copied, so velocity/panning/length are preserved)
+		// to the drop position, preserving the relative timing between clips
+		for (Track* t : addedInstruments)
+		{
+			auto src = dynamic_cast<InstrumentTrack*>(t);
+			if (src == nullptr) { continue; }
+			for (Clip* c : src->getClips())
+			{
+				auto mc = dynamic_cast<MidiClip*>(c);
+				if (mc == nullptr || mc->notes().empty()) { continue; }
+				const TimePos pos = dropStart + (mc->startPosition() - minStart);
+				auto dst = dynamic_cast<MidiClip*>(target->createClip(pos));
+				if (dst == nullptr) { continue; }
+				for (const Note* n : mc->notes()) { dst->addNote(*n, false); }
+				dst->updateLength();
+			}
+		}
+	}
+	else
+	{
+		// keep the imported instrument tracks; shift their clips to the drop
+		// point (automation clips stay on the timeline where they belong)
+		for (Track* t : addedInstruments)
+		{
+			for (Clip* c : t->getClips())
+			{
+				c->movePosition(dropStart + (c->startPosition() - minStart));
+			}
+		}
+	}
+	Engine::audioEngine()->doneChangeInModel();
+
+	// Decide which import-created tracks to drop. When dropping onto an
+	// instrument track its notes now live on the target, so the imported
+	// instrument tracks are always removed; automation is removed unless the
+	// user chose to keep it.
+	std::vector<Track*> toRemove;
+	if (!keepAutomation)
+	{
+		toRemove.insert(toRemove.end(), addedAutomation.begin(), addedAutomation.end());
+	}
+	if (target != nullptr)
+	{
+		toRemove.insert(toRemove.end(), addedInstruments.begin(), addedInstruments.end());
+	}
+	if (toRemove.empty()) { return; }
+
+	// Defer the removal one more event cycle: the importer just built these
+	// tracks' views, whose queued initialisation events would dangle (and
+	// crash) if the widgets were deleted synchronously from this deferred call.
+	QTimer::singleShot(0, this, [this, toRemove]() {
+		for (Track* t : toRemove) { removeTrackSafely(t); }
+	});
+}
+
+
+
+
+void TrackContainerView::removeTrackSafely( Track* track )
+{
+	// prefer the view-safe removal (destroys the TrackView before the model)
+	for (TrackView* tv : trackViews())
+	{
+		if (tv->getTrack() == track) { deleteTrackView(tv); return; }
+	}
+	// no view (e.g. headless): delete the model directly
+	Engine::audioEngine()->requestChangeInModel();
+	delete track;
+	Engine::audioEngine()->doneChangeInModel();
 }
 
 

@@ -28,6 +28,7 @@
 #include <QDebug>
 #include <QFile>
 #include <QMessageBox>
+#include <QTimer>
 
 #include <algorithm>
 #include <cmath>
@@ -37,6 +38,7 @@
 #include "AutomationEditor.h"
 #include "ConfigManager.h"
 #include "SampleClip.h"
+#include "SampleTrack.h"
 #include "ControllerRackView.h"
 #include "ControllerConnection.h"
 #include "EnvelopeAndLfoParameters.h"
@@ -521,6 +523,89 @@ void Song::playSong()
 
 
 
+//! Begin recording every record-armed track: sample tracks capture their
+//! selected microphone/input, instrument tracks record played MIDI notes into
+//! a new clip on themselves. Tracks that are not armed are left untouched, and
+//! no extra tracks are created.
+void Song::startAudioRecording()
+{
+	m_recordStartPos = TimePos(getPlayPos(PlayMode::Song).getTicks());
+	m_recordingClips.clear();
+
+	auto& recorder = AudioRecorder::instance();
+	bool started = false;
+	Engine::audioEngine()->requestChangeInModel();
+	for (Track* t : tracks())
+	{
+		if (!t->isRecordEnabled()) { continue; }
+
+		if (t->type() == Track::Type::Sample)
+		{
+			auto st = dynamic_cast<SampleTrack*>(t);
+			if (st != nullptr
+					&& recorder.startCapture(static_cast<int>(t->id()), st->recordingDevice()))
+			{
+				started = true;
+				// create a live clip now so the recording is visible while it
+				// grows; the WAV file is attached on stop
+				if (auto clip = dynamic_cast<SampleClip*>(st->createClip(m_recordStartPos)))
+				{
+					clip->setName(tr("Recording..."));
+					clip->changeLength(TimePos(1));
+					m_recordingClips[static_cast<int>(t->id())] = clip;
+				}
+			}
+		}
+		else if (t->type() == Track::Type::Instrument)
+		{
+			if (auto it = dynamic_cast<InstrumentTrack*>(t))
+			{
+				it->startMidiRecording(m_recordStartPos);
+				started = true;
+			}
+		}
+	}
+	Engine::audioEngine()->doneChangeInModel();
+
+	m_recording = started;
+
+	// grow the live clips towards the playhead a few times a second
+	if (started)
+	{
+		if (m_recordUpdateTimer == nullptr)
+		{
+			m_recordUpdateTimer = new QTimer(this);
+			connect(m_recordUpdateTimer, &QTimer::timeout, this, &Song::updateRecordingClips);
+		}
+		m_recordUpdateTimer->start(60);
+	}
+}
+
+
+
+
+void Song::updateRecordingClips()
+{
+	if (!m_recording) { return; }
+	const int songTicks = getPlayPos(PlayMode::Song).getTicks();
+	const int len = std::max(1, songTicks - m_recordStartPos.getTicks());
+
+	for (auto& [id, clip] : m_recordingClips)
+	{
+		if (clip != nullptr) { clip->changeLength(TimePos(len)); }
+	}
+	for (Track* t : tracks())
+	{
+		if (auto it = dynamic_cast<InstrumentTrack*>(t))
+		{
+			if (it->isMidiRecording()) { it->updateRecordingLength(TimePos(len)); }
+		}
+	}
+}
+
+
+
+
 void Song::record()
 {
 	if (AudioRecorder::instance().isRecording())
@@ -530,8 +615,7 @@ void Song::record()
 		return;
 	}
 
-	m_recordStartPos = TimePos(getPlayPos(PlayMode::Song).getTicks());
-	m_recording = AudioRecorder::instance().start();
+	startAudioRecording();
 }
 
 
@@ -539,13 +623,16 @@ void Song::record()
 
 void Song::playAndRecord()
 {
+	// remember where the playhead is now: playSong() calls stop() which may
+	// reset the position, but recording should begin from the current
+	// playhead so the user can punch in mid-song
+	const tick_t startTick = getPlayPos(PlayMode::Song).getTicks();
+
 	playSong();
 
-	m_recordStartPos = TimePos(getPlayPos(PlayMode::Song).getTicks());
-	if (AudioRecorder::instance().start())
-	{
-		m_recording = true;
-	}
+	// restore the intended start position, then begin recording from it
+	setPlayPos(startTick, PlayMode::Song);
+	startAudioRecording();
 }
 
 
@@ -654,22 +741,60 @@ void Song::togglePause()
 
 void Song::stop()
 {
-	// finish a running recording and place the result on a new sample track
-	if (AudioRecorder::instance().isRecording())
+	if (m_recordUpdateTimer != nullptr) { m_recordUpdateTimer->stop(); }
+
+	// finish MIDI recording on any armed instrument track
+	for (Track* t : tracks())
 	{
-		const QString recordedFile = AudioRecorder::instance().stopAndSave();
-		m_recording = false;
-		if (!recordedFile.isEmpty())
+		if (auto it = dynamic_cast<InstrumentTrack*>(t))
 		{
-			Engine::audioEngine()->requestChangeInModel();
-			auto track = Track::create(Track::Type::Sample, this);
-			track->setName(tr("Recording"));
-			auto clip = dynamic_cast<SampleClip*>(track->createClip(m_recordStartPos));
-			if (clip != nullptr) { clip->setSampleFile(recordedFile); }
-			Engine::audioEngine()->doneChangeInModel();
-			setModified();
+			if (it->isMidiRecording()) { it->stopMidiRecording(); }
 		}
 	}
+
+	// finish audio (mic) recording: attach the recorded WAV to the live clip
+	// that was created on each armed sample track when recording started
+	if (AudioRecorder::instance().isRecording())
+	{
+		const std::map<int, QString> recorded = AudioRecorder::instance().stopAllAndSave();
+		m_recording = false;
+
+		// input latency compensation: shift the recorded clip earlier by the
+		// configured number of milliseconds
+		const int latencyMs = ConfigManager::inst()->value(
+				"audioengine", "recordinglatency", "0").toInt();
+		const int latencyTicks = latencyMs <= 0 ? 0
+				: static_cast<int>(latencyMs / 1000.0 * getTempo() / 60.0 * 48.0);
+
+		Engine::audioEngine()->requestChangeInModel();
+		for (const auto& [id, clip] : m_recordingClips)
+		{
+			if (clip == nullptr) { continue; }
+			auto found = recorded.find(id);
+			if (found != recorded.end() && !found->second.isEmpty())
+			{
+				clip->setName(QString());
+				if (latencyTicks > 0)
+				{
+					clip->movePosition(TimePos(std::max(0,
+							m_recordStartPos.getTicks() - latencyTicks)));
+				}
+				clip->setSampleFile(found->second);	// sets length to the sample
+			}
+			else
+			{
+				// nothing captured for this track: drop the placeholder clip
+				delete clip;
+			}
+		}
+		Engine::audioEngine()->doneChangeInModel();
+		setModified();
+	}
+	else
+	{
+		m_recording = false;
+	}
+	m_recordingClips.clear();
 
 	// do not stop/reset things again if we're stopped already
 	if( m_playMode == PlayMode::None )

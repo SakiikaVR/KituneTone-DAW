@@ -32,11 +32,13 @@
 #include <QPainter>
 #include <QPushButton>
 
+#include "AudioRecorder.h"
 #include "AutomatableButton.h"
 #include "AutomationClip.h"
 #include "AutomationTrackView.h"
 #include "ColorChooser.h"
 #include "ConfigManager.h"
+#include "SampleTrack.h"
 #include "DataFile.h"
 #include "embed.h"
 #include "Engine.h"
@@ -84,7 +86,7 @@ TrackOperationsWidget::TrackOperationsWidget( TrackView * parent ) :
 	// buttons in a layout.
 	auto operationsWidget = new QWidget(this);
 	auto operationsLayout = new QHBoxLayout(operationsWidget);
-	operationsLayout->setContentsMargins(2, 6, 0, 6);
+	operationsLayout->setContentsMargins(2, 6, 4, 6);
 	operationsLayout->setSpacing(2);
 
 	m_trackOps = new QPushButton(operationsWidget);
@@ -102,9 +104,15 @@ TrackOperationsWidget::TrackOperationsWidget( TrackView * parent ) :
 	m_soloBtn->setToolTip(tr("Solo"));
 	m_soloBtn->setObjectName("btn-solo");
 
+	m_recordBtn = new AutomatableButton(operationsWidget, tr("Record"));
+	m_recordBtn->setCheckable(true);
+	m_recordBtn->setToolTip(tr("Arm for recording"));
+	m_recordBtn->setObjectName("btn-record");
+
 	operationsLayout->addWidget(m_trackOps);
 	operationsLayout->addWidget(m_muteBtn);
 	operationsLayout->addWidget(m_soloBtn);
+	operationsLayout->addWidget(m_recordBtn);
 
 	layout->addWidget(operationsWidget, 0, Qt::AlignTop | Qt::AlignLeading);
 
@@ -323,6 +331,33 @@ void TrackOperationsWidget::updateMenu()
 		toMenu->addSeparator();
 		toMenu->addMenu(trackView->midiMenu());
 	}
+	// sample tracks: choose the recording input device (filtered to the
+	// audio-interface backend selected in the settings)
+	if (auto st = dynamic_cast<SampleTrack*>(m_trackView->getTrack()))
+	{
+		toMenu->addSeparator();
+		QMenu* micMenu = toMenu->addMenu(tr("Recording input device"));
+
+		const QString backend = ConfigManager::inst()->value("audioportaudio", "backend");
+		const QString current = st->recordingDevice();
+
+		auto addDevice = [&](const QString& text, const QString& key) {
+			QAction* action = micMenu->addAction(text);
+			action->setCheckable(true);
+			action->setChecked(key == current);
+			connect(action, &QAction::triggered, this,
+					[st, key]() { st->setRecordingDevice(key); Engine::getSong()->setModified(); });
+		};
+
+		addDevice(tr("Default input device"), QString());
+		for (const auto& device : AudioRecorder::availableInputDevices())
+		{
+			// only show devices of the configured backend (WASAPI, DirectSound, ...)
+			if (!backend.isEmpty() && device.hostApi != backend) { continue; }
+			addDevice(device.name, AudioRecorder::deviceKey(device));
+		}
+	}
+
 	if( dynamic_cast<AutomationTrackView *>( m_trackView ) )
 	{
 		toMenu->addAction( tr( "Turn all recording on" ), this, SLOT(recordingOn()));

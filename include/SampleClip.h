@@ -81,6 +81,15 @@ public:
 	void setIsPlaying(bool isPlaying);
 	void setSampleBuffer(std::shared_ptr<const SampleBuffer> sb);
 
+	//! Time-stretch factor applied to the audio (1.0 = original length,
+	//! pitch preserved). Values > 1 lengthen, < 1 shorten.
+	float stretchFactor() const { return m_stretchFactor; }
+	void setStretchFactor(float factor);
+	//! Original tempo of the material in BPM (0 = disabled). When set, the
+	//! clip is auto-stretched to the current song tempo.
+	int sourceBpm() const { return m_sourceBpm; }
+	void setSourceBpm(int bpm);
+
 	SampleClip* clone() override
 	{
 		return new SampleClip(*this);
@@ -94,11 +103,19 @@ public slots:
 	void updateTrackClips();
 	void tempoChanged();
 
+private:
+	//! rebuild m_sample from m_originalBuffer applying the current stretch
+	void applyStretch();
+
 protected:
 	SampleClip( const SampleClip& orig );
 
 private:
 	Sample m_sample;
+	//! the un-stretched source, kept so re-stretching starts from the original
+	std::shared_ptr<const SampleBuffer> m_originalBuffer;
+	float m_stretchFactor = 1.0f;
+	int m_sourceBpm = 0;
 	BoolModel m_recordModel;
 	bool m_isPlaying;
 	int m_startFrameOffset;

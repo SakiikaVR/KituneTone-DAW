@@ -90,6 +90,7 @@ public:
 protected slots:
 	void openPlugin();
 	void toggleGui();
+	void toggleParams();
 	void updateName();
 
 protected:
@@ -99,6 +100,7 @@ private:
 	QLabel* m_nameLabel;
 	QPushButton* m_openButton;
 	QPushButton* m_guiButton;
+	QPushButton* m_paramsButton;
 };
 
 } // namespace gui

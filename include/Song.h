@@ -31,6 +31,10 @@
 #include <QString>
 #include <QHash>  // IWYU pragma: keep
 
+#include <map>
+
+class QTimer;
+
 #include "AudioEngine.h"
 #include "Controller.h"
 #include "Metronome.h"
@@ -46,6 +50,7 @@ namespace lmms
 class AutomationTrack;
 class Keymap;
 class MidiClip;
+class SampleClip;
 class Scale;
 
 namespace gui
@@ -368,6 +373,8 @@ private:
 	Song( const Song & );
 	~Song() override;
 
+	//! arm and start audio capture for record-enabled sample tracks
+	void startAudioRecording();
 
 	inline bar_t currentBar() const
 	{
@@ -421,6 +428,10 @@ private:
 
 	volatile bool m_recording;
 	TimePos m_recordStartPos = TimePos(0);  //!< song position where recording began
+	QTimer* m_recordUpdateTimer = nullptr;  //!< grows recording clips live
+	std::map<int, SampleClip*> m_recordingClips;  //!< sample track id -> live clip
+	//! grow the live recording clips to follow the playhead
+	void updateRecordingClips();
 	volatile bool m_exporting;
 	volatile bool m_exportLoop;
 	volatile bool m_renderBetweenMarkers;

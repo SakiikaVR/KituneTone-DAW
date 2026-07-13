@@ -31,6 +31,7 @@
 #include <QLayout>
 #include <QLineEdit>
 #include <QScrollArea>
+#include <QSpinBox>
 
 #include "AudioEngine.h"
 #include "embed.h"
@@ -617,6 +618,20 @@ SetupDialog::SetupDialog(ConfigTab tab_to_open) :
 
 	setBufferSize(m_bufferSizeSlider->value());
 
+	// Recording latency compensation: recorded clips are shifted earlier by
+	// this many milliseconds to line up with what was played back
+	auto recLatencyBox = new QGroupBox(tr("Recording latency"), audio_w);
+	auto recLatencyLayout = new QHBoxLayout(recLatencyBox);
+	recLatencyLayout->addWidget(new QLabel(tr("Input latency compensation (ms):"), recLatencyBox));
+	m_recordingLatencySpinBox = new QSpinBox(recLatencyBox);
+	m_recordingLatencySpinBox->setRange(0, 2000);
+	m_recordingLatencySpinBox->setValue(ConfigManager::inst()->value(
+			"audioengine", "recordinglatency", "0").toInt());
+	m_recordingLatencySpinBox->setToolTip(tr("Recorded microphone/line clips are moved earlier by this "
+			"amount to compensate for the input latency of your device."));
+	recLatencyLayout->addWidget(m_recordingLatencySpinBox);
+	recLatencyLayout->addStretch();
+
 	const auto otherBox = new QGroupBox(tr("Other"), audio_w);
 	const auto otherBoxLayout = new QVBoxLayout{otherBox};
 
@@ -630,6 +645,7 @@ SetupDialog::SetupDialog(ConfigTab tab_to_open) :
 	audio_layout->addWidget(as_w);
 	audio_layout->addWidget(sampleRateBox);
 	audio_layout->addWidget(bufferSizeBox);
+	audio_layout->addWidget(recLatencyBox);
 	audio_layout->addWidget(otherBox);
 	audio_layout->addStretch();
 
@@ -993,6 +1009,8 @@ void SetupDialog::accept()
 					QString::number(m_sampleRate));
 	ConfigManager::inst()->setValue("audioengine", "framesperaudiobuffer",
 					QString::number(m_bufferSize));
+	ConfigManager::inst()->setValue("audioengine", "recordinglatency",
+					QString::number(m_recordingLatencySpinBox->value()));
 	ConfigManager::inst()->setValue("audioengine", "mididev",
 					m_midiIfaceNames[m_midiInterfaces->currentText()]);
 	ConfigManager::inst()->setValue("midi", "midiautoassign",

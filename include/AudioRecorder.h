@@ -1,5 +1,5 @@
 /*
- * AudioRecorder.h - records audio from the default input device
+ * AudioRecorder.h - records audio from selectable input devices
  *
  * This file is part of LMMS - https://lmms.io
  *
@@ -25,6 +25,8 @@
 
 #include <QString>
 
+#include <map>
+#include <memory>
 #include <mutex>
 #include <vector>
 
@@ -33,42 +35,59 @@
 namespace lmms
 {
 
-//! Records audio into memory and saves it as a WAV file when stopped. The
-//! samples come from the input device configured for the audio interface
-//! (fed in by AudioPortAudio's duplex stream); if the engine has no capture
-//! channel, a standalone stream on the system default input is used instead.
+//! Records audio from one or more input devices simultaneously (multitrack
+//! recording) and writes each capture to a WAV file when stopped. Each capture
+//! is identified by a caller-provided id (e.g. a track's id).
 class LMMS_EXPORT AudioRecorder
 {
 public:
+	//! one selectable capture device as reported by PortAudio
+	struct InputDevice
+	{
+		QString name;
+		QString hostApi;	//!< e.g. "Windows WASAPI", "ASIO", "MME"
+	};
+
 	static AudioRecorder& instance();
 
-	//! begin capturing; returns false if no input device is available
-	bool start();
+	AudioRecorder(const AudioRecorder&) = delete;
+	AudioRecorder& operator=(const AudioRecorder&) = delete;
 
-	bool isRecording() const { return m_recording; }
+	//! all devices with at least one input channel, in PortAudio order
+	static std::vector<InputDevice> availableInputDevices();
+	static QString deviceKey(const InputDevice& device) { return device.hostApi + "|" + device.name; }
 
-	//! called from the audio interface's callback with the frames of the
-	//! configured input device; ignored unless recording in engine mode
-	void captureFromEngine(const float* interleaved, unsigned long frames, int channels, double sampleRate);
+	//! Start capturing for the given id from the device identified by key
+	//! ("<hostApi>|<name>", empty = system default input). Returns false if
+	//! the device cannot be opened.
+	bool startCapture(int id, const QString& deviceKey);
 
-	//! stop capturing, write the recording to a WAV file below the user's
-	//! sample directory and return its path (empty string on failure)
-	QString stopAndSave();
+	bool isRecording() const { return !m_captures.empty(); }
+
+	//! Stop every capture, write each to a WAV file below the user's sample
+	//! directory, and return a map of id -> file path (missing on failure).
+	std::map<int, QString> stopAllAndSave();
 
 private:
 	AudioRecorder() = default;
 	~AudioRecorder();
 
-	void appendFrames(const float* interleaved, unsigned long frames);
+	struct Capture
+	{
+		int id = 0;
+		void* stream = nullptr;
+		int channels = 0;
+		double sampleRate = 0.;
+		std::mutex mutex;
+		std::vector<float> data;
+	};
+
+	void appendFrames(Capture* capture, const float* interleaved, unsigned long frames);
+	QString writeWav(Capture& capture);
 	friend struct AudioRecorderCallback;
 
-	void* m_stream = nullptr;
-	bool m_recording = false;
-	bool m_engineCapture = false;	//!< frames arrive via captureFromEngine()
-	int m_channels = 0;
-	double m_sampleRate = 0.;
-	std::mutex m_dataMutex;
-	std::vector<float> m_data;
+	bool m_paInitialized = false;
+	std::vector<std::unique_ptr<Capture>> m_captures;
 };
 
 } // namespace lmms

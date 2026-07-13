@@ -27,11 +27,15 @@
 #include <QDomElement>
 #include <QFileInfo>
 
+#include <algorithm>
+#include <cmath>
+
 #include "PatternStore.h"
 #include "PathUtil.h"
 #include "SampleClipView.h"
 #include "SampleTrack.h"
 #include "Song.h"
+#include "TimeStretch.h"
 
 namespace lmms
 {
@@ -76,13 +80,20 @@ SampleClip::SampleClip(Track* track)
 
 SampleClip::SampleClip(const SampleClip& orig) :
 	Clip(orig),
-	m_sample(std::move(orig.m_sample)),
+	m_sample(orig.m_sample),
 	m_isPlaying(orig.m_isPlaying),
 	m_startFrameOffset(orig.m_startFrameOffset)
 {
 	saveJournallingState( false );
 	setSampleFile( "" );
 	restoreJournallingState();
+
+	// preserve the time-stretch state (setSampleFile cleared it); the copied
+	// m_sample already holds the stretched audio, so no re-stretch is needed
+	m_originalBuffer = orig.m_originalBuffer;
+	m_stretchFactor = orig.m_stretchFactor;
+	m_sourceBpm = orig.m_sourceBpm;
+	m_sample = orig.m_sample;
 
 	// we need to receive bpm-change-events, because then we have to
 	// change length of this Clip
@@ -143,8 +154,10 @@ void SampleClip::setSampleBuffer(std::shared_ptr<const SampleBuffer> sb)
 {
 	{
 		const auto guard = Engine::audioEngine()->requestChangesGuard();
+		m_originalBuffer = sb;
 		m_sample = Sample(std::move(sb));
 	}
+	applyStretch();
 	updateLength();
 
 	emit sampleChanged();
@@ -158,11 +171,14 @@ void SampleClip::setSampleFile(const QString& sf)
 	setStartTimeOffset(0);
 	if (!sf.isEmpty())
 	{
-		m_sample = Sample(SampleBuffer::fromFile(sf));
+		m_originalBuffer = SampleBuffer::fromFile(sf);
+		m_sample = Sample(m_originalBuffer);
+		applyStretch();
 		updateLength();
 	}
 	else
 	{
+		m_originalBuffer = nullptr;
 		// If there is no sample, make the clip a bar long
 		float nom = Engine::getSong()->getTimeSigModel().getNumerator();
 		float den = Engine::getSong()->getTimeSigModel().getDenominator();
@@ -171,6 +187,62 @@ void SampleClip::setSampleFile(const QString& sf)
 
 	emit sampleChanged();
 	emit playbackPositionChanged();
+}
+
+
+
+
+void SampleClip::applyStretch()
+{
+	if (m_originalBuffer == nullptr) { return; }
+
+	const int rate = m_originalBuffer->sampleRate();
+	auto rebuild = [&](std::shared_ptr<const SampleBuffer> buf) {
+		const auto guard = Engine::audioEngine()->requestChangesGuard();
+		m_sample = Sample(std::move(buf));
+	};
+
+	if (std::abs(m_stretchFactor - 1.0f) < 1e-3f || m_originalBuffer->size() == 0)
+	{
+		rebuild(m_originalBuffer);
+		return;
+	}
+
+	auto stretched = timeStretch(m_originalBuffer->data(), m_originalBuffer->size(), m_stretchFactor);
+	auto buf = std::make_shared<SampleBuffer>(std::move(stretched), rate);
+	rebuild(buf);
+}
+
+
+
+
+void SampleClip::setStretchFactor(float factor)
+{
+	factor = std::clamp(factor, 0.25f, 4.0f);
+	if (std::abs(factor - m_stretchFactor) < 1e-4f) { return; }
+	m_stretchFactor = factor;
+	applyStretch();
+	updateLength();
+	emit sampleChanged();
+	Engine::getSong()->setModified();
+}
+
+
+
+
+void SampleClip::setSourceBpm(int bpm)
+{
+	m_sourceBpm = std::max(0, bpm);
+	if (m_sourceBpm > 0)
+	{
+		// stretch so the material plays at the current song tempo: material
+		// faster than the song (higher BPM) must be lengthened (slowed down)
+		setStretchFactor(static_cast<float>(m_sourceBpm) / Engine::getSong()->getTempo());
+	}
+	else
+	{
+		setStretchFactor(1.0f);
+	}
 }
 
 
@@ -244,6 +316,11 @@ void SampleClip::updateLength()
 void SampleClip::tempoChanged()
 {
 	Clip::setStartTimeOffset(std::round(1.0f * m_startFrameOffset / Engine::framesPerTick()));
+	// keep BPM-synced clips matched to the new song tempo
+	if (m_sourceBpm > 0)
+	{
+		setStretchFactor(static_cast<float>(m_sourceBpm) / Engine::getSong()->getTempo());
+	}
 	updateLength();
 	emit sampleChanged();
 }
@@ -289,18 +366,25 @@ void SampleClip::saveSettings( QDomDocument & _doc, QDomElement & _this )
 	{
 		_this.setAttribute( "pos", startPosition() );
 	}
+	// persist the ORIGINAL (un-stretched) source, so reloading re-applies the
+	// stretch from the original instead of stretching an already-stretched
+	// sample (which would compound on copy/paste)
+	const QString origFile = m_originalBuffer != nullptr
+			? m_originalBuffer->audioFile() : sampleFile();
 	_this.setAttribute( "len", length() );
 	_this.setAttribute( "muted", isMuted() );
-	_this.setAttribute( "src", sampleFile() );
+	_this.setAttribute( "src", origFile );
 	_this.setAttribute( "off", startTimeOffset() );
 	_this.setAttribute("autoresize", QString::number(getAutoResize()));
-	if( sampleFile() == "" )
+	if (origFile.isEmpty())
 	{
-		QString s;
-		_this.setAttribute("data", m_sample.toBase64());
+		_this.setAttribute("data", m_originalBuffer != nullptr
+				? m_originalBuffer->toBase64() : m_sample.toBase64());
 	}
 
 	_this.setAttribute( "sample_rate", m_sample.sampleRate());
+	if (m_stretchFactor != 1.0f) { _this.setAttribute("stretch", QString::number(m_stretchFactor)); }
+	if (m_sourceBpm > 0) { _this.setAttribute("srcbpm", QString::number(m_sourceBpm)); }
 	if (const auto& c = color())
 	{
 		_this.setAttribute("color", c->name());
@@ -336,9 +420,15 @@ void SampleClip::loadSettings( const QDomElement & _this )
 		auto sampleRate = _this.hasAttribute("sample_rate") ? _this.attribute("sample_rate").toInt() :
 			Engine::audioEngine()->outputSampleRate();
 
-		auto buffer = SampleBuffer::fromBase64(_this.attribute("data"), sampleRate);
-		m_sample = Sample(std::move(buffer));
+		m_originalBuffer = SampleBuffer::fromBase64(_this.attribute("data"), sampleRate);
+		m_sample = Sample(m_originalBuffer);
 	}
+
+	// restore time-stretch settings and apply them to the loaded sample
+	m_stretchFactor = _this.hasAttribute("stretch") ? _this.attribute("stretch").toFloat() : 1.0f;
+	m_sourceBpm = _this.attribute("srcbpm").toInt();
+	if (m_stretchFactor != 1.0f) { applyStretch(); }
+
 	changeLength( _this.attribute( "len" ).toInt() );
 	setMuted( _this.attribute( "muted" ).toInt() );
 	setStartTimeOffset( _this.attribute( "off" ).toInt() );

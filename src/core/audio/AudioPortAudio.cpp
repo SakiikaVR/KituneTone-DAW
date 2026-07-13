@@ -32,7 +32,6 @@
 
 #include "AudioEngine.h"
 #include "AudioPortAudio.h"
-#include "AudioRecorder.h"
 #include "ConfigManager.h"
 #include "LcdSpinBox.h"
 
@@ -281,12 +280,6 @@ int AudioPortAudio::processCallback(const void* input, void* output, unsigned lo
 	{
 		std::fill_n(outputBuffer, frameCount * channels, 0.f);
 		return paComplete;
-	}
-
-	if (input != nullptr && device->m_inputChannels > 0)
-	{
-		AudioRecorder::instance().captureFromEngine(
-			static_cast<const float*>(input), frameCount, device->m_inputChannels, device->sampleRate());
 	}
 
 	device->audioEngine()->renderNextBuffer({outputBuffer, channels, frameCount});

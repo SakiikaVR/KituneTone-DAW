@@ -63,6 +63,7 @@ Track::Track( Type type, TrackContainer * tc ) :
 	m_name(),                       /*!< The track's name */
 	m_mutedModel( false, this, tr( "Mute" ) ), /*!< For controlling track muting */
 	m_soloModel( false, this, tr( "Solo" ) ), /*!< For controlling track soloing */
+	m_recordEnabledModel( false, this, tr( "Record" ) ), /*!< Arm for recording */
 	m_clips()        /*!< The clips (segments) */
 {	
 	m_trackContainer->addTrack( this );
@@ -195,6 +196,7 @@ void Track::saveTrack(QDomDocument& doc, QDomElement& element, bool presetMode)
 	element.setAttribute( "name", name() );
 	m_mutedModel.saveSettings( doc, element, "muted" );
 	m_soloModel.saveSettings( doc, element, "solo" );
+	m_recordEnabledModel.saveSettings( doc, element, "recordenabled" );
 	// Save the mutedBeforeSolo value so we can recover the muted state if any solo was active (issue 5562)
 	element.setAttribute( "mutedBeforeSolo", int(m_mutedBeforeSolo) );
 
@@ -251,6 +253,7 @@ void Track::loadTrack(const QDomElement& element, bool presetMode)
 
 	m_mutedModel.loadSettings( element, "muted" );
 	m_soloModel.loadSettings( element, "solo" );
+	m_recordEnabledModel.loadSettings( element, "recordenabled" );
 	// Get the mutedBeforeSolo value so we can recover the muted state if any solo was active.
 	// Older project files that didn't have this attribute will set the value to false (issue 5562)
 	m_mutedBeforeSolo = QVariant( element.attribute( "mutedBeforeSolo", "0" ) ).toBool();

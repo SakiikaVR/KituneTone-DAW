@@ -27,9 +27,14 @@
 #include <QCloseEvent>
 #include <QDomDocument>
 #include <QDomElement>
+#include <QLayout>
+#include <QList>
+#include <QScrollArea>
 #include <QTimer>
 #include <QVBoxLayout>
 #include <QWidget>
+
+#include "public.sdk/source/vst/utility/stringconvert.h"
 
 #include <algorithm>
 #include <cmath>
@@ -53,8 +58,10 @@ DEF_CLASS_IID(IPlugInEntryPoint2)
 #include "pluginterfaces/base/funknownimpl.h"
 
 #include "AudioEngine.h"
+#include "AutomatableModel.h"
 #include "Engine.h"
 #include "GuiApplication.h"
+#include "Knob.h"
 #include "MainWindow.h"
 #include "MidiEvent.h"
 #include "SampleFrame.h"
@@ -985,8 +992,27 @@ Steinberg::tresult PLUGIN_API Vst3Plugin::beginEdit(Steinberg::Vst::ParamID)
 Steinberg::tresult PLUGIN_API Vst3Plugin::performEdit(Steinberg::Vst::ParamID id,
 		Steinberg::Vst::ParamValue valueNormalized)
 {
-	QMutexLocker lock(&m_queueMutex);
-	m_pendingParams[id] = valueNormalized;
+	{
+		QMutexLocker lock(&m_queueMutex);
+		m_pendingParams[id] = valueNormalized;
+	}
+
+	// mirror the change into the LMMS parameter model so automation display,
+	// controller connections and project saving stay in sync when the user
+	// turns a knob in the plug-in's own GUI
+	for (const auto& p : m_params)
+	{
+		if (p.id == id)
+		{
+			m_applyingParamFromPlugin = true;
+			p.model->setValue(static_cast<float>(valueNormalized));
+			m_applyingParamFromPlugin = false;
+			break;
+		}
+	}
+
+	// surface the parameter the user just edited to the top of the list
+	bringParamToFront(id);
 	return Steinberg::kResultOk;
 }
 
@@ -1055,6 +1081,10 @@ Steinberg::tresult PLUGIN_API Vst3Plugin::queryInterface(const Steinberg::TUID _
 
 
 
+
+
+
+
 std::vector<std::string> Vst3Plugin::modulePaths()
 {
 	return VST3::Hosting::Module::getModulePaths();
@@ -1114,6 +1144,239 @@ bool Vst3Plugin::enableAra(const std::vector<AraSource>& sources)
 	Q_UNUSED(sources)
 	return false;
 #endif
+}
+
+
+
+
+//! A layout that arranges its widgets left-to-right and wraps to the next row
+//! based on the available width (like the standard Qt FlowLayout example),
+//! with support for reordering items. No signals/slots -> no Q_OBJECT needed.
+class FlowLayout : public QLayout
+{
+public:
+	explicit FlowLayout(QWidget* parent, int margin = 6, int spacing = 6)
+		: QLayout(parent), m_hSpace(spacing), m_vSpace(spacing)
+	{
+		setContentsMargins(margin, margin, margin, margin);
+	}
+	~FlowLayout() override { QLayoutItem* item; while ((item = takeAt(0))) { delete item; } }
+
+	void addItem(QLayoutItem* item) override { m_items.append(item); }
+	int count() const override { return m_items.size(); }
+	QLayoutItem* itemAt(int index) const override { return m_items.value(index); }
+	QLayoutItem* takeAt(int index) override
+	{
+		return (index >= 0 && index < m_items.size()) ? m_items.takeAt(index) : nullptr;
+	}
+	Qt::Orientations expandingDirections() const override { return {}; }
+	bool hasHeightForWidth() const override { return true; }
+	int heightForWidth(int width) const override { return doLayout(QRect(0, 0, width, 0), true); }
+	void setGeometry(const QRect& rect) override { QLayout::setGeometry(rect); doLayout(rect, false); }
+	QSize sizeHint() const override { return minimumSize(); }
+	QSize minimumSize() const override
+	{
+		QSize size;
+		for (QLayoutItem* item : m_items) { size = size.expandedTo(item->minimumSize()); }
+		const QMargins m = contentsMargins();
+		return size + QSize(m.left() + m.right(), m.top() + m.bottom());
+	}
+
+	//! move the widget to the front (top-left) of the flow
+	void moveToFront(QWidget* w)
+	{
+		for (int i = 0; i < m_items.size(); ++i)
+		{
+			if (m_items[i]->widget() == w)
+			{
+				if (i == 0) { return; }
+				m_items.move(i, 0);
+				invalidate();
+				return;
+			}
+		}
+	}
+
+private:
+	int doLayout(const QRect& rect, bool testOnly) const
+	{
+		const QMargins m = contentsMargins();
+		const QRect effective = rect.adjusted(m.left(), m.top(), -m.right(), -m.bottom());
+		int x = effective.x();
+		int y = effective.y();
+		int lineHeight = 0;
+		for (QLayoutItem* item : m_items)
+		{
+			const QSize hint = item->sizeHint();
+			int next = x + hint.width() + m_hSpace;
+			if (next - m_hSpace > effective.right() && lineHeight > 0)
+			{
+				x = effective.x();
+				y = y + lineHeight + m_vSpace;
+				next = x + hint.width() + m_hSpace;
+				lineHeight = 0;
+			}
+			if (!testOnly) { item->setGeometry(QRect(QPoint(x, y), hint)); }
+			x = next;
+			lineHeight = qMax(lineHeight, hint.height());
+		}
+		return y + lineHeight - rect.y() + m.bottom();
+	}
+
+	QList<QLayoutItem*> m_items;
+	int m_hSpace;
+	int m_vSpace;
+};
+
+
+
+
+void Vst3Plugin::createParameterModels(Model* parent)
+{
+	using namespace Steinberg;
+	if (m_failed || m_controller == nullptr || !m_params.empty()) { return; }
+
+	const int32 count = m_controller->getParameterCount();
+	for (int32 i = 0; i < count; ++i)
+	{
+		Vst::ParameterInfo info;
+		if (m_controller->getParameterInfo(i, info) != kResultTrue) { continue; }
+		// only expose parameters the plug-in allows to be automated, and skip
+		// read-only / hidden / list-separator "parameters"
+		if ((info.flags & Vst::ParameterInfo::kIsReadOnly) != 0) { continue; }
+		if ((info.flags & Vst::ParameterInfo::kCanAutomate) == 0) { continue; }
+
+		auto title = QString::fromStdString(VST3::StringConvert::convert(info.title));
+		if (title.isEmpty()) { title = QStringLiteral("Param %1").arg(info.id); }
+
+		const auto current = static_cast<float>(m_controller->getParamNormalized(info.id));
+		// VST3 parameters are normalized to 0..1; a fine step keeps automation smooth
+		auto* model = new FloatModel(current, 0.f, 1.f, 0.001f, parent, title);
+		const auto id = info.id;
+		connect(model, &FloatModel::dataChanged, this, [this, id, model]() {
+			if (m_applyingParamFromPlugin) { return; }
+			sendParameterToPlugin(id, model->value());
+		}, Qt::DirectConnection);
+
+		m_params.push_back({info.id, model, title});
+	}
+}
+
+
+
+
+void Vst3Plugin::sendParameterToPlugin(Steinberg::Vst::ParamID id, float normalized)
+{
+	{
+		QMutexLocker lock(&m_queueMutex);
+		m_pendingParams[id] = normalized;
+	}
+	// keep the edit controller (and thus the plug-in GUI) in sync
+	if (m_controller) { m_controller->setParamNormalized(id, normalized); }
+}
+
+
+
+
+void Vst3Plugin::saveParameterModels(QDomDocument& doc, QDomElement& element)
+{
+	for (const auto& p : m_params)
+	{
+		// only persist parameters that carry automation or a controller
+		// connection; plain values are already covered by the plug-in state
+		if (p.model->isAutomated() || p.model->controllerConnection() != nullptr)
+		{
+			p.model->saveSettings(doc, element, "vst3param_" + QString::number(p.id));
+		}
+	}
+}
+
+
+
+
+void Vst3Plugin::loadParameterModels(const QDomElement& element)
+{
+	for (const auto& p : m_params)
+	{
+		const QString name = "vst3param_" + QString::number(p.id);
+		if (!element.firstChildElement(name).isNull()
+				|| element.hasAttribute(name))
+		{
+			p.model->loadSettings(element, name);
+		}
+	}
+}
+
+
+
+
+void Vst3Plugin::toggleParameterWindow()
+{
+	if (gui::getGUI() == nullptr || m_params.empty()) { return; }
+
+	if (m_paramWindow != nullptr)
+	{
+		auto win = m_paramWindow->parentWidget() ? m_paramWindow->parentWidget() : m_paramWindow;
+		win->setVisible(!win->isVisible());
+		if (win->isVisible()) { win->raise(); }
+		return;
+	}
+
+	auto* content = new QWidget;
+	content->setWindowTitle(name() + tr(" - Parameters"));
+	auto* outer = new QVBoxLayout(content);
+	outer->setContentsMargins(0, 0, 0, 0);
+
+	auto* scroll = new QScrollArea(content);
+	scroll->setWidgetResizable(true);
+	scroll->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+	outer->addWidget(scroll);
+
+	// knobs in a reflowing layout: columns follow the window width, and the
+	// last touched parameter is moved to the front
+	auto* grid = new QWidget;
+	m_paramFlow = new FlowLayout(grid);
+	m_paramKnobs.assign(m_params.size(), nullptr);
+	for (size_t i = 0; i < m_params.size(); ++i)
+	{
+		auto* knob = new gui::Knob(gui::KnobType::Small17, m_params[i].title, grid);
+		knob->setModel(m_params[i].model);
+		knob->setHintText(m_params[i].title + ":", "");
+		m_paramFlow->addWidget(knob);
+		m_paramKnobs[i] = knob;
+	}
+	scroll->setWidget(grid);
+
+	auto* subWindow = gui::getGUI()->mainWindow()->addWindowedWidget(content);
+	subWindow->resize(560, 420);
+	m_paramWindow = content;
+	// forget the layout/knobs when the window is destroyed
+	connect(content, &QObject::destroyed, this, [this]() {
+		m_paramWindow = nullptr;
+		m_paramFlow = nullptr;
+		m_paramKnobs.clear();
+	});
+	subWindow->show();
+	content->show();
+}
+
+
+
+
+void Vst3Plugin::bringParamToFront(Steinberg::Vst::ParamID id)
+{
+	if (m_paramFlow == nullptr) { return; }
+	for (size_t i = 0; i < m_params.size(); ++i)
+	{
+		if (m_params[i].id == id)
+		{
+			if (i < m_paramKnobs.size() && m_paramKnobs[i] != nullptr)
+			{
+				m_paramFlow->moveToFront(m_paramKnobs[i]);
+			}
+			return;
+		}
+	}
 }
 
 

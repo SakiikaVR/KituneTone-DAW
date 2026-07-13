@@ -37,6 +37,7 @@
 class QCheckBox;
 class QComboBox;
 class QLabel;
+class QSpinBox;
 class QLineEdit;
 class QSlider;
 
@@ -177,6 +178,7 @@ private:
 	QSlider * m_bufferSizeSlider;
 	QLabel * m_bufferSizeLbl;
 	QLabel * m_bufferSizeWarnLbl;
+	QSpinBox * m_recordingLatencySpinBox;
 	bool m_mixSanitization;
 	int m_sampleRate;
 	QSlider* m_sampleRateSlider;

@@ -199,6 +199,7 @@ void TrackView::modelChanged()
 	connect( m_track, SIGNAL(destroyedTrack()), this, SLOT(close()));
 	m_trackOperationsWidget.m_muteBtn->setModel( &m_track->m_mutedModel );
 	m_trackOperationsWidget.m_soloBtn->setModel( &m_track->m_soloModel );
+	m_trackOperationsWidget.m_recordBtn->setModel( &m_track->m_recordEnabledModel );
 	ModelView::modelChanged();
 	setFixedHeight( m_track->getHeight() );
 }

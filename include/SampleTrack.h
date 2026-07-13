@@ -83,6 +83,11 @@ public:
 		m_isPlaying = playing;
 	}
 
+	//! Recording input device key ("<hostApi>|<name>", empty = default input)
+	//! used when this track is armed for recording.
+	const QString& recordingDevice() const { return m_recordingDevice; }
+	void setRecordingDevice(const QString& key) { m_recordingDevice = key; }
+
 signals:
 	void playingChanged();
 
@@ -96,6 +101,7 @@ private:
 	FloatModel m_panningModel;
 	IntModel m_mixerChannelModel;
 	AudioBusHandle m_audioBusHandle;
+	QString m_recordingDevice;
 	bool m_isPlaying;
 
 

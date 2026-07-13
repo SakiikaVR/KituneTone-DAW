@@ -202,20 +202,10 @@ public:
 			qApp->processEvents();
 			it = dynamic_cast<InstrumentTrack*>(Track::create(Track::Type::Instrument, tc));
 
-#ifdef LMMS_HAVE_FLUIDSYNTH
-			it_inst = it->loadInstrument("sf2player");
-
-			if (it_inst)
-			{
-				isSF2 = true;
-				it_inst->loadFile(ConfigManager::inst()->sf2File());
-				it_inst->childModel("bank")->setValue(0);
-				it_inst->childModel("patch")->setValue(0);
-			}
-			else { it_inst = it->loadInstrument("patman"); }
-#else
-			it_inst = it->loadInstrument("patman");
-#endif
+			// use the built-in TripleOscillator as the default instrument for
+			// imported MIDI tracks (no external dependencies, always available)
+			it_inst = it->loadInstrument("tripleoscillator");
+			isSF2 = false;
 			trackName = tn;
 			if (trackName != "") { it->setName(tn); }
 			// General MIDI default
@@ -265,8 +255,9 @@ bool MidiImport::readSMF(TrackContainer* tc)
 {
 	constexpr int MIDI_CC_COUNT = 128 + 1; // 0-127 (128) + pitch bend
 	constexpr int preTrackSteps = 2;
+	QWidget* pdParent = gui::getGUI() != nullptr ? gui::getGUI()->mainWindow() : nullptr;
 	QProgressDialog pd(TrackContainer::tr("Importing MIDI-file..."),
-	TrackContainer::tr("Cancel"), 0, preTrackSteps, gui::getGUI()->mainWindow());
+	TrackContainer::tr("Cancel"), 0, preTrackSteps, pdParent);
 	pd.setWindowTitle(TrackContainer::tr("Please wait..."));
 	pd.setWindowModality(Qt::WindowModal);
 	pd.setMinimumDuration(0);

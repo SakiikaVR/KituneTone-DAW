@@ -69,6 +69,7 @@ class LMMS_EXPORT Track : public Model, public JournallingObject
 	Q_OBJECT
 	mapPropertyFromModel(bool,isMuted,setMuted,m_mutedModel);
 	mapPropertyFromModel(bool,isSolo,setSolo,m_soloModel);
+	mapPropertyFromModel(bool,isRecordEnabled,setRecordEnabled,m_recordEnabledModel);
 public:
 	using clipVector = std::vector<Clip*>;
 
@@ -196,6 +197,8 @@ public:
 	}
 	
 	BoolModel* getMutedModel();
+	//! whether this track is armed for recording (batch record captures it)
+	BoolModel* getRecordEnabledModel() { return &m_recordEnabledModel; }
 
 public slots:
 	virtual void setName(const QString& newName);
@@ -220,6 +223,7 @@ private:
 protected:
 	BoolModel m_mutedModel;
 	BoolModel m_soloModel;
+	BoolModel m_recordEnabledModel;
 
 private:
 	bool m_mutedBeforeSolo;

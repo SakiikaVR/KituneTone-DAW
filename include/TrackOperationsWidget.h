@@ -71,6 +71,7 @@ private:
 	QPushButton * m_trackOps;
 	AutomatableButton* m_muteBtn;
 	AutomatableButton* m_soloBtn;
+	AutomatableButton* m_recordBtn;
 
 	friend class TrackView;
 

@@ -120,6 +120,9 @@ bool Vst3Effect::openPlugin(const QString& file, const QString& uid)
 	m_key.attributes["file"] = file;
 	m_key.attributes["uid"] = m_plugin->uidString();
 
+	// expose the plug-in's parameters as LMMS automatable models
+	m_plugin->createParameterModels(this);
+
 	if (m_plugin->hasAra())
 	{
 		// start following the track's clips so audio dropped onto the track
@@ -305,6 +308,7 @@ void Vst3EffectControls::saveSettings(QDomDocument& doc, QDomElement& element)
 	if (m_effect->m_plugin != nullptr)
 	{
 		m_effect->m_plugin->saveState(doc, element);
+		m_effect->m_plugin->saveParameterModels(doc, element);
 
 		// persist the plug-in's ARA state (analysis / edits) as base64 so
 		// they survive a project save/reload
@@ -326,6 +330,7 @@ void Vst3EffectControls::loadSettings(const QDomElement& element)
 	if (m_effect->m_plugin != nullptr)
 	{
 		m_effect->m_plugin->loadState(element);
+		m_effect->m_plugin->loadParameterModels(element);
 
 		// stage any saved ARA archive; it is restored once the ARA document
 		// is (re)bound from the track's clips
@@ -380,6 +385,15 @@ Vst3EffectControlDialog::Vst3EffectControlDialog(Vst3EffectControls* controls) :
 		if (p != nullptr) { p->toggleEditor(); }
 	});
 	layout->addWidget(guiButton);
+
+	auto paramsButton = new QPushButton(tr("Parameters"), this);
+	paramsButton->setEnabled(plugin != nullptr && plugin->hasParameters());
+	connect(paramsButton, &QPushButton::clicked, this, [controls]
+	{
+		auto p = controls->m_effect->plugin();
+		if (p != nullptr) { p->toggleParameterWindow(); }
+	});
+	layout->addWidget(paramsButton);
 
 	// experimental ARA: automatically expose the track's audio clips to the
 	// plug-in (e.g. Melodyne / Vovious) and offer a button to re-sync after the

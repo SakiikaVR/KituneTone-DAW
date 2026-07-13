@@ -198,6 +198,7 @@ void SampleTrack::saveTrackSpecificSettings(QDomDocument& doc, QDomElement& this
 	m_volumeModel.saveSettings(doc, thisElem, "vol");
 	m_panningModel.saveSettings(doc, thisElem, "pan");
 	m_mixerChannelModel.saveSettings(doc, thisElem, "mixch");
+	if (!m_recordingDevice.isEmpty()) { thisElem.setAttribute("recdevice", m_recordingDevice); }
 }
 
 
@@ -222,6 +223,7 @@ void SampleTrack::loadTrackSpecificSettings(const QDomElement & thisElem)
 	m_panningModel.loadSettings(thisElem, "pan");
 	m_mixerChannelModel.setRange(0, Engine::mixer()->numChannels() - 1);
 	m_mixerChannelModel.loadSettings(thisElem, "mixch");
+	m_recordingDevice = thisElem.attribute("recdevice");
 }
 
 

@@ -102,6 +102,15 @@ public:
 
 	void deleteNotePluginData( NotePlayHandle * _n );
 
+	//! Begin recording played MIDI notes into a new clip at songStart. Notes
+	//! arriving through the track's MIDI input / piano land in that clip.
+	void startMidiRecording(const TimePos& songStart);
+	//! Stop recording and finalize the clip.
+	void stopMidiRecording();
+	bool isMidiRecording() const { return m_recordingClip != nullptr; }
+	//! grow the in-progress recording clip so it is visible while recording
+	void updateRecordingLength(const TimePos& songLength);
+
 	// name-stuff
 	void setName( const QString & _new_name ) override;
 
@@ -265,11 +274,20 @@ protected slots:
 	void updatePitchRange();
 	void updateMixerChannel();
 
+private slots:
+	//! record a played note into m_recordingClip (connected while recording)
+	void recordNoteOn(const lmms::Note& note);
+	void recordNoteOff(const lmms::Note& note);
 
 private:
 	void processCCEvent(int controller);
 
 	MidiPort m_midiPort;
+
+	// MIDI recording (batch record of an armed instrument track)
+	class MidiClip* m_recordingClip = nullptr;
+	TimePos m_recordStartPos;
+	QList<Note> m_pendingRecordNotes;
 
 	NotePlayHandle* m_notes[NumKeys];
 	NotePlayHandleList m_sustainedNotes;

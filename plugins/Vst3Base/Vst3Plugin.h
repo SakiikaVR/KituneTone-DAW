@@ -54,7 +54,9 @@ class QWidget;
 namespace lmms
 {
 
+class FloatModel;
 class MidiEvent;
+class Model;
 class SampleFrame;
 
 //! In-process host for a single VST3 plug-in instance (effect or instrument).
@@ -130,6 +132,17 @@ public:
 	void toggleEditor();
 	bool editorVisible() const;
 
+	//! Expose the plug-in's automatable parameters as LMMS FloatModels
+	//! (parented to the given LMMS instrument/effect model) so they can be
+	//! automated and controller-mapped. Call once after loading.
+	void createParameterModels(Model* parent);
+	bool hasParameters() const { return !m_params.empty(); }
+	//! Show/hide a window of LMMS knobs bound to the parameter models.
+	void toggleParameterWindow();
+	//! Persist parameter automation/controller connections into the project.
+	void saveParameterModels(QDomDocument& doc, QDomElement& element);
+	void loadParameterModels(const QDomElement& element);
+
 	// --- Steinberg::Vst::IComponentHandler ---
 	Steinberg::tresult PLUGIN_API beginEdit(Steinberg::Vst::ParamID id) override;
 	Steinberg::tresult PLUGIN_API performEdit(Steinberg::Vst::ParamID id,
@@ -172,6 +185,22 @@ private:
 	const void* m_araFactory = nullptr;       //!< const ARA::ARAFactory*
 	std::unique_ptr<class Vst3AraDocument> m_araDocument;
 	QByteArray m_pendingAraArchive;           //!< restored on the next bind
+
+	// automatable parameters exposed to LMMS
+	struct ParamModel
+	{
+		Steinberg::Vst::ParamID id;
+		FloatModel* model;
+		QString title;
+	};
+	std::vector<ParamModel> m_params;
+	bool m_applyingParamFromPlugin = false;    //!< guard against feedback loops
+	QWidget* m_paramWindow = nullptr;
+	class FlowLayout* m_paramFlow = nullptr;   //!< reflowing layout of param knobs
+	std::vector<QWidget*> m_paramKnobs;        //!< one knob per m_params entry
+	void sendParameterToPlugin(Steinberg::Vst::ParamID id, float normalized);
+	//! move a parameter's knob to the front of the param window (last touched)
+	void bringParamToFront(Steinberg::Vst::ParamID id);
 
 	VST3::Hosting::Module::Ptr m_module;
 	Steinberg::IPtr<Steinberg::Vst::PlugProvider> m_provider;

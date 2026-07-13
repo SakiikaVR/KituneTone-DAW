@@ -818,6 +818,88 @@ Clip* InstrumentTrack::createClip(const TimePos & pos)
 
 
 
+void InstrumentTrack::startMidiRecording(const TimePos& songStart)
+{
+	if (m_recordingClip != nullptr) { return; }
+
+	m_recordStartPos = songStart;
+	Engine::audioEngine()->requestChangeInModel();
+	m_recordingClip = dynamic_cast<MidiClip*>(createClip(songStart));
+	Engine::audioEngine()->doneChangeInModel();
+	if (m_recordingClip == nullptr) { return; }
+	m_recordingClip->setName(tr("Recording"));
+
+	m_pendingRecordNotes.clear();
+	// notes played on this track (MIDI input / virtual piano) are recorded
+	connect(this, &InstrumentTrack::midiNoteOn, this, &InstrumentTrack::recordNoteOn);
+	connect(this, &InstrumentTrack::midiNoteOff, this, &InstrumentTrack::recordNoteOff);
+}
+
+
+
+
+void InstrumentTrack::stopMidiRecording()
+{
+	if (m_recordingClip == nullptr) { return; }
+
+	disconnect(this, &InstrumentTrack::midiNoteOn, this, &InstrumentTrack::recordNoteOn);
+	disconnect(this, &InstrumentTrack::midiNoteOff, this, &InstrumentTrack::recordNoteOff);
+	m_pendingRecordNotes.clear();
+
+	MidiClip* clip = m_recordingClip;
+	m_recordingClip = nullptr;
+	clip->updateLength();
+}
+
+
+
+
+void InstrumentTrack::updateRecordingLength(const TimePos& songLength)
+{
+	if (m_recordingClip == nullptr) { return; }
+	m_recordingClip->changeLength(TimePos(std::max<tick_t>(1, songLength.getTicks())));
+}
+
+
+
+
+void InstrumentTrack::recordNoteOn(const Note& note)
+{
+	if (m_recordingClip == nullptr || !Engine::getSong()->isPlaying()) { return; }
+	// record note position relative to the clip's start on the song timeline
+	const TimePos pos = Engine::getSong()->getPlayPos(Engine::getSong()->playMode())
+			- m_recordStartPos;
+	if (pos < 0) { return; }
+	m_pendingRecordNotes.append(Note(TimePos(1), pos, note.key(), note.getVolume(), note.getPanning()));
+}
+
+
+
+
+void InstrumentTrack::recordNoteOff(const Note& note)
+{
+	if (m_recordingClip == nullptr) { return; }
+	for (auto it = m_pendingRecordNotes.begin(); it != m_pendingRecordNotes.end(); ++it)
+	{
+		if (it->key() == note.key())
+		{
+			const TimePos now = Engine::getSong()->getPlayPos(Engine::getSong()->playMode())
+					- m_recordStartPos;
+			const int len = std::max(1, now.getTicks() - it->pos().getTicks());
+			Note recorded(TimePos(len), it->pos(),
+					it->key(), it->getVolume(), it->getPanning(), note.detuning());
+			Engine::audioEngine()->requestChangeInModel();
+			m_recordingClip->addNote(recorded, false);
+			Engine::audioEngine()->doneChangeInModel();
+			m_pendingRecordNotes.erase(it);
+			break;
+		}
+	}
+}
+
+
+
+
 gui::TrackView* InstrumentTrack::createView( gui::TrackContainerView* tcv )
 {
 	return new gui::InstrumentTrackView( this, tcv );
