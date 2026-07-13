@@ -197,20 +197,9 @@ bool ConfigManager::enableBlockedPlugins()
 
 QStringList ConfigManager::availableVstEmbedMethods()
 {
-	QStringList methods;
-	methods.append("none");
-	methods.append("qt");
-#ifdef LMMS_BUILD_WIN32
-	methods.append("win32");
-#endif
-#if defined(LMMS_BUILD_LINUX) && (QT_VERSION < QT_VERSION_CHECK(6,0,0))
-	if (static_cast<QGuiApplication*>(QApplication::instance())->
-		platformName() == "xcb")
-	{
-		methods.append("xembed");
-	}
-#endif
-	return methods;
+	// this fork hosts every plug-in UI in a Qt window; the native win32 and
+	// xembed paths were dropped along with non-Windows platform support
+	return {"qt"};
 }
 
 QString ConfigManager::vstEmbedMethod() const

@@ -30,6 +30,7 @@
 
 #ifdef LMMS_HAVE_PORTAUDIO
 #include <portaudio.h>
+#include "AudioPortAudio.h"
 #endif
 
 #include <sndfile.h>
@@ -45,6 +46,17 @@ AudioRecorder& AudioRecorder::instance()
 {
 	static AudioRecorder recorder;
 	return recorder;
+}
+
+
+
+
+void AudioRecorder::captureFromEngine(const float* interleaved, unsigned long frames, int channels, double sampleRate)
+{
+	if (!m_recording || !m_engineCapture) { return; }
+	m_channels = channels;
+	m_sampleRate = sampleRate;
+	appendFrames(interleaved, frames);
 }
 
 
@@ -74,6 +86,24 @@ bool AudioRecorder::start()
 {
 	if (m_recording) { return true; }
 
+	// preferred path: the engine's PortAudio duplex stream already delivers
+	// the configured input device to captureFromEngine()
+	if (auto pa = dynamic_cast<AudioPortAudio*>(Engine::audioEngine()->audioDev());
+		pa != nullptr && pa->inputChannels() > 0)
+	{
+		{
+			std::lock_guard<std::mutex> lock(m_dataMutex);
+			m_data.clear();
+			m_data.reserve(static_cast<size_t>(pa->sampleRate()) * pa->inputChannels() * 60);
+		}
+		m_channels = pa->inputChannels();
+		m_sampleRate = static_cast<double>(pa->sampleRate());
+		m_engineCapture = true;
+		m_recording = true;
+		return true;
+	}
+
+	// fallback: standalone stream on the system default input
 	if (Pa_Initialize() != paNoError) { return false; }
 
 	const PaDeviceIndex device = Pa_GetDefaultInputDevice();
@@ -129,6 +159,7 @@ bool AudioRecorder::start()
 	}
 
 	m_stream = stream;
+	m_engineCapture = false;
 	m_recording = true;
 	return true;
 }
@@ -140,12 +171,20 @@ QString AudioRecorder::stopAndSave()
 {
 	if (!m_recording) { return QString(); }
 
-	auto stream = static_cast<PaStream*>(m_stream);
-	Pa_StopStream(stream);
-	Pa_CloseStream(stream);
-	Pa_Terminate();
-	m_stream = nullptr;
-	m_recording = false;
+	if (m_engineCapture)
+	{
+		m_recording = false;
+		m_engineCapture = false;
+	}
+	else
+	{
+		auto stream = static_cast<PaStream*>(m_stream);
+		Pa_StopStream(stream);
+		Pa_CloseStream(stream);
+		Pa_Terminate();
+		m_stream = nullptr;
+		m_recording = false;
+	}
 
 	std::vector<float> data;
 	{

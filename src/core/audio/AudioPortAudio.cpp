@@ -24,6 +24,7 @@
  */
 
 #include <iostream>
+#include <vector>
 
 #include "lmmsconfig.h"
 
@@ -31,8 +32,15 @@
 
 #include "AudioEngine.h"
 #include "AudioPortAudio.h"
+#include "AudioRecorder.h"
 #include "ConfigManager.h"
 #include "LcdSpinBox.h"
+
+#include <QCheckBox>
+
+#ifdef LMMS_BUILD_WIN32
+#include <pa_win_wasapi.h>
+#endif
 
 namespace {
 enum class Direction
@@ -49,6 +57,16 @@ constexpr auto tag()
 constexpr auto backendAttribute()
 {
 	return "backend";
+}
+
+constexpr auto wasapiExclusiveAttribute()
+{
+	return "wasapiexclusive";
+}
+
+constexpr auto wasapiBackendName()
+{
+	return "Windows WASAPI";
 }
 
 constexpr auto deviceNameAttribute(Direction direction)
@@ -105,9 +123,9 @@ AudioPortAudio::AudioPortAudio(bool& successful, AudioEngine* engine)
 	}
 
 	const auto backend = ConfigManager::inst()->value(tag(), backendAttribute());
-	
+
 	const auto inputDeviceName = ConfigManager::inst()->value(tag(), deviceNameAttribute(Direction::Input));
-	const auto inputDeviceChannels = ConfigManager::inst()->value(tag(), channelsAttribute(Direction::Input)).toInt();
+	auto inputDeviceChannels = ConfigManager::inst()->value(tag(), channelsAttribute(Direction::Input)).toInt();
 
 	const auto outputDeviceName = ConfigManager::inst()->value(tag(), deviceNameAttribute(Direction::Output));
 	const auto outputDeviceChannels = ConfigManager::inst()->value(tag(), channelsAttribute(Direction::Output)).toInt();
@@ -123,6 +141,8 @@ AudioPortAudio::AudioPortAudio(bool& successful, AudioEngine* engine)
 		if (deviceInfo->name == outputDeviceName && hostApiInfo->name == backend) { outputDeviceIndex = i; }
 	}
 
+	if (inputDeviceIndex != paNoDevice && inputDeviceChannels < 1) { inputDeviceChannels = DEFAULT_CHANNELS; }
+
 	const auto sampleRate = engine->baseSampleRate();
 	const auto framesPerBuffer = engine->framesPerPeriod();
 	const auto inputLatency
@@ -130,15 +150,15 @@ AudioPortAudio::AudioPortAudio(bool& successful, AudioEngine* engine)
 	const auto outputLatency
 		= outputDeviceIndex == paNoDevice ? 0. : Pa_GetDeviceInfo(outputDeviceIndex)->defaultLowOutputLatency;
 
-	const auto inputParameters = PaStreamParameters {
+	auto inputParameters = PaStreamParameters {
 		.device = inputDeviceIndex,
 		.channelCount = inputDeviceChannels,
 		.sampleFormat = paFloat32,
 		.suggestedLatency = inputLatency,
 		.hostApiSpecificStreamInfo = nullptr
 	};
-	
-	const auto outputParameters = PaStreamParameters {
+
+	auto outputParameters = PaStreamParameters {
 		.device = outputDeviceIndex,
 		.channelCount = outputDeviceChannels,
 		.sampleFormat = paFloat32,
@@ -146,23 +166,81 @@ AudioPortAudio::AudioPortAudio(bool& successful, AudioEngine* engine)
 		.hostApiSpecificStreamInfo = nullptr
 	};
 
-	const auto inputParametersPtr = inputDeviceIndex == paNoDevice ? nullptr : &inputParameters; 
-	const auto outputParametersPtr = outputDeviceIndex == paNoDevice ? nullptr : &outputParameters;
-	auto err = Pa_IsFormatSupported(inputParametersPtr, outputParametersPtr, sampleRate);
-
-	if (err != paFormatIsSupported)
+#ifdef LMMS_BUILD_WIN32
+	// WASAPI tuning: run the stream thread at MMCSS "Pro Audio" priority.
+	// Exclusive mode bypasses the Windows mixer as the low-latency
+	// alternative to ASIO; shared mode gets automatic sample rate conversion
+	// so the stream still opens when the project rate differs from the
+	// device's mix format (e.g. 44.1 kHz project on a 48 kHz device).
+	auto wasapiInfo = PaWasapiStreamInfo{};
+	const bool wasapiUsed = backend == wasapiBackendName();
+	if (wasapiUsed)
 	{
-		std::cerr << "Pa_IsFormatSupported() failed: " << Pa_GetErrorText(err) << '\n';
-		successful = false;
-		return;
+		const bool wasapiExclusive
+				= ConfigManager::inst()->value(tag(), wasapiExclusiveAttribute()).toInt() != 0;
+		wasapiInfo.size = sizeof(PaWasapiStreamInfo);
+		wasapiInfo.hostApiType = paWASAPI;
+		wasapiInfo.version = 1;
+		wasapiInfo.flags = paWinWasapiThreadPriority
+				| (wasapiExclusive ? paWinWasapiExclusive : paWinWasapiAutoConvert);
+		wasapiInfo.threadPriority = eThreadPriorityProAudio;
+	}
+#else
+	const bool wasapiUsed = false;
+#endif
+
+	// try the requested configuration first, then progressively back off:
+	// without the WASAPI tuning, and finally without the input device, so a
+	// capture-side problem never takes playback down with it
+	struct Attempt { bool withInput; bool withWasapiInfo; };
+	auto attempts = std::vector<Attempt>{};
+	const bool hasInput = inputDeviceIndex != paNoDevice;
+	attempts.push_back({hasInput, wasapiUsed});
+	if (wasapiUsed) { attempts.push_back({hasInput, false}); }
+	if (hasInput)
+	{
+		attempts.push_back({false, wasapiUsed});
+		if (wasapiUsed) { attempts.push_back({false, false}); }
 	}
 
-	err = Pa_OpenStream(&m_paStream, inputParametersPtr, outputParametersPtr, sampleRate, framesPerBuffer, paNoFlag,
-		&AudioPortAudio::processCallback, this);
-	
-	if (err != paNoError)
+	PaError err = paNoError;
+	bool opened = false;
+	bool inputOpened = false;
+	for (const auto& attempt : attempts)
 	{
-		std::cerr << "Pa_OpenStream() failed: " << Pa_GetErrorText(err) << '\n';
+#ifdef LMMS_BUILD_WIN32
+		auto info = attempt.withWasapiInfo ? &wasapiInfo : nullptr;
+#else
+		void* info = nullptr;
+#endif
+		inputParameters.hostApiSpecificStreamInfo = info;
+		outputParameters.hostApiSpecificStreamInfo = info;
+		const auto inputParametersPtr = attempt.withInput ? &inputParameters : nullptr;
+		const auto outputParametersPtr = outputDeviceIndex == paNoDevice ? nullptr : &outputParameters;
+
+		err = Pa_IsFormatSupported(inputParametersPtr, outputParametersPtr, sampleRate);
+		if (err != paFormatIsSupported)
+		{
+			std::cerr << "AudioPortAudio: format not supported (input: " << attempt.withInput
+					<< ", tuned: " << attempt.withWasapiInfo << "): " << Pa_GetErrorText(err) << '\n';
+			continue;
+		}
+
+		err = Pa_OpenStream(&m_paStream, inputParametersPtr, outputParametersPtr, sampleRate, framesPerBuffer,
+			paNoFlag, &AudioPortAudio::processCallback, this);
+		if (err == paNoError)
+		{
+			opened = true;
+			inputOpened = attempt.withInput;
+			break;
+		}
+		std::cerr << "AudioPortAudio: could not open stream (input: " << attempt.withInput
+				<< ", tuned: " << attempt.withWasapiInfo << "): " << Pa_GetErrorText(err) << '\n';
+	}
+
+	if (!opened)
+	{
+		std::cerr << "AudioPortAudio: no usable stream configuration found\n";
 		successful = false;
 		return;
 	}
@@ -170,6 +248,10 @@ AudioPortAudio::AudioPortAudio(bool& successful, AudioEngine* engine)
 	successful = true;
 	setSampleRate(sampleRate);
 	setChannels(outputDeviceChannels);
+	m_inputChannels = inputOpened ? inputDeviceChannels : 0;
+	// the record buttons stay available even without a configured input
+	// device - AudioRecorder then falls back to the system default input
+	m_supportsCapture = true;
 }
 
 AudioPortAudio::~AudioPortAudio()
@@ -188,7 +270,7 @@ void AudioPortAudio::stopProcessingImpl()
 	Pa_StopStream(m_paStream);
 }
 
-int AudioPortAudio::processCallback(const void*, void* output, unsigned long frameCount,
+int AudioPortAudio::processCallback(const void* input, void* output, unsigned long frameCount,
 	const PaStreamCallbackTimeInfo*, PaStreamCallbackFlags, void* userData)
 {
 	const auto device = static_cast<AudioPortAudio*>(userData);
@@ -199,6 +281,12 @@ int AudioPortAudio::processCallback(const void*, void* output, unsigned long fra
 	{
 		std::fill_n(outputBuffer, frameCount * channels, 0.f);
 		return paComplete;
+	}
+
+	if (input != nullptr && device->m_inputChannels > 0)
+	{
+		AudioRecorder::instance().captureFromEngine(
+			static_cast<const float*>(input), frameCount, device->m_inputChannels, device->sampleRate());
 	}
 
 	device->audioEngine()->renderNextBuffer({outputBuffer, channels, frameCount});
@@ -221,7 +309,7 @@ public:
 
 		const auto layout = new QFormLayout{this};
 		layout->addRow(deviceLabel, m_deviceComboBox);
-		layout->addRow(tr("Channels"), m_channelSpinBox);
+		layout->addRow(AudioDeviceSetupWidget::tr("Channels"), m_channelSpinBox);
 
 		connect(m_deviceComboBox, qOverload<int>(&QComboBox::currentIndexChanged), this,
 			[this](int index) { refreshChannels(m_deviceComboBox->itemData(index).toInt()); });
@@ -273,6 +361,7 @@ private:
 AudioPortAudioSetupWidget::AudioPortAudioSetupWidget(QWidget* parent)
 	: AudioDeviceSetupWidget{AudioPortAudio::name(), parent}
 	, m_backendComboBox{new QComboBox{this}}
+	, m_wasapiExclusiveCheckBox{new QCheckBox{tr("Exclusive mode (lower latency)"), this}}
 	, m_inputDevice{new DeviceSelectorWidget{tr("Input device"), Direction::Input}}
 	, m_outputDevice(new DeviceSelectorWidget{tr("Output device"), Direction::Output})
 {
@@ -282,14 +371,28 @@ AudioPortAudioSetupWidget::AudioPortAudioSetupWidget(QWidget* parent)
 	form->setVerticalSpacing(formVerticalSpacing);
 
 	form->addRow(tr("Backend"), m_backendComboBox);
+	form->addRow(QString(), m_wasapiExclusiveCheckBox);
 	form->addRow(m_outputDevice);
 	form->addRow(m_inputDevice);
+
+	m_wasapiExclusiveCheckBox->setChecked(
+		ConfigManager::inst()->value(tag(), wasapiExclusiveAttribute()).toInt() != 0);
 
 	connect(m_backendComboBox, qOverload<int>(&QComboBox::currentIndexChanged), this, [this](int index) {
 		m_inputDevice->refreshFromConfig(m_backendComboBox->itemData(index).toInt());
 		m_outputDevice->refreshFromConfig(m_backendComboBox->itemData(index).toInt());
+		updateExclusiveCheckBox();
 	});
 
+}
+
+
+
+
+void AudioPortAudioSetupWidget::updateExclusiveCheckBox()
+{
+	// the option only has an effect for the WASAPI backend
+	m_wasapiExclusiveCheckBox->setVisible(m_backendComboBox->currentText() == wasapiBackendName());
 }
 
 void AudioPortAudioSetupWidget::show()
@@ -308,12 +411,15 @@ void AudioPortAudioSetupWidget::show()
 		m_backendComboBox->setCurrentIndex(selectedBackendIndex);
 	}
 
+	updateExclusiveCheckBox();
 	AudioDeviceSetupWidget::show();
 }
 
 void AudioPortAudioSetupWidget::saveSettings()
 {
 	ConfigManager::inst()->setValue(tag(), backendAttribute(), m_backendComboBox->currentText());
+	ConfigManager::inst()->setValue(tag(), wasapiExclusiveAttribute(),
+		m_wasapiExclusiveCheckBox->isChecked() ? "1" : "0");
 	m_inputDevice->saveToConfig();
 	m_outputDevice->saveToConfig();
 }

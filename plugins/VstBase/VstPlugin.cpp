@@ -35,11 +35,6 @@
 #include <QTemporaryFile>
 #include <QTimerEvent>
 
-#if defined(LMMS_BUILD_LINUX) && (QT_VERSION < QT_VERSION_CHECK(6,0,0))
-#	include <QX11Info>
-#	include <X11EmbedContainer.h>
-#endif
-
 #include <QWindow>
 
 
@@ -58,10 +53,6 @@
 #include "PathUtil.h"
 #include "SimpleTextFloat.h"
 #include "Song.h"
-
-#ifdef LMMS_BUILD_LINUX
-#	include <X11/Xlib.h>
-#endif
 
 namespace PE
 {
@@ -407,23 +398,6 @@ bool VstPlugin::processMessage( const message & _m )
 	{
 	case IdVstPluginWindowID:
 		m_pluginWindowID = _m.getInt();
-		if (m_embedMethod == "none" && !gui::GuiApplication::isWayland()
-			&& ConfigManager::inst()->value("ui", "vstalwaysontop").toInt())
-		{
-#ifdef LMMS_BUILD_WIN32
-			// We're changing the owner, not the parent,
-			// so this is legal despite MSDN's warning
-			SetWindowLongPtr( (HWND)(intptr_t) m_pluginWindowID,
-					GWLP_HWNDPARENT,
-					(LONG_PTR) gui::getGUI()->mainWindow()->winId() );
-#endif
-
-#if defined(LMMS_BUILD_LINUX) && (QT_VERSION < QT_VERSION_CHECK(6,0,0))
-			XSetTransientForHint( QX11Info::display(),
-					m_pluginWindowID,
-					gui::getGUI()->mainWindow()->winId() );
-#endif
-		}
 		break;
 
 	case IdVstPluginEditorGeometry:
@@ -706,16 +680,6 @@ void VstPlugin::hideUI()
 	}
 }
 
-// X11Embed only
-void VstPlugin::handleClientEmbed()
-{
-	lock();
-	sendMessage( IdShowUI );
-	unlock();
-}
-
-
-
 void VstPlugin::loadChunk( const QByteArray & _chunk )
 {
 	QTemporaryFile tf;
@@ -790,52 +754,8 @@ void VstPlugin::createUI( QWidget * parent )
 		QWindow* vw = QWindow::fromWinId(m_pluginWindowID);
 		container = QWidget::createWindowContainer(vw, parent );
 		container->installEventFilter(this);
-	} else
-
-#ifdef LMMS_BUILD_WIN32
-	if (m_embedMethod == "win32" )
-	{
-		QWidget * helper = new QWidget;
-		QHBoxLayout * l = new QHBoxLayout( helper );
-		QWidget * target = new QWidget( helper );
-		l->setSpacing( 0 );
-		l->setContentsMargins(0, 0, 0, 0);
-		l->addWidget( target );
-
-		// we've to call that for making sure, Qt created the windows
-		helper->winId();
-		HWND targetHandle = (HWND)target->winId();
-		HWND pluginHandle = (HWND)(intptr_t)m_pluginWindowID;
-
-		DWORD style = GetWindowLong(pluginHandle, GWL_STYLE);
-		style = style & ~(WS_POPUP);
-		style = style | WS_CHILD;
-		SetWindowLong(pluginHandle, GWL_STYLE, style);
-		SetParent(pluginHandle, targetHandle);
-
-		DWORD threadId = GetWindowThreadProcessId(pluginHandle, nullptr);
-		DWORD currentThreadId = GetCurrentThreadId();
-		AttachThreadInput(currentThreadId, threadId, true);
-
-		container = helper;
-		RemotePlugin::showUI();
-
-	} else
-#endif
-
-#if defined(LMMS_BUILD_LINUX) && (QT_VERSION < QT_VERSION_CHECK(6,0,0))
-	if (m_embedMethod == "xembed" )
-	{
-		if (parent)
-		{
-			parent->setAttribute(Qt::WA_NativeWindow);
-		}
-		auto embedContainer = new QX11EmbedContainer(parent);
-		connect(embedContainer, SIGNAL(clientIsEmbedded()), this, SLOT(handleClientEmbed()));
-		embedContainer->embedClient( m_pluginWindowID );
-		container = embedContainer;
-	} else
-#endif
+	}
+	else
 	{
 		qCritical() << "Unknown embed method" << m_embedMethod;
 		return;

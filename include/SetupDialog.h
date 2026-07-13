@@ -85,7 +85,6 @@ private slots:
 	void toggleMMPZ(bool enabled);
 	void toggleDisableBackup(bool enabled);
 	void toggleOpenLastProject(bool enabled);
-	void detachBehaviorChanged();
 	void loopMarkerModeChanged();
 	void setLanguage(int lang);
 
@@ -96,8 +95,6 @@ private slots:
 	void toggleRunningAutoSave(bool enabled);
 	void toggleSmoothScroll(bool enabled);
 	void toggleAnimateAFP(bool enabled);
-	void vstEmbedMethodChanged();
-	void toggleVSTAlwaysOnTop(bool en);
 	void toggleDisableAutoQuit(bool enabled);
 	void toggleMixSanitization(bool enabled);
 
@@ -149,8 +146,6 @@ private:
 	bool m_MMPZ;
 	bool m_disableBackup;
 	bool m_openLastProject;
-	QString m_detachBehavior;
-	QComboBox* m_detachBehaviorComboBox;
 	QString m_loopMarkerMode;
 	QComboBox* m_loopMarkerComboBox;
 	QString m_autoScroll;
@@ -168,11 +163,6 @@ private:
 	QCheckBox * m_runningAutoSave;
 	bool m_smoothScroll;
 	bool m_animateAFP;
-	QLabel * m_vstEmbedLbl;
-	QComboBox* m_vstEmbedComboBox;
-	QString m_vstEmbedMethod;
-	QCheckBox * m_vstAlwaysOnTopCheckBox;
-	bool m_vstAlwaysOnTop;
 	bool m_disableAutoQuit;
 
 	using AswMap = QMap<QString, AudioDeviceSetupWidget*>;

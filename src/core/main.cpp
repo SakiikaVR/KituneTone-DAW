@@ -39,6 +39,7 @@
 
 #ifdef LMMS_BUILD_WIN32
 #include <windows.h>
+#include <mmsystem.h>
 #endif
 
 #ifdef LMMS_HAVE_PROCESS_H
@@ -363,6 +364,17 @@ int main( int argc, char * * argv )
 #if (QT_VERSION < QT_VERSION_CHECK(6, 0, 0))
 	// High-DPI scaling is always enabled in Qt >= 6.0
 	QCoreApplication::setAttribute(Qt::AA_EnableHighDpiScaling);
+#endif
+
+	// don't force sibling widgets to become native windows when a plug-in
+	// view is embedded - keeps the rest of the UI on Qt's fast raster path
+	QCoreApplication::setAttribute(Qt::AA_DontCreateNativeWidgetSiblings);
+
+#ifdef LMMS_BUILD_WIN32
+	// 1 ms system timer resolution for steadier GUI/MIDI timers, and a
+	// slightly elevated priority class for the realtime audio workload
+	timeBeginPeriod(1);
+	SetPriorityClass(GetCurrentProcess(), ABOVE_NORMAL_PRIORITY_CLASS);
 #endif
 
 	QCoreApplication * app = coreOnly ?

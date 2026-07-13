@@ -202,6 +202,12 @@ target_static_libraries(lmmsobjs ringbuffer)
 set_target_properties(lmms PROPERTIES
 	ENABLE_EXPORTS ON
 	WIN32_EXECUTABLE $<NOT:$<CONFIG:DEBUG>>
+	# KitsuneTone rebranding. The binary name must stay ASCII: a non-ASCII
+	# OUTPUT_NAME breaks the MSVC toolchain (CMake writes UTF-8 response
+	# files, link.exe reads them in the ANSI code page, so plug-ins fail to
+	# link against the exe's import library). The user-facing 狐Tone.exe is
+	# a small launcher deployed alongside.
+	OUTPUT_NAME "KitsuneTone"
 )
 
 set_target_properties(lmmsobjs PROPERTIES AUTOUIC_SEARCH_PATHS "gui/modals")

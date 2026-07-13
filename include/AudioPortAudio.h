@@ -78,6 +78,9 @@ public:
 
 	static auto name() -> QString { return QT_TRANSLATE_NOOP("AudioDeviceSetupWidget", "PortAudio"); }
 
+	//! number of channels of the configured input device (0 = no capture)
+	int inputChannels() const { return m_inputChannels; }
+
 private:
 	void startProcessingImpl() override;
 	void stopProcessingImpl() override;
@@ -87,8 +90,11 @@ private:
 
 	detail::PortAudioInitializationGuard m_initGuard;
 	PaStream* m_paStream = nullptr;
+	int m_inputChannels = 0;
 };
 } // namespace lmms
+
+class QCheckBox;
 
 namespace lmms::gui {
 class AudioPortAudioSetupWidget : public AudioDeviceSetupWidget
@@ -100,8 +106,11 @@ public:
 	void saveSettings() override;
 
 private:
+	void updateExclusiveCheckBox();
+
 	class DeviceSelectorWidget;
 	QComboBox* m_backendComboBox = nullptr;
+	QCheckBox* m_wasapiExclusiveCheckBox = nullptr;
 	DeviceSelectorWidget* m_inputDevice = nullptr;
 	DeviceSelectorWidget* m_outputDevice = nullptr;
 };

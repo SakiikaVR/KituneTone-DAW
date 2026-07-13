@@ -27,15 +27,9 @@
 #include <QCloseEvent>
 #include <QDomDocument>
 #include <QDomElement>
-#include <QHBoxLayout>
 #include <QTimer>
-#include <QToolButton>
 #include <QVBoxLayout>
 #include <QWidget>
-
-#ifdef LMMS_BUILD_WIN32
-#include <windows.h>
-#endif
 
 #include <algorithm>
 #include <cmath>
@@ -60,9 +54,12 @@ DEF_CLASS_IID(IPlugInEntryPoint2)
 
 #include "AudioEngine.h"
 #include "Engine.h"
+#include "GuiApplication.h"
+#include "MainWindow.h"
 #include "MidiEvent.h"
 #include "SampleFrame.h"
 #include "Song.h"
+#include "SubWindow.h"
 
 namespace lmms
 {
@@ -94,13 +91,14 @@ bool isInstrumentClass(const VST3::Hosting::ClassInfo& info)
 } // anonymous namespace
 
 
-//! Top-level window hosting the plug-in's native editor view, with a small
-//! toolbar (always-on-top toggle) above the plug-in area
+//! Widget hosting the plug-in's native editor view; lives inside an LMMS
+//! workspace subwindow like every other editor window (and can be torn off
+//! via the subwindow's detach feature)
 class Vst3EditorWidget : public QWidget
 {
 public:
 	Vst3EditorWidget(Vst3Plugin* plugin, Steinberg::IPlugView* view) :
-		QWidget(nullptr, Qt::Window),
+		QWidget(),
 		m_plugin(plugin),
 		m_view(view)
 	{
@@ -110,21 +108,6 @@ public:
 		layout->setContentsMargins(0, 0, 0, 0);
 		layout->setSpacing(0);
 
-		auto bar = new QWidget(this);
-		auto barLayout = new QHBoxLayout(bar);
-		barLayout->setContentsMargins(4, 2, 4, 2);
-
-		auto pinButton = new QToolButton(bar);
-		pinButton->setCheckable(true);
-		pinButton->setText(QStringLiteral("\U0001F4CC")); // pushpin
-		pinButton->setToolTip(Vst3Plugin::tr("Always on top"));
-		pinButton->setAutoRaise(true);
-		QObject::connect(pinButton, &QToolButton::toggled,
-				[this](bool on) { setAlwaysOnTop(on); });
-		barLayout->addWidget(pinButton);
-		barLayout->addStretch();
-		layout->addWidget(bar);
-
 		m_container = new QWidget(this);
 		m_container->setAttribute(Qt::WA_NativeWindow);
 		layout->addWidget(m_container, 1);
@@ -133,30 +116,49 @@ public:
 	//! native window the plug-in view gets attached to
 	QWidget* container() const { return m_container; }
 
-	//! resize the window so the plug-in area has the given size
+	//! the workspace subwindow wrapping this widget (self before it is added)
+	QWidget* windowWidget()
+	{
+		return parentWidget() != nullptr ? parentWidget() : this;
+	}
+
+	//! resize widget and subwindow so the plug-in area has the given size
 	void setPluginSize(int w, int h, bool fixed)
 	{
+		// adopt the exact plug-in size while the container is pinned to it
 		m_container->setFixedSize(w, h);
 		adjustSize();
-		if (fixed)
+
+		if (!fixed)
 		{
-			setFixedSize(size());
-		}
-		else
-		{
+			// resizable view: free the constraints again *after* the size
+			// has been adopted, otherwise the layout collapses
 			m_container->setMinimumSize(64, 64);
 			m_container->setMaximumSize(QWIDGETSIZE_MAX, QWIDGETSIZE_MAX);
 			setMinimumSize(160, 90);
 			setMaximumSize(QWIDGETSIZE_MAX, QWIDGETSIZE_MAX);
+		}
+
+		if (auto win = qobject_cast<gui::SubWindow*>(parentWidget()))
+		{
+			// the contents margins are exactly the window decoration, both
+			// attached and detached; use the plug-in size directly instead
+			// of a size hint, which is unreliable for resizable views
+			const auto m = win->contentsMargins();
+			const auto decoration = QSize(m.left() + m.right(), m.top() + m.bottom());
+			win->setMinimumSize(0, 0);
+			win->setMaximumSize(QWIDGETSIZE_MAX, QWIDGETSIZE_MAX);
+			win->resize(decoration + QSize(w, h));
+			if (fixed) { win->setFixedSize(win->size()); }
 		}
 	}
 
 protected:
 	void closeEvent(QCloseEvent* event) override
 	{
-		// keep the editor alive, just hide it
+		// keep the editor alive, just hide its window
 		event->ignore();
-		hide();
+		windowWidget()->hide();
 		emit m_plugin->editorClosed();
 	}
 
@@ -171,20 +173,6 @@ protected:
 	}
 
 private:
-	void setAlwaysOnTop(bool on)
-	{
-#ifdef LMMS_BUILD_WIN32
-		// use the Win32 API directly - toggling Qt window flags would
-		// recreate the native window the plug-in view is attached to
-		SetWindowPos(reinterpret_cast<HWND>(winId()),
-				on ? HWND_TOPMOST : HWND_NOTOPMOST,
-				0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
-#else
-		setWindowFlag(Qt::WindowStaysOnTopHint, on);
-		show();
-#endif
-	}
-
 	Vst3Plugin* m_plugin;
 	Steinberg::IPlugView* m_view;
 	QWidget* m_container = nullptr;
@@ -786,12 +774,14 @@ void Vst3Plugin::showEditor()
 {
 	using namespace Steinberg;
 
-	if (m_failed || !m_controller) { return; }
+	if (m_failed || !m_controller || gui::getGUI() == nullptr) { return; }
 
 	if (m_editorWidget != nullptr)
 	{
-		m_editorWidget->show();
-		m_editorWidget->raise();
+		auto win = static_cast<Vst3EditorWidget*>(m_editorWidget)->windowWidget();
+		win->show();
+		win->raise();
+		m_editorWidget->setFocus();
 		return;
 	}
 
@@ -800,6 +790,7 @@ void Vst3Plugin::showEditor()
 	if (!m_view) { return; }
 
 	auto widget = new Vst3EditorWidget(this, m_view.get());
+	auto subWindow = gui::getGUI()->mainWindow()->addWindowedWidget(widget);
 
 	ViewRect size = {};
 	int w = 640, h = 480;
@@ -811,17 +802,31 @@ void Vst3Plugin::showEditor()
 	widget->setPluginSize(w, h, m_view->canResize() != kResultTrue);
 
 	m_view->setFrame(this);
+	// set before attached(): plug-ins like Vital report their real size via
+	// resizeView() while attaching, which must not be rejected
+	m_editorWidget = widget;
 	if (m_view->attached(reinterpret_cast<void*>(widget->container()->winId()),
 			kPlatformTypeHWND) != kResultTrue)
 	{
 		m_view->setFrame(nullptr);
 		m_view = nullptr;
-		delete widget;
+		m_editorWidget = nullptr;
+		delete subWindow;	// deletes the widget as well
 		return;
 	}
 
-	m_editorWidget = widget;
-	m_editorWidget->show();
+	subWindow->show();
+	widget->show();
+
+	// showing detaches the window (reparenting it); re-apply the plug-in
+	// size afterwards, asking the view again since it may have changed
+	// during attached()
+	if (m_view->getSize(&size) == kResultTrue)
+	{
+		w = size.getWidth();
+		h = size.getHeight();
+	}
+	widget->setPluginSize(w, h, m_view->canResize() != kResultTrue);
 }
 
 
@@ -829,7 +834,10 @@ void Vst3Plugin::showEditor()
 
 void Vst3Plugin::hideEditor()
 {
-	if (m_editorWidget != nullptr) { m_editorWidget->hide(); }
+	if (m_editorWidget != nullptr)
+	{
+		static_cast<Vst3EditorWidget*>(m_editorWidget)->windowWidget()->hide();
+	}
 }
 
 
@@ -862,7 +870,9 @@ void Vst3Plugin::destroyEditor()
 	}
 	if (m_editorWidget != nullptr)
 	{
-		delete m_editorWidget;
+		// delete the wrapping subwindow (which owns the widget), or the bare
+		// widget if it was never added to the workspace
+		delete static_cast<Vst3EditorWidget*>(m_editorWidget)->windowWidget();
 		m_editorWidget = nullptr;
 	}
 }

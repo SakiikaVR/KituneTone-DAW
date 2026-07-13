@@ -119,7 +119,6 @@ SetupDialog::SetupDialog(ConfigTab tab_to_open) :
 			"app", "disablebackup").toInt()),
 	m_openLastProject(ConfigManager::inst()->value(
 			"app", "openlastproject").toInt()),
-	m_detachBehavior{ConfigManager::inst()->value("ui", "detachbehavior", "show")},
 	m_loopMarkerMode{ConfigManager::inst()->value("app", "loopmarkermode", "dual")},
 	m_autoScroll(ConfigManager::inst()->value("ui", "autoscroll", "stepped")),
 	m_lang(ConfigManager::inst()->value(
@@ -137,9 +136,6 @@ SetupDialog::SetupDialog(ConfigTab tab_to_open) :
 			"ui", "smoothscroll").toInt()),
 	m_animateAFP(ConfigManager::inst()->value(
 			"ui", "animateafp", "1").toInt()),
-	m_vstEmbedMethod(ConfigManager::inst()->vstEmbedMethod()),
-	m_vstAlwaysOnTop(ConfigManager::inst()->value(
-			"ui", "vstalwaysontop").toInt()),
 	m_disableAutoQuit(ConfigManager::inst()->value(
 			"ui", "disableautoquit", "1").toInt()),
 	m_bufferSize(ConfigManager::inst()->value(
@@ -258,18 +254,8 @@ SetupDialog::SetupDialog(ConfigTab tab_to_open) :
 	addCheckBox(tr("Show warning when deleting a mixer channel that is in use"), guiGroupBox, guiGroupLayout,
 		m_mixerChannelDeletionWarning,	SLOT(toggleMixerChannelDeletionWarning(bool)), false);
 
-	m_detachBehaviorComboBox = new QComboBox{guiGroupBox};
-
-	m_detachBehaviorComboBox->addItem(tr("Attach and show when closed"), "show");
-	m_detachBehaviorComboBox->addItem(tr("Attach and hide when closed"), "hide");
-	m_detachBehaviorComboBox->addItem(tr("Always detached"), "detached");
-
-	m_detachBehaviorComboBox->setCurrentIndex(m_detachBehaviorComboBox->findData(m_detachBehavior));
-	connect(m_detachBehaviorComboBox, qOverload<int>(&QComboBox::currentIndexChanged),
-		this, &SetupDialog::detachBehaviorChanged);
-
-	guiGroupLayout->addWidget(new QLabel{tr("Detached window behavior"), guiGroupBox});
-	guiGroupLayout->addWidget(m_detachBehaviorComboBox);
+	// the detached-window behavior is fixed to its default ("attach and show
+	// when closed"); the selector was removed from the dialog
 
 	m_loopMarkerComboBox = new QComboBox{guiGroupBox};
 
@@ -445,33 +431,8 @@ SetupDialog::SetupDialog(ConfigTab tab_to_open) :
 	QGroupBox * pluginsBox = new QGroupBox(tr("Plugins"), performance_w);
 	QVBoxLayout * pluginsLayout = new QVBoxLayout(pluginsBox);
 
-	m_vstEmbedLbl = new QLabel(pluginsBox);
-	m_vstEmbedLbl->setText(tr("VST plugins embedding:"));
-	pluginsLayout->addWidget(m_vstEmbedLbl);
-
-	m_vstEmbedComboBox = new QComboBox(pluginsBox);
-
-	QStringList embedMethods = ConfigManager::availableVstEmbedMethods();
-	m_vstEmbedComboBox->addItem(tr("No embedding"), "none");
-	if(embedMethods.contains("qt"))
-	{
-		m_vstEmbedComboBox->addItem(tr("Embed using Qt API"), "qt");
-	}
-	if(embedMethods.contains("win32"))
-	{
-		m_vstEmbedComboBox->addItem(tr("Embed using native Win32 API"), "win32");
-	}
-	if(embedMethods.contains("xembed"))
-	{
-		m_vstEmbedComboBox->addItem(tr("Embed using XEmbed protocol"), "xembed");
-	}
-	m_vstEmbedComboBox->setCurrentIndex(m_vstEmbedComboBox->findData(m_vstEmbedMethod));
-	connect(m_vstEmbedComboBox, SIGNAL(currentIndexChanged(int)),
-			this, SLOT(vstEmbedMethodChanged()));
-	pluginsLayout->addWidget(m_vstEmbedComboBox);
-
-	m_vstAlwaysOnTopCheckBox = addCheckBox(tr("Keep plugin windows on top when not embedded"), pluginsBox, pluginsLayout,
-		m_vstAlwaysOnTop, SLOT(toggleVSTAlwaysOnTop(bool)), false);
+	// plug-in UIs are always embedded in Qt windows in this fork, so the
+	// embed-method selector and the always-on-top option are gone
 
 	addCheckBox(tr("Keep effects running even without input"), pluginsBox, pluginsLayout,
 		m_disableAutoQuit, SLOT(toggleDisableAutoQuit(bool)), false);
@@ -563,7 +524,9 @@ SetupDialog::SetupDialog(ConfigTab tab_to_open) :
 		QWidget * audioWidget = m_audioIfaceSetupWidgets[it.value()];
 		audioWidget->hide();
 		as_w_layout->addWidget(audioWidget);
-		m_audioInterfaces->addItem(it.key());
+		// the dummy driver stays registered as a silent fallback, but is not
+		// offered for selection
+		if (it.value() != AudioDummy::name()) { m_audioInterfaces->addItem(it.key()); }
 	}
 
 	// If no preferred audio device is saved, save the current one.
@@ -1007,7 +970,6 @@ void SetupDialog::accept()
 					QString::number(!m_disableBackup));
 	ConfigManager::inst()->setValue("app", "openlastproject",
 					QString::number(m_openLastProject));
-	ConfigManager::inst()->setValue("ui", "detachbehavior", m_detachBehavior);
 	ConfigManager::inst()->setValue("app", "loopmarkermode", m_loopMarkerMode);
 	ConfigManager::inst()->setValue("app", "language", m_lang);
 	ConfigManager::inst()->setValue("ui", "autoscroll", m_autoScroll);
@@ -1021,10 +983,6 @@ void SetupDialog::accept()
 					QString::number(m_smoothScroll));
 	ConfigManager::inst()->setValue("ui", "animateafp",
 					QString::number(m_animateAFP));
-	ConfigManager::inst()->setValue("ui", "vstembedmethod",
-					m_vstEmbedComboBox->currentData().toString());
-	ConfigManager::inst()->setValue("ui", "vstalwaysontop",
-					QString::number(m_vstAlwaysOnTop));
 	ConfigManager::inst()->setValue("ui", "disableautoquit",
 					QString::number(m_disableAutoQuit));
 	ConfigManager::inst()->setValue("audioengine", "audiodev",
@@ -1148,12 +1106,6 @@ void SetupDialog::toggleOpenLastProject(bool enabled)
 }
 
 
-void SetupDialog::detachBehaviorChanged()
-{
-	m_detachBehavior = m_detachBehaviorComboBox->currentData().toString();
-}
-
-
 void SetupDialog::loopMarkerModeChanged()
 {
 	m_loopMarkerMode = m_loopMarkerComboBox->currentData().toString();
@@ -1218,19 +1170,6 @@ void SetupDialog::toggleSmoothScroll(bool enabled)
 void SetupDialog::toggleAnimateAFP(bool enabled)
 {
 	m_animateAFP = enabled;
-}
-
-
-void SetupDialog::vstEmbedMethodChanged()
-{
-	m_vstEmbedMethod = m_vstEmbedComboBox->currentData().toString();
-	m_vstAlwaysOnTopCheckBox->setVisible(m_vstEmbedMethod == "none");
-}
-
-
-void SetupDialog::toggleVSTAlwaysOnTop(bool enabled)
-{
-	m_vstAlwaysOnTop = enabled;
 }
 
 

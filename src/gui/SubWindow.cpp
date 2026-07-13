@@ -28,6 +28,12 @@
 
 #include "SubWindow.h"
 
+#include "lmmsconfig.h"
+
+#ifdef LMMS_BUILD_WIN32
+#include <windows.h>
+#endif
+
 #include <algorithm>
 
 #include <QGraphicsDropShadowEffect>
@@ -36,14 +42,15 @@
 #include <QLayout>
 #include <QMdiArea>
 #include <QMetaMethod>
+#include <QMouseEvent>
 #include <QMoveEvent>
 #include <QPainter>
 #include <QPushButton>
+#include <QSizeGrip>
 #include <QStyleOption>
 #include <QStyleOptionTitleBar>
 #include <QWindow>
 
-#include "ConfigManager.h"
 #include "embed.h"
 
 namespace lmms::gui
@@ -87,6 +94,10 @@ SubWindow::SubWindow(QWidget* parent, Qt::WindowFlags windowFlags)
 
 	m_detachBtn = createButton("detach", tr("Detach"));
 	connect(m_detachBtn, &QPushButton::clicked, this, &SubWindow::detach);
+
+	m_pinBtn = createButton("pin", tr("Always on top"));
+	m_pinBtn->setCheckable(true);
+	connect(m_pinBtn, &QPushButton::toggled, this, &SubWindow::setPinned);
 
 	// QLabel for the window title and the shadow effect
 	m_shadow = new QGraphicsDropShadowEffect();
@@ -169,22 +180,12 @@ void SubWindow::changeEvent( QEvent *event )
 
 void SubWindow::setVisible(bool visible)
 {
-	if (isDetached())
-	{
-		// When detached, top-level window is the child widget itself. (This is janky and is best changed at some point.)
-		// For that reason we forward show/hide to the child widget, and don't touch the hidden attached window frame.
-		widget()->setVisible(visible);
-	}
-	else
-	{
-		// When attached, visibility of the actual window is controlled by SubWindow.
-		// SubWindow::hide() when it's already hidden still causes a size recalculation,
-		// if the child widget is hidden it does not get included into the layout, and maximum size is set to 0x0.
-		// There shouldn't be a reason to keep the child widget hidden when the subwindow is attached.
-		// see bug #8292
-		widget()->show();
-		QMdiSubWindow::setVisible(visible);
-	}
+	// the SubWindow itself is the window in both the attached and the
+	// detached state, so visibility is always controlled here.
+	// The child widget is kept visible: a hidden child does not get included
+	// into the layout and the maximum size collapses to 0x0 (bug #8292).
+	widget()->show();
+	QMdiSubWindow::setVisible(visible);
 }
 
 
@@ -192,10 +193,16 @@ void SubWindow::setVisible(bool visible)
 
 void SubWindow::showEvent(QShowEvent* e)
 {
-	if (ConfigManager::inst()->value("ui", "detachbehavior", "show") == "detached") { detach(); }
+	// everything except the Song Editor floats from its first show on
+	if (m_alwaysDetached && !isDetached() && isDetachable())
+	{
+		detach();
+		return;
+	}
+
 	if (isDetached())
 	{
-		widget()->setWindowState((widget()->windowState() & ~Qt::WindowMinimized) | Qt::WindowActive);
+		setWindowState((windowState() & ~Qt::WindowMinimized) | Qt::WindowActive);
 	}
 }
 
@@ -220,7 +227,7 @@ void SubWindow::setDetachable(bool on)
 
 bool SubWindow::isDetached() const
 {
-	return widget()->windowFlags().testFlag(Qt::Window);
+	return windowFlags().testFlag(Qt::Window);
 }
 
 
@@ -322,65 +329,105 @@ void SubWindow::detach()
 {
 	if (!isDetachable() || isDetached()) { return; }
 
-	const auto pos = mapToGlobal(widget()->pos());
+	auto area = mdiArea();
+	if (area == nullptr) { return; }
+	m_mdiArea = area;
+
+	const auto pos = mapToGlobal(QPoint(0, 0));
+	const auto oldSize = size();
 	const bool shown = isVisible();
 
-	auto flags = windowFlags();
-	flags |= Qt::Window;
-	flags &= ~Qt::SubWindow;
-	flags |= Qt::WindowMinimizeButtonHint;
+	m_attachedFlags = windowFlags();
+	m_attachedMargins = contentsMargins();
 
-	hide();
-	widget()->setWindowFlags(flags);
+	// float the whole subwindow - custom Qt frame included - so a detached
+	// window looks exactly like an attached one. QMdiSubWindow rewrites any
+	// flags passed to setWindowFlags() (it forces Qt::SubWindow back on), so
+	// the only reliable way out of the workspace is setParent() with
+	// explicit flags. A frameless tool window keeps the LMMS-drawn frame and
+	// adds no extra taskbar entry.
+	setParent(nullptr, Qt::Tool | Qt::FramelessWindowHint);
 
-	if (shown) { widget()->show(); }
+	// reparenting resets the contents margins - restore the attached ones so
+	// the layout stays pixel-identical (event() keeps re-asserting this)
+	setContentsMargins(m_attachedMargins);
 
-	widget()->move(pos);
+	// group with the main window for stacking and minimizing
+	auto mainWin = m_mdiArea->window();
+	if (mainWin != nullptr)
+	{
+		winId();	// make sure our QWindow exists
+		if (mainWin->windowHandle() != nullptr) { windowHandle()->setTransientParent(mainWin->windowHandle()); }
+	}
+
+	// frameless windows have no native resize edges - offer a size grip
+	if (m_sizeGrip == nullptr)
+	{
+		m_sizeGrip = new QSizeGrip(this);
+		m_sizeGrip->resize(m_sizeGrip->sizeHint());
+	}
+	m_sizeGrip->show();
+
+	// reparenting must not change the window size
+	resize(oldSize);
+
+	if (shown) { show(); }
+	move(pos);
+	m_sizeGrip->move(width() - m_sizeGrip->width() - frameWidth(),
+			height() - m_sizeGrip->height() - frameWidth());
+	m_sizeGrip->raise();
+	adjustTitleBar();
+}
+
+void SubWindow::setPinned(bool on)
+{
+	if (!isDetached()) { return; }
+
+#ifdef LMMS_BUILD_WIN32
+	// use the Win32 API directly - toggling Qt window flags would recreate
+	// the native window (fatal for embedded plug-in views)
+	SetWindowPos(reinterpret_cast<HWND>(winId()),
+			on ? HWND_TOPMOST : HWND_NOTOPMOST,
+			0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+#else
+	setWindowFlag(Qt::WindowStaysOnTopHint, on);
+	show();
+#endif
 }
 
 void SubWindow::attach()
 {
-	if (!isDetached()) { return; }
+	if (!isDetached() || m_mdiArea == nullptr) { return; }
 
-	const bool shown = widget()->isVisible();
+	// release the pin while the window is still a top-level one
+	if (m_pinBtn->isChecked()) { m_pinBtn->setChecked(false); }
 
-	auto frame = widget()->geometry();
-	frame.moveTo(mdiArea()->mapFromGlobal(frame.topLeft()));
-	frame += decorationMargins();
+	const bool shown = isVisible();
 
-	// Make sure the window fully fits on screen
+	auto frame = geometry();
+	frame.moveTo(m_mdiArea->mapFromGlobal(frame.topLeft()));
+
+	// Make sure the window fully fits into the workspace
 	frame.setSize({
-		std::min(frame.width(), mdiArea()->width()),
-		std::min(frame.height(), mdiArea()->height())
+		std::min(frame.width(), m_mdiArea->width()),
+		std::min(frame.height(), m_mdiArea->height())
 	});
 
 	frame.moveTo(
-		std::clamp(frame.left(), 0, mdiArea()->rect().width() - frame.width()),
-		std::clamp(frame.top(), 0, mdiArea()->rect().height() - frame.height())
+		std::clamp(frame.left(), 0, m_mdiArea->rect().width() - frame.width()),
+		std::clamp(frame.top(), 0, m_mdiArea->rect().height() - frame.height())
 	);
 
-	auto flags = windowFlags();
-	flags &= ~Qt::Window;
-	flags |= Qt::SubWindow;
-	flags &= ~Qt::WindowMinimizeButtonHint;
-	widget()->setWindowFlags(flags);
+	m_dragging = false;
+	if (m_sizeGrip != nullptr) { m_sizeGrip->hide(); }
 
-	if (shown)
-	{
-		widget()->show();
-		show();
-	}
+	// re-enter the workspace; QMdiSubWindow's ParentChange handling restores
+	// the proper subwindow flags and margins itself
+	setParent(m_mdiArea->viewport(), m_attachedFlags);
 
-	if (QGuiApplication::platformName() == "wayland")
-	{
-		// Workaround for wayland reporting position as 0-0
-		// See https://doc.qt.io/qt-6.9/application-windows.html#wayland-peculiarities
-		resize(frame.size());
-	}
-	else
-	{
-		setGeometry(frame);
-	}
+	if (shown) { show(); }
+	setGeometry(frame);
+	adjustTitleBar();
 }
 
 
@@ -464,6 +511,7 @@ void SubWindow::adjustTitleBar()
 		m_closeBtn->hide();
 		m_maximizeBtn->hide();
 		m_restoreBtn->hide();
+		m_pinBtn->hide();
 		m_windowTitle->hide();
 
 		return;
@@ -479,7 +527,6 @@ void SubWindow::adjustTitleBar()
 	m_maximizeBtn->hide();
 	m_restoreBtn->hide();
 	m_detachBtn->hide();
-	m_closeBtn->show();
 
 	const int rightSpace = 3;
 	const int buttonGap = 1;
@@ -490,12 +537,20 @@ void SubWindow::adjustTitleBar()
 
 	// the buttonBarWidth depends on the number of buttons.
 	// we need it to calculate the width of window title label
-	int buttonBarWidth = rightSpace + m_buttonSize.width();
+	int buttonBarWidth = rightSpace;
 
-	// set the buttons on their positions.
-	// the close button is always needed and on the rightButtonPos
-	m_closeBtn->move(buttonPos);
-	buttonPos -= buttonStep;
+	// set the buttons on their positions, starting from the right
+	if (m_closable)
+	{
+		m_closeBtn->move(buttonPos);
+		m_closeBtn->show();
+		buttonPos -= buttonStep;
+		buttonBarWidth += m_buttonSize.width();
+	}
+	else
+	{
+		m_closeBtn->hide();
+	}
 
 	// here we ask: is the Subwindow maximizable and
 	// then we set the buttons and show them if needed
@@ -519,11 +574,25 @@ void SubWindow::adjustTitleBar()
 		buttonPos -= buttonStep;
 	}
 
-	if (isDetachable())
+	if (isDetachable() && !isDetached())
 	{
 		m_detachBtn->move(buttonPos);
 		m_detachBtn->show();
+		buttonPos -= buttonStep;
 		buttonBarWidth = buttonBarWidth + m_buttonSize.width() + buttonGap;
+	}
+
+	// floating windows can be pinned on top of everything
+	if (isDetached())
+	{
+		m_pinBtn->move(buttonPos);
+		m_pinBtn->show();
+		buttonPos -= buttonStep;
+		buttonBarWidth = buttonBarWidth + m_buttonSize.width() + buttonGap;
+	}
+	else
+	{
+		m_pinBtn->hide();
 	}
 
 	if( widget() )
@@ -588,6 +657,14 @@ void SubWindow::resizeEvent( QResizeEvent * event )
 	QMdiSubWindow::resizeEvent( event );
 	adjustTitleBar();
 
+	// keep the size grip of a floating window in its bottom-right corner
+	if (m_sizeGrip != nullptr && isDetached())
+	{
+		m_sizeGrip->move(width() - m_sizeGrip->width() - frameWidth(),
+				height() - m_sizeGrip->height() - frameWidth());
+		m_sizeGrip->raise();
+	}
+
 	// if the window was resized and ISN'T minimized/maximized/fullscreen,
 	// then save the current size
 	if( !isMaximized() && !isMinimized() && !isFullScreen() )
@@ -622,37 +699,135 @@ bool SubWindow::eventFilter(QObject* obj, QEvent* event)
 			return true;
 
 		case QEvent::Close:
-			if (isDetached())
+			if (!m_closable)
 			{
-				QString detachBehavior = ConfigManager::inst()->value("ui", "detachbehavior", "show");
-				if (detachBehavior == "show")
-				{
-					attach();
-					event->ignore();
-					return true;
-				}
-				else if (detachBehavior == "hide")
-				{
-					attach();
-					hide();
-					event->ignore();
-					return QMdiSubWindow::eventFilter(obj, event);
-				}
-				else if (detachBehavior == "detached")
-				{
-					event->accept();
-					return QMdiSubWindow::eventFilter(obj, event);
-				}
+				event->ignore();
+				return true;
 			}
-			else
+			if (isDetached() && !m_alwaysDetached)
 			{
-				hide();
+				// closing a manually detached window re-attaches it
+				attach();
+				event->ignore();
+				return true;
 			}
+			hide();
 			return QMdiSubWindow::eventFilter(obj, event);
 
 		default:
 			return QMdiSubWindow::eventFilter(obj, event);
 	}
+}
+
+
+
+
+void SubWindow::closeEvent(QCloseEvent* event)
+{
+	if (!m_closable)
+	{
+		event->ignore();
+		return;
+	}
+	if (isDetached())
+	{
+		// always-detached windows just hide; a manually detached window
+		// returns to the workspace
+		if (m_alwaysDetached) { hide(); }
+		else { attach(); }
+		event->ignore();
+		return;
+	}
+	QMdiSubWindow::closeEvent(event);
+}
+
+
+
+
+bool SubWindow::event(QEvent* event)
+{
+	const bool result = QMdiSubWindow::event(event);
+
+	// QMdiSubWindow zeroes the contents margins on various events (parent or
+	// style changes ...), which would let the child overlap the painted
+	// title bar - keep the margins captured while attached, so the layout
+	// stays pixel-identical to the attached state
+	if (isDetached() && contentsMargins() != m_attachedMargins)
+	{
+		setContentsMargins(m_attachedMargins);
+		adjustTitleBar();
+	}
+
+	return result;
+}
+
+
+
+
+void SubWindow::mousePressEvent(QMouseEvent* event)
+{
+	if (isDetached())
+	{
+		if (event->button() == Qt::LeftButton
+				&& event->position().toPoint().y() <= titleBarHeight() + frameWidth())
+		{
+			m_dragging = true;
+			m_dragOffset = event->globalPosition().toPoint() - frameGeometry().topLeft();
+		}
+		event->accept();
+		return;
+	}
+	QMdiSubWindow::mousePressEvent(event);
+}
+
+
+
+
+void SubWindow::mouseMoveEvent(QMouseEvent* event)
+{
+	if (isDetached())
+	{
+		if (m_dragging)
+		{
+			move(event->globalPosition().toPoint() - m_dragOffset);
+		}
+		event->accept();
+		return;
+	}
+	QMdiSubWindow::mouseMoveEvent(event);
+}
+
+
+
+
+void SubWindow::mouseReleaseEvent(QMouseEvent* event)
+{
+	if (isDetached())
+	{
+		m_dragging = false;
+		event->accept();
+		return;
+	}
+	QMdiSubWindow::mouseReleaseEvent(event);
+}
+
+
+
+
+void SubWindow::mouseDoubleClickEvent(QMouseEvent* event)
+{
+	if (isDetached())
+	{
+		// double-clicking the title bar of a manually detached window
+		// re-attaches it
+		if (!m_alwaysDetached && event->position().toPoint().y() <= m_titleBarHeight + frameWidth())
+		{
+			attach();
+		}
+		event->accept();
+		return;
+	}
+	QMdiSubWindow::mouseDoubleClickEvent(event);
 }
 
 

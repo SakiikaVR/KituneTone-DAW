@@ -490,11 +490,21 @@ void MainWindow::finalize()
 		sd.exec();
 	}
 
-	// Add editor subwindows
+	// Add editor subwindows. The Song Editor is the only window living
+	// inside the workspace; everything else floats (always detached).
 	addWindowedWidget(getGUI()->automationEditor());
 	addWindowedWidget(getGUI()->patternEditor());
 	addWindowedWidget(getGUI()->pianoRoll());
-	addWindowedWidget(getGUI()->songEditor());
+	auto songEditorWindow = addWindowedWidget(getGUI()->songEditor());
+	songEditorWindow->setAlwaysDetached(false);
+	songEditorWindow->setDetachable(false);
+	// the Song Editor is the permanent, always-maximized workspace window:
+	// it cannot be closed, moved or resized. The frameless hint removes the
+	// title bar and - per QMdiSubWindow's implementation - suppresses the
+	// restore/close buttons that would appear in the menu bar corner while
+	// maximized.
+	songEditorWindow->setClosable(false);
+	songEditorWindow->setWindowFlags(Qt::SubWindow | Qt::FramelessWindowHint);
 
 	getGUI()->automationEditor()->parentWidget()->hide();
 	getGUI()->patternEditor()->parentWidget()->move(610, 5);
@@ -596,7 +606,7 @@ void MainWindow::resetWindowTitle()
 		title += " - " + tr( "Recover session. Please save your work!" );
 	}
 
-	setWindowTitle( title + " - " + tr( "LMMS %1" ).arg( LMMS_VERSION ) );
+	setWindowTitle(title + " - " + QStringLiteral("狐Tone %1").arg(LMMS_VERSION));
 }
 
 
@@ -928,6 +938,12 @@ void MainWindow::toggleWindow( QWidget *window, bool forceShow )
 	auto parent = dynamic_cast<QMdiSubWindow*>(window->parentWidget());
 	if (parent == nullptr) { return; }
 
+	// non-closable windows (the Song Editor) can only be brought to front
+	if (auto sub = dynamic_cast<SubWindow*>(parent); sub != nullptr && !sub->isClosable())
+	{
+		forceShow = true;
+	}
+
 	if( forceShow ||
 		m_workspace->activeSubWindow() != parent ||
 		parent->isHidden() )
@@ -1088,22 +1104,6 @@ void MainWindow::updateViewMenu()
 
 	m_viewMenu->addSeparator();
 
-	auto detachAllAction = m_viewMenu->addAction(embed::getIconPixmap("detach"),
-		tr("Detach all subwindows"),
-		this, [this](){ setAllSubWindowsDetached(true); },
-		QKeySequence{Qt::CTRL | Qt::SHIFT | Qt::Key_D}
-	);
-	auto attachAllAction = m_viewMenu->addAction(embed::getIconPixmap("detach"),
-		tr("Attach all subwindows"),
-		this, [this](){ setAllSubWindowsDetached(false); },
-		QKeySequence{Qt::CTRL | Qt::ALT | Qt::SHIFT | Qt::Key_D}
-	);
-
-	detachAllAction->setShortcutContext(Qt::ApplicationShortcut);
-	attachAllAction->setShortcutContext(Qt::ApplicationShortcut);
-
-	m_viewMenu->addSeparator();
-
 	// Here we should put all look&feel -stuff from configmanager
 	// that is safe to change on the fly. There is probably some
 	// more elegant way to do this.
@@ -1250,8 +1250,13 @@ void MainWindow::closeEvent( QCloseEvent * _ce )
 				value( "ui", "enableautosave" ).toInt() )
 		{
 			sessionCleanup();
-			_ce->accept();
 		}
+		_ce->accept();
+		// the floating subwindows are parentless top-level windows; their
+		// native windows die with the main window (owner), but Qt never
+		// registers them as closed, so lastWindowClosed alone would not
+		// fire and the process would linger without any window
+		QApplication::quit();
 	}
 	else
 	{

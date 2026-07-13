@@ -28,6 +28,7 @@
 #define LMMS_GUI_SUBWINDOW_H
 
 #include <QMdiSubWindow>
+#include <QPointer>
 #include <QString>
 
 #include "lmms_export.h"
@@ -35,6 +36,7 @@
 class QGraphicsDropShadowEffect;
 class QLabel;
 class QPushButton;
+class QSizeGrip;
 class QWidget;
 
 namespace lmms::gui
@@ -73,6 +75,14 @@ public:
 	void setDetachable(bool on);
 	bool isDetached() const;
 	void setDetached(bool on);
+	//! always-detached windows float from their first show on and never
+	//! re-attach; this is the default for everything but the Song Editor
+	bool isAlwaysDetached() const { return m_alwaysDetached; }
+	void setAlwaysDetached(bool on) { m_alwaysDetached = on; }
+	//! non-closable windows (the Song Editor) have no close button and
+	//! ignore close requests
+	bool isClosable() const { return m_closable; }
+	void setClosable(bool on) { m_closable = on; }
 
 	// TODO Needed to update the title bar when replacing instruments.
 	// Update works automatically if QMdiSubWindows are used.
@@ -90,7 +100,16 @@ protected:
 	void paintEvent(QPaintEvent* pe) override;
 	void changeEvent(QEvent* event) override;
 	void showEvent(QShowEvent* e) override;
+	void closeEvent(QCloseEvent* event) override;
+	bool event(QEvent* event) override;
 	bool eventFilter(QObject* obj, QEvent* event) override;
+
+	// while detached, the QMdiSubWindow machinery would clamp all moves and
+	// resizes to the workspace, so dragging is handled here instead
+	void mousePressEvent(QMouseEvent* event) override;
+	void mouseMoveEvent(QMouseEvent* event) override;
+	void mouseReleaseEvent(QMouseEvent* event) override;
+	void mouseDoubleClickEvent(QMouseEvent* event) override;
 
 signals:
 	void focusLost();
@@ -102,6 +121,7 @@ private:
 	QPushButton * m_maximizeBtn;
 	QPushButton * m_restoreBtn;
 	QPushButton* m_detachBtn;
+	QPushButton* m_pinBtn;
 	QBrush m_activeColor;
 	QColor m_textShadowColor;
 	QColor m_borderColor;
@@ -112,8 +132,19 @@ private:
 	bool m_hasFocus;
 	bool m_isDetachable;
 
+	// detached (floating Qt window) state
+	Qt::WindowFlags m_attachedFlags;
+	QMargins m_attachedMargins;	//!< contents margins captured while attached
+	bool m_alwaysDetached = true;
+	bool m_closable = true;
+	bool m_dragging = false;
+	QPoint m_dragOffset;
+	QSizeGrip* m_sizeGrip = nullptr;
+	QPointer<QMdiArea> m_mdiArea;	//!< home workspace while floating
+
 	static void elideText( QLabel *label, QString text );
 	void adjustTitleBar();
+	void setPinned(bool on);
 
 private slots:
 	void focusChanged( QMdiSubWindow * subWindow );

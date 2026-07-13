@@ -283,12 +283,14 @@ SongEditor::~SongEditor()
 
 void SongEditor::saveSettings( QDomDocument& doc, QDomElement& element )
 {
-	MainWindow::saveWidgetState( parentWidget(), element );
+	// the Song Editor window is a fixed, always-maximized workspace panel -
+	// its geometry is neither saved to nor restored from the project
 }
 
 void SongEditor::loadSettings( const QDomElement& element )
 {
-	MainWindow::restoreWidgetState(parentWidget(), element);
+	// see saveSettings() - any geometry stored in (older) project files is
+	// deliberately ignored; MainWindow keeps the window maximized
 }
 
 
@@ -1145,6 +1147,9 @@ void SongEditorWindow::adjustUiAfterProjectLoad()
 	getGUI()->mainWindow()->workspace()->setActiveSubWindow(
 			qobject_cast<QMdiSubWindow *>( parentWidget() ) );
 	connect( qobject_cast<SubWindow *>( parentWidget() ), SIGNAL(focusLost()), this, SLOT(lostFocus()));
+	// the Song Editor permanently fills the workspace, no matter what the
+	// loaded project says about its geometry
+	parentWidget()->showMaximized();
 	m_editor->scrolled(0);
 }
 

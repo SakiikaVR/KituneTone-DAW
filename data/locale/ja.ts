@@ -13466,7 +13466,7 @@ Warning: This operation can not be undone.</source>
 </context>
 <context>
     <name>lmms::gui::SetupDialog</name>
-    <message>
+<message>
         <location filename="../../src/gui/modals/SetupDialog.cpp" line="162"/>
         <source>Settings</source>
         <translation>設定</translation>
@@ -13475,7 +13475,7 @@ Warning: This operation can not be undone.</source>
         <location filename="../../src/gui/modals/SetupDialog.cpp" line="197"/>
         <location filename="../../src/gui/modals/SetupDialog.cpp" line="872"/>
         <source>General</source>
-        <translation type="unfinished"/>
+        <translation>全般</translation>
     </message>
     <message>
         <location filename="../../src/gui/modals/SetupDialog.cpp" line="232"/>
@@ -13490,42 +13490,42 @@ Warning: This operation can not be undone.</source>
     <message>
         <location filename="../../src/gui/modals/SetupDialog.cpp" line="237"/>
         <source>Enable master oscilloscope by default</source>
-        <translation type="unfinished"/>
+        <translation>マスターオシロスコープを既定で有効にする</translation>
     </message>
     <message>
         <location filename="../../src/gui/modals/SetupDialog.cpp" line="239"/>
         <source>Enable all note labels in piano roll</source>
-        <translation type="unfinished"/>
+        <translation>ピアノロールで全ノートのラベルを表示</translation>
     </message>
     <message>
         <location filename="../../src/gui/modals/SetupDialog.cpp" line="241"/>
         <source>Show fader ticks</source>
-        <translation type="unfinished"/>
+        <translation>フェーダーの目盛りを表示</translation>
     </message>
     <message>
         <location filename="../../src/gui/modals/SetupDialog.cpp" line="243"/>
         <source>Enable compact track buttons</source>
-        <translation type="unfinished"/>
+        <translation>コンパクトなトラックボタンを使用</translation>
     </message>
     <message>
         <location filename="../../src/gui/modals/SetupDialog.cpp" line="245"/>
         <source>Enable one instrument-track-window mode</source>
-        <translation type="unfinished"/>
+        <translation>楽器トラックウィンドウを1つに制限</translation>
     </message>
     <message>
         <location filename="../../src/gui/modals/SetupDialog.cpp" line="247"/>
         <source>Show sidebar on the right-hand side</source>
-        <translation type="unfinished"/>
+        <translation>サイドバーを右側に表示</translation>
     </message>
     <message>
         <location filename="../../src/gui/modals/SetupDialog.cpp" line="249"/>
         <source>Let sample previews continue when mouse is released</source>
-        <translation type="unfinished"/>
+        <translation>マウスを離してもサンプルのプレビューを継続</translation>
     </message>
     <message>
         <location filename="../../src/gui/modals/SetupDialog.cpp" line="251"/>
         <source>Mute automation tracks during solo</source>
-        <translation type="unfinished"/>
+        <translation>ソロ中はオートメーショントラックをミュート</translation>
     </message>
     <message>
         <location filename="../../src/gui/modals/SetupDialog.cpp" line="253"/>
@@ -13545,17 +13545,17 @@ Warning: This operation can not be undone.</source>
     <message>
         <location filename="../../src/gui/modals/SetupDialog.cpp" line="261"/>
         <source>Grab closest</source>
-        <translation type="unfinished"/>
+        <translation>最も近い値をつかむ</translation>
     </message>
     <message>
         <location filename="../../src/gui/modals/SetupDialog.cpp" line="262"/>
         <source>Handles</source>
-        <translation type="unfinished"/>
+        <translation>ハンドル</translation>
     </message>
     <message>
         <location filename="../../src/gui/modals/SetupDialog.cpp" line="268"/>
         <source>Loop edit mode</source>
-        <translation type="unfinished"/>
+        <translation>ループ編集モード</translation>
     </message>
     <message>
         <location filename="../../src/gui/modals/SetupDialog.cpp" line="276"/>
@@ -13601,22 +13601,22 @@ Warning: This operation can not be undone.</source>
     <message>
         <location filename="../../src/gui/modals/SetupDialog.cpp" line="400"/>
         <source>Allow autosave while playing</source>
-        <translation type="unfinished"/>
+        <translation>再生中も自動保存を許可</translation>
     </message>
     <message>
         <location filename="../../src/gui/modals/SetupDialog.cpp" line="408"/>
         <source>User interface (UI) effects vs. performance</source>
-        <translation type="unfinished"/>
+        <translation>UI効果とパフォーマンス</translation>
     </message>
     <message>
         <location filename="../../src/gui/modals/SetupDialog.cpp" line="411"/>
         <source>Smooth scroll in song editor</source>
-        <translation type="unfinished"/>
+        <translation>ソングエディタでスムーズスクロール</translation>
     </message>
     <message>
         <location filename="../../src/gui/modals/SetupDialog.cpp" line="413"/>
         <source>Display playback cursor in AudioFileProcessor</source>
-        <translation type="unfinished"/>
+        <translation>AudioFileProcessorに再生カーソルを表示</translation>
     </message>
     <message>
         <location filename="../../src/gui/modals/SetupDialog.cpp" line="418"/>
@@ -13626,12 +13626,12 @@ Warning: This operation can not be undone.</source>
     <message>
         <location filename="../../src/gui/modals/SetupDialog.cpp" line="422"/>
         <source>VST plugins embedding:</source>
-        <translation type="unfinished"/>
+        <translation>VSTプラグインの埋め込み:</translation>
     </message>
     <message>
         <location filename="../../src/gui/modals/SetupDialog.cpp" line="428"/>
         <source>No embedding</source>
-        <translation type="unfinished"/>
+        <translation>埋め込まない</translation>
     </message>
     <message>
         <location filename="../../src/gui/modals/SetupDialog.cpp" line="431"/>
@@ -13646,17 +13646,17 @@ Warning: This operation can not be undone.</source>
     <message>
         <location filename="../../src/gui/modals/SetupDialog.cpp" line="439"/>
         <source>Embed using XEmbed protocol</source>
-        <translation type="unfinished"/>
+        <translation>XEmbedプロトコルで埋め込む</translation>
     </message>
     <message>
         <location filename="../../src/gui/modals/SetupDialog.cpp" line="446"/>
         <source>Keep plugin windows on top when not embedded</source>
-        <translation type="unfinished"/>
+        <translation>埋め込みでないプラグインウィンドウを常に手前に表示</translation>
     </message>
     <message>
         <location filename="../../src/gui/modals/SetupDialog.cpp" line="449"/>
         <source>Keep effects running even without input</source>
-        <translation type="unfinished"/>
+        <translation>入力が無くてもエフェクトを動作させ続ける</translation>
     </message>
     <message>
         <location filename="../../src/gui/modals/SetupDialog.cpp" line="467"/>
@@ -13677,7 +13677,7 @@ Warning: This operation can not be undone.</source>
     <message>
         <location filename="../../src/gui/modals/SetupDialog.cpp" line="587"/>
         <source>Sample rate: %1</source>
-        <translation type="unfinished"/>
+        <translation>サンプルレート: %1</translation>
     </message>
     <message>
         <location filename="../../src/gui/modals/SetupDialog.cpp" line="601"/>
@@ -13703,22 +13703,22 @@ Warning: This operation can not be undone.</source>
     <message>
         <location filename="../../src/gui/modals/SetupDialog.cpp" line="733"/>
         <source>Automatically assign MIDI controller to selected track</source>
-        <translation type="unfinished"/>
+        <translation>選択中のトラックにMIDIコントローラーを自動割り当て</translation>
     </message>
     <message>
         <location filename="../../src/gui/modals/SetupDialog.cpp" line="754"/>
         <source>Behavior when recording</source>
-        <translation type="unfinished"/>
+        <translation>録音時の動作</translation>
     </message>
     <message>
         <location filename="../../src/gui/modals/SetupDialog.cpp" line="757"/>
         <source>Auto-quantize notes in Piano Roll</source>
-        <translation type="unfinished"/>
+        <translation>ピアノロールでノートを自動クオンタイズ</translation>
     </message>
     <message>
         <location filename="../../src/gui/modals/SetupDialog.cpp" line="761"/>
         <source>If enabled, notes will be automatically quantized when recording them from a MIDI controller. If disabled, they are always recorded at the highest possible resolution.</source>
-        <translation type="unfinished"/>
+        <translation>有効にすると、MIDIコントローラーからの録音時にノートを自動的にクオンタイズします。無効の場合は常に最高の分解能で録音されます。</translation>
     </message>
     <message>
         <location filename="../../src/gui/modals/SetupDialog.cpp" line="780"/>
@@ -13749,7 +13749,7 @@ Warning: This operation can not be undone.</source>
     <message>
         <location filename="../../src/gui/modals/SetupDialog.cpp" line="834"/>
         <source>Default SF2</source>
-        <translation type="unfinished"/>
+        <translation>既定のSF2</translation>
     </message>
     <message>
         <location filename="../../src/gui/modals/SetupDialog.cpp" line="839"/>
@@ -13759,7 +13759,7 @@ Warning: This operation can not be undone.</source>
     <message>
         <location filename="../../src/gui/modals/SetupDialog.cpp" line="843"/>
         <source>Theme directory</source>
-        <translation type="unfinished"/>
+        <translation>テーマフォルダー</translation>
     </message>
     <message>
         <location filename="../../src/gui/modals/SetupDialog.cpp" line="847"/>
@@ -13769,7 +13769,7 @@ Warning: This operation can not be undone.</source>
     <message>
         <location filename="../../src/gui/modals/SetupDialog.cpp" line="904"/>
         <source>Some changes require restarting.</source>
-        <translation type="unfinished"/>
+        <translation>一部の変更は再起動後に反映されます。</translation>
     </message>
     <message>
         <location filename="../../src/gui/modals/SetupDialog.cpp" line="908"/>
@@ -13799,17 +13799,17 @@ Warning: This operation can not be undone.</source>
     <message>
         <location filename="../../src/gui/modals/SetupDialog.cpp" line="1151"/>
         <source>Autosave interval: %1</source>
-        <translation type="unfinished"/>
+        <translation>自動保存の間隔: %1</translation>
     </message>
     <message>
         <location filename="../../src/gui/modals/SetupDialog.cpp" line="1229"/>
         <source>The currently selected value is not a power of 2 (32, 64, 128, 256). Some plugins may not be available.</source>
-        <translation type="unfinished"/>
+        <translation>現在選択中の値は2のべき乗 (32, 64, 128, 256) ではありません。一部のプラグインが利用できない場合があります。</translation>
     </message>
     <message>
         <location filename="../../src/gui/modals/SetupDialog.cpp" line="1234"/>
         <source>The currently selected value is less than or equal to 32. Some plugins may not be available.</source>
-        <translation type="unfinished"/>
+        <translation>現在選択中の値は32以下です。一部のプラグインが利用できない場合があります。</translation>
     </message>
     <message>
         <location filename="../../src/gui/modals/SetupDialog.cpp" line="1265"/>
@@ -13821,17 +13821,17 @@ Latency: %2 ms</source>
     <message>
         <location filename="../../src/gui/modals/SetupDialog.cpp" line="1301"/>
         <source>Choose the LMMS working directory</source>
-        <translation type="unfinished"/>
+        <translation>LMMSの作業フォルダーを選択</translation>
     </message>
     <message>
         <location filename="../../src/gui/modals/SetupDialog.cpp" line="1318"/>
         <source>Choose your VST plugins directory</source>
-        <translation type="unfinished"/>
+        <translation>VSTプラグインフォルダーを選択</translation>
     </message>
     <message>
         <location filename="../../src/gui/modals/SetupDialog.cpp" line="1335"/>
         <source>Choose your LADSPA plugins directory</source>
-        <translation type="unfinished"/>
+        <translation>LADSPAプラグインフォルダーを選択</translation>
     </message>
     <message>
         <location filename="../../src/gui/modals/SetupDialog.cpp" line="1360"/>
@@ -13841,7 +13841,7 @@ Latency: %2 ms</source>
     <message>
         <location filename="../../src/gui/modals/SetupDialog.cpp" line="1378"/>
         <source>Choose your default SF2</source>
-        <translation type="unfinished"/>
+        <translation>既定のSF2を選択</translation>
     </message>
     <message>
         <location filename="../../src/gui/modals/SetupDialog.cpp" line="1399"/>
@@ -13851,14 +13851,54 @@ Latency: %2 ms</source>
     <message>
         <location filename="../../src/gui/modals/SetupDialog.cpp" line="1416"/>
         <source>Choose your theme directory</source>
-        <translation type="unfinished"/>
+        <translation>テーマフォルダーを選択</translation>
     </message>
     <message>
         <location filename="../../src/gui/modals/SetupDialog.cpp" line="1450"/>
         <source>Choose your background picture</source>
-        <translation type="unfinished"/>
+        <translation>背景画像を選択</translation>
     </message>
-</context>
+    <message>
+        <source>Always detached</source>
+        <translation>常に分離</translation>
+    </message>
+    <message>
+        <source>Attach and hide when closed</source>
+        <translation>閉じると格納して非表示</translation>
+    </message>
+    <message>
+        <source>Attach and show when closed</source>
+        <translation>閉じると格納して表示</translation>
+    </message>
+    <message>
+        <source>Continuous (Scroll constantly to keep the playhead in the center)</source>
+        <translation>連続 (再生ヘッドを中央に保つよう常にスクロール)</translation>
+    </message>
+    <message>
+        <source>Default Autoscroll Mode</source>
+        <translation>既定の自動スクロールモード</translation>
+    </message>
+    <message>
+        <source>Detached window behavior</source>
+        <translation>分離ウィンドウの動作</translation>
+    </message>
+    <message>
+        <source>Enable mix sanitization</source>
+        <translation>ミックスのサニタイズを有効化</translation>
+    </message>
+    <message>
+        <source>Other</source>
+        <translation>その他</translation>
+    </message>
+    <message>
+        <source>Provides protection from any plugins or tracks that generate corrupted audio, but may negatively impact performance.</source>
+        <translation>異常な音声を生成するプラグインやトラックから保護しますが、パフォーマンスに影響する場合があります。</translation>
+    </message>
+    <message>
+        <source>Stepped (Scroll once the playhead goes out of view)</source>
+        <translation>段階的 (再生ヘッドが画面外に出たらスクロール)</translation>
+    </message>
+    </context>
 <context>
     <name>lmms::gui::Sf2InstrumentView</name>
     <message>
@@ -14654,6 +14694,14 @@ Latency: %2 ms</source>
         <location filename="../../src/gui/SubWindow.cpp" line="67"/>
         <source>Restore</source>
         <translation>復元</translation>
+    </message>
+    <message>
+        <source>Detach</source>
+        <translation>分離</translation>
+    </message>
+    <message>
+        <source>Always on top</source>
+        <translation>常に最前面に表示</translation>
     </message>
 </context>
 <context>
@@ -16253,6 +16301,29 @@ Latency: %2 ms</source>
     <message>
         <source>plugin for using native VST3 effects inside LMMS.</source>
         <translation>ネイティブVST3エフェクトをLMMSで使用するためのプラグインです。</translation>
+    </message>
+</context>
+<context>
+    <name>lmms::gui::AudioDeviceSetupWidget</name>
+    <message>
+        <source>Backend</source>
+        <translation>バックエンド</translation>
+    </message>
+    <message>
+        <source>Input device</source>
+        <translation>入力デバイス</translation>
+    </message>
+    <message>
+        <source>Output device</source>
+        <translation>出力デバイス</translation>
+    </message>
+    <message>
+        <source>Channels</source>
+        <translation>チャンネル数</translation>
+    </message>
+    <message>
+        <source>Exclusive mode (lower latency)</source>
+        <translation>排他モード (低遅延)</translation>
     </message>
 </context>
 </TS>
