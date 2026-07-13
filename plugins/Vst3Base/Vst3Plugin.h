@@ -28,6 +28,7 @@
 #include <QMutex>
 
 #include <atomic>
+#include <functional>
 #include <map>
 #include <memory>
 #include <vector>
@@ -104,6 +105,14 @@ public:
 	//! Queue a MIDI event (note on/off, CC, pitch bend, ...) for the next block.
 	void queueMidiEvent(const MidiEvent& event, f_cnt_t offset);
 
+	//! Called on the audio thread for every MIDI event the plug-in outputs
+	//! (notes, CCs, pitch bend, aftertouch). Set once right after loading,
+	//! before any processing happens.
+	void setMidiOutputHandler(std::function<void(const MidiEvent&)> handler)
+	{
+		m_midiOutputHandler = std::move(handler);
+	}
+
 	void saveState(QDomDocument& doc, QDomElement& element);
 	void loadState(const QDomElement& element);
 
@@ -169,6 +178,7 @@ private:
 	Steinberg::Vst::EventList m_outputEvents;
 	Steinberg::Vst::ParameterChanges m_inputParamChanges;
 	Steinberg::Vst::ParameterChanges m_outputParamChanges;
+	std::function<void(const MidiEvent&)> m_midiOutputHandler;
 
 	bool m_processingActive = false;
 	double m_sampleRate = 0.;

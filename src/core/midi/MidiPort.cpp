@@ -24,6 +24,8 @@
  */
 
 #include <QDomElement>
+#include <QMutex>
+#include <QVector>
 
 #include "MidiPort.h"
 #include "MidiClient.h"
@@ -39,6 +41,10 @@ namespace lmms
 
 
 static MidiDummy s_dummyClient;
+
+// registry of all ports for the internal (track-to-track) MIDI bus
+static QVector<MidiPort*> s_ports;
+static QMutex s_portsMutex;
 
 
 
@@ -66,6 +72,11 @@ MidiPort::MidiPort( const QString& name,
 	m_writableModel( false, this, tr( "Send MIDI-events" ) )
 {
 	m_midiClient->addPort( this );
+
+	{
+		QMutexLocker lock(&s_portsMutex);
+		s_ports.append(this);
+	}
 
 	m_readableModel.setValue( m_mode == Mode::Input || m_mode == Mode::Duplex );
 	m_writableModel.setValue( m_mode == Mode::Output || m_mode == Mode::Duplex );
@@ -98,6 +109,11 @@ MidiPort::MidiPort( const QString& name,
 
 MidiPort::~MidiPort()
 {
+	{
+		QMutexLocker lock(&s_portsMutex);
+		s_ports.removeAll(this);
+	}
+
 	// unsubscribe ports
 	m_readableModel.setValue( false );
 	m_writableModel.setValue( false );
@@ -177,6 +193,24 @@ void MidiPort::processOutEvent( const MidiEvent& event, const TimePos& time )
 		}
 
 		m_midiClient->processOutEvent( outEvent, time, this );
+
+		// Internal MIDI bus: tracks with enabled MIDI input receive what
+		// other tracks output, like a virtual MIDI cable - no loopback
+		// driver needed. Events are delivered through the receiving port's
+		// event loop: processInEvent() (note-off model changes etc.) is not
+		// safe to call synchronously from another track's render thread.
+		QVector<MidiPort*> ports;
+		{
+			QMutexLocker lock(&s_portsMutex);
+			ports = s_ports;
+		}
+		for (MidiPort* port : ports)
+		{
+			if (port == this) { continue; }
+			QMetaObject::invokeMethod(port,
+					[port, outEvent, time]() { port->processInEvent(outEvent, time); },
+					Qt::QueuedConnection);
+		}
 	}
 }
 

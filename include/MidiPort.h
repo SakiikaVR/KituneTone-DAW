@@ -52,7 +52,7 @@ class InstrumentMidiIOView;
 
 
 // class for abstraction of MIDI-port
-class MidiPort : public Model, public SerializingObject
+class LMMS_EXPORT MidiPort : public Model, public SerializingObject
 {
 	Q_OBJECT
 	mapPropertyFromModel(int,inputChannel,setInputChannel,m_inputChannelModel);
