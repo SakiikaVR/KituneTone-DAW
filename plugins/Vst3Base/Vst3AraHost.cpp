@@ -39,7 +39,9 @@
 #include <vector>
 
 #include "ConfigManager.h"
+#include "Engine.h"
 #include "SampleDecoder.h"
+#include "Song.h"
 
 using namespace ARA;
 
@@ -294,13 +296,40 @@ public:
 };
 
 
-//! Playback transport requests from the plug-in - not wired to LMMS yet.
+//! Playback transport requests from the plug-in, forwarded to the LMMS
+//! transport on the GUI thread (these calls may arrive on any plug-in thread)
 class AraPlaybackController : public Host::PlaybackControllerInterface
 {
 public:
-	void requestStartPlayback() noexcept override {}
-	void requestStopPlayback() noexcept override {}
-	void requestSetPlaybackPosition(ARATimePosition) noexcept override {}
+	void requestStartPlayback() noexcept override
+	{
+		araDebugLog("plug-in requested playback start");
+		auto song = Engine::getSong();
+		if (song == nullptr) { return; }
+		QMetaObject::invokeMethod(song, [song]() {
+			if (!song->isPlaying()) { song->playSong(); }
+		}, Qt::QueuedConnection);
+	}
+
+	void requestStopPlayback() noexcept override
+	{
+		araDebugLog("plug-in requested playback stop");
+		auto song = Engine::getSong();
+		if (song == nullptr) { return; }
+		QMetaObject::invokeMethod(song, [song]() { song->stop(); }, Qt::QueuedConnection);
+	}
+
+	void requestSetPlaybackPosition(ARATimePosition seconds) noexcept override
+	{
+		araDebugLog(QString("plug-in requested playback position %1s").arg(seconds));
+		auto song = Engine::getSong();
+		if (song == nullptr) { return; }
+		QMetaObject::invokeMethod(song, [song, seconds]() {
+			const double ticksPerSecond = song->getTempo() * 48.0 / 60.0;
+			song->setPlayPos(static_cast<tick_t>(seconds * ticksPerSecond), Song::PlayMode::Song);
+		}, Qt::QueuedConnection);
+	}
+
 	void requestSetCycleRange(ARATimePosition, ARATimeDuration) noexcept override {}
 	void requestEnableCycle(bool) noexcept override {}
 };
@@ -350,6 +379,7 @@ bool Vst3AraDocument::setup(const ARAFactory* araFactory,
 {
 	if (araFactory == nullptr || entryPoint == nullptr || sources.empty()) { return false; }
 
+	m_araFactory = araFactory;
 	m_impl->content.tempo = tempo;
 	m_impl->content.timeSigNum = timeSigNum;
 	m_impl->content.timeSigDen = timeSigDen;
@@ -386,88 +416,13 @@ bool Vst3AraDocument::setup(const ARAFactory* araFactory,
 			.arg(sources.size()).arg(tempo).arg(timeSigNum).arg(timeSigDen)
 			.arg(araFactory->analyzeableContentTypesCount));
 
-	int index = 0;
-	for (const auto& src : sources)
-	{
-		auto decoded = SampleDecoder::decode(src.file);
-		if (!decoded || decoded->data.empty())
-		{
-			araDebugLog(QString("  decode FAILED: %1").arg(src.file));
-			++index;
-			continue;
-		}
-		araDebugLog(QString("  decoded %1: %2 frames @ %3 Hz, startSong=%4s dur=%5s off=%6s")
-				.arg(src.file).arg(decoded->data.size()).arg(decoded->sampleRate)
-				.arg(src.startInSongSeconds).arg(src.durationSeconds).arg(src.offsetInSourceSeconds));
-
-		auto data = std::make_unique<AraAudioData>();
-		data->sampleRate = decoded->sampleRate;
-		data->frames = static_cast<ARASampleCount>(decoded->data.size());
-		data->persistentID = "lmms-src-" + std::to_string(index);
-		data->left.resize(decoded->data.size());
-		data->right.resize(decoded->data.size());
-		for (size_t i = 0; i < decoded->data.size(); ++i)
-		{
-			data->left[i] = decoded->data[i].left();
-			data->right[i] = decoded->data[i].right();
-		}
-		AraAudioData* dataPtr = data.get();
-		m_impl->audioData.push_back(std::move(data));
-
-		SourceGraph g;
-
-		auto sourceProps = makeProps<ARAAudioSourceProperties>();
-		sourceProps.name = "LMMS Audio";
-		sourceProps.persistentID = dataPtr->persistentID.c_str();
-		sourceProps.sampleCount = dataPtr->frames;
-		sourceProps.sampleRate = static_cast<ARASampleRate>(dataPtr->sampleRate);
-		sourceProps.channelCount = 2;
-		sourceProps.merits64BitSamples = kARAFalse;
-		// the audio source's host ref points to its decoded data
-		g.audioSource = dc->createAudioSource(
-				reinterpret_cast<ARAAudioSourceHostRef>(dataPtr), &sourceProps);
-
-		const std::string modID = "lmms-mod-" + std::to_string(index);
-		auto modProps = makeProps<ARAAudioModificationProperties>();
-		modProps.name = "LMMS Modification";
-		modProps.persistentID = modID.c_str();
-		g.audioModification = dc->createAudioModification(g.audioSource, nullptr, &modProps);
-
-		const double srcDuration = static_cast<double>(dataPtr->frames) / dataPtr->sampleRate;
-		const double dur = src.durationSeconds > 0.0 ? src.durationSeconds : srcDuration;
-
-		auto regionProps = makeProps<ARAPlaybackRegionProperties>();
-		regionProps.transformationFlags = kARAPlaybackTransformationNoChanges;
-		regionProps.startInModificationTime = src.offsetInSourceSeconds;
-		regionProps.durationInModificationTime = dur;
-		regionProps.startInPlaybackTime = src.startInSongSeconds;
-		regionProps.durationInPlaybackTime = dur;
-		regionProps.musicalContextRef = m_musicalContext;
-		regionProps.regionSequenceRef = m_regionSequence;
-		regionProps.name = "LMMS Region";
-		g.playbackRegion = dc->createPlaybackRegion(g.audioModification, nullptr, &regionProps);
-
-		m_sources.push_back(g);
-		m_regions.push_back(g.playbackRegion);
-		++index;
-	}
+	buildSources(sources);
 
 	dc->endEditing();
 
 	if (m_sources.empty()) { return false; }
 
-	// enable sample access and request analysis for every source
-	for (const auto& g : m_sources)
-	{
-		dc->enableAudioSourceSamplesAccess(g.audioSource, true);
-		if (araFactory->analyzeableContentTypesCount > 0
-				&& araFactory->analyzeableContentTypes != nullptr)
-		{
-			dc->requestAudioSourceContentAnalysis(g.audioSource,
-					araFactory->analyzeableContentTypesCount,
-					araFactory->analyzeableContentTypes);
-		}
-	}
+	enableSourceSampleAccess();
 
 	// --- bind the VST3 instance with all three ARA roles ---
 	const ARAPlugInInstanceRoleFlags roles =
@@ -500,6 +455,173 @@ bool Vst3AraDocument::setup(const ARAFactory* araFactory,
 	selection.playbackRegionRefs = m_regions.data();
 	m_editorView->notifySelection(&selection);
 
+	return true;
+}
+
+
+
+
+bool Vst3AraDocument::buildSources(const std::vector<Vst3Plugin::AraSource>& sources)
+{
+	auto* dc = m_documentController;
+	if (dc == nullptr) { return false; }
+
+	int index = 0;
+	for (const auto& src : sources)
+	{
+		auto decoded = SampleDecoder::decode(src.file);
+		if (!decoded || decoded->data.empty())
+		{
+			araDebugLog(QString("  decode FAILED: %1").arg(src.file));
+			++index;
+			continue;
+		}
+		araDebugLog(QString("  decoded %1: %2 frames @ %3 Hz, startSong=%4s dur=%5s off=%6s")
+				.arg(src.file).arg(decoded->data.size()).arg(decoded->sampleRate)
+				.arg(src.startInSongSeconds).arg(src.durationSeconds).arg(src.offsetInSourceSeconds));
+
+		auto data = std::make_unique<AraAudioData>();
+		data->sampleRate = decoded->sampleRate;
+		data->frames = static_cast<ARASampleCount>(decoded->data.size());
+		// unique persistent IDs across the whole document lifetime so that
+		// re-created sources never collide with ones the plug-in is retiring
+		data->persistentID = "lmms-src-" + std::to_string(m_sourceIdCounter);
+		data->left.resize(decoded->data.size());
+		data->right.resize(decoded->data.size());
+		for (size_t i = 0; i < decoded->data.size(); ++i)
+		{
+			data->left[i] = decoded->data[i].left();
+			data->right[i] = decoded->data[i].right();
+		}
+		AraAudioData* dataPtr = data.get();
+		m_impl->audioData.push_back(std::move(data));
+
+		SourceGraph g;
+
+		auto sourceProps = makeProps<ARAAudioSourceProperties>();
+		sourceProps.name = "LMMS Audio";
+		sourceProps.persistentID = dataPtr->persistentID.c_str();
+		sourceProps.sampleCount = dataPtr->frames;
+		sourceProps.sampleRate = static_cast<ARASampleRate>(dataPtr->sampleRate);
+		sourceProps.channelCount = 2;
+		sourceProps.merits64BitSamples = kARAFalse;
+		// the audio source's host ref points to its decoded data
+		g.audioSource = dc->createAudioSource(
+				reinterpret_cast<ARAAudioSourceHostRef>(dataPtr), &sourceProps);
+
+		const std::string modID = "lmms-mod-" + std::to_string(m_sourceIdCounter);
+		auto modProps = makeProps<ARAAudioModificationProperties>();
+		modProps.name = "LMMS Modification";
+		modProps.persistentID = modID.c_str();
+		g.audioModification = dc->createAudioModification(g.audioSource, nullptr, &modProps);
+
+		const double srcDuration = static_cast<double>(dataPtr->frames) / dataPtr->sampleRate;
+		const double dur = src.durationSeconds > 0.0 ? src.durationSeconds : srcDuration;
+
+		auto regionProps = makeProps<ARAPlaybackRegionProperties>();
+		regionProps.transformationFlags = kARAPlaybackTransformationNoChanges;
+		regionProps.startInModificationTime = src.offsetInSourceSeconds;
+		regionProps.durationInModificationTime = dur;
+		regionProps.startInPlaybackTime = src.startInSongSeconds;
+		regionProps.durationInPlaybackTime = dur;
+		regionProps.musicalContextRef = m_musicalContext;
+		regionProps.regionSequenceRef = m_regionSequence;
+		regionProps.name = "LMMS Region";
+		g.playbackRegion = dc->createPlaybackRegion(g.audioModification, nullptr, &regionProps);
+
+		m_sources.push_back(g);
+		m_regions.push_back(g.playbackRegion);
+		++index;
+		++m_sourceIdCounter;
+	}
+	return !m_sources.empty();
+}
+
+
+
+
+void Vst3AraDocument::destroySources()
+{
+	auto* dc = m_documentController;
+	if (dc == nullptr) { return; }
+	for (auto it = m_sources.rbegin(); it != m_sources.rend(); ++it)
+	{
+		if (it->playbackRegion) { dc->destroyPlaybackRegion(it->playbackRegion); }
+		if (it->audioModification) { dc->destroyAudioModification(it->audioModification); }
+		if (it->audioSource)
+		{
+			dc->enableAudioSourceSamplesAccess(it->audioSource, false);
+			dc->destroyAudioSource(it->audioSource);
+		}
+	}
+	m_sources.clear();
+	m_regions.clear();
+	m_impl->audioData.clear();
+}
+
+
+
+
+void Vst3AraDocument::enableSourceSampleAccess()
+{
+	auto* dc = m_documentController;
+	if (dc == nullptr) { return; }
+	for (const auto& g : m_sources)
+	{
+		dc->enableAudioSourceSamplesAccess(g.audioSource, true);
+		if (m_araFactory != nullptr && m_araFactory->analyzeableContentTypesCount > 0
+				&& m_araFactory->analyzeableContentTypes != nullptr)
+		{
+			dc->requestAudioSourceContentAnalysis(g.audioSource,
+					m_araFactory->analyzeableContentTypesCount,
+					m_araFactory->analyzeableContentTypes);
+		}
+	}
+}
+
+
+
+
+bool Vst3AraDocument::updateRegions(const std::vector<Vst3Plugin::AraSource>& sources,
+		double tempo, int timeSigNum, int timeSigDen)
+{
+	auto* dc = m_documentController;
+	if (dc == nullptr || m_playbackRenderer == nullptr) { return false; }
+
+	araDebugLog(QString("updateRegions: %1 source(s)").arg(sources.size()));
+
+	m_impl->content.tempo = tempo;
+	m_impl->content.timeSigNum = timeSigNum;
+	m_impl->content.timeSigDen = timeSigDen;
+
+	// detach the old regions from the renderers before they are destroyed
+	for (auto region : m_regions)
+	{
+		m_editorRenderer->removePlaybackRegion(region);
+		m_playbackRenderer->removePlaybackRegion(region);
+	}
+
+	// swap the document content for the new clip set, keeping the binding,
+	// the musical context and the region sequence intact
+	dc->beginEditing();
+	destroySources();
+	buildSources(sources);
+	dc->endEditing();
+
+	enableSourceSampleAccess();
+
+	for (auto region : m_regions)
+	{
+		m_playbackRenderer->addPlaybackRegion(region);
+		m_editorRenderer->addPlaybackRegion(region);
+	}
+
+	auto selection = makeProps<ARAViewSelection>();
+	selection.playbackRegionRefsCount = m_regions.size();
+	selection.playbackRegionRefs = m_regions.data();
+	m_editorView->notifySelection(&selection);
+
+	dc->notifyModelUpdates();
 	return true;
 }
 

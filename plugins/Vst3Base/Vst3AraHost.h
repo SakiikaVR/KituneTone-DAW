@@ -63,6 +63,13 @@ public:
 			const std::vector<Vst3Plugin::AraSource>& sources,
 			double tempo, int timeSigNum, int timeSigDen);
 
+	//! Replace the document's audio sources/regions in place, keeping the
+	//! existing plug-in binding. This is how clip edits (move, resize, add,
+	//! remove) are applied - a VST3 instance can be bound only once, so the
+	//! document must never be torn down and rebound while in use.
+	bool updateRegions(const std::vector<Vst3Plugin::AraSource>& sources,
+			double tempo, int timeSigNum, int timeSigDen);
+
 	bool isValid() const { return m_playbackRenderer != nullptr; }
 
 	//! Must be called regularly on the GUI thread so the plug-in can process
@@ -71,9 +78,19 @@ public:
 
 private:
 	void teardown();
+	//! create audio sources / modifications / regions for the given clips;
+	//! must run inside a beginEditing()/endEditing() pair
+	bool buildSources(const std::vector<Vst3Plugin::AraSource>& sources);
+	//! destroy the current audio sources / modifications / regions; must run
+	//! inside a beginEditing()/endEditing() pair
+	void destroySources();
+	//! enable sample access and request analysis for the current sources
+	void enableSourceSampleAccess();
 
 	struct Impl;
 	std::unique_ptr<Impl> m_impl;
+
+	const ARA::ARAFactory* m_araFactory = nullptr;
 
 	ARA::Host::DocumentController* m_documentController = nullptr;
 	std::unique_ptr<ARA::Host::PlaybackRenderer> m_playbackRenderer;
@@ -91,6 +108,7 @@ private:
 	};
 	std::vector<SourceGraph> m_sources;
 	std::vector<ARA::ARAPlaybackRegionRef> m_regions;
+	int m_sourceIdCounter = 0;	//!< monotonic, for unique persistent IDs
 };
 
 

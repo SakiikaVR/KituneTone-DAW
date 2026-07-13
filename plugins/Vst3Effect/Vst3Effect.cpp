@@ -34,6 +34,7 @@
 #include "FileDialog.h"
 #include <QMutexLocker>
 #include <QPushButton>
+#include <QTimer>
 #include <QVBoxLayout>
 
 #include <array>
@@ -118,7 +119,94 @@ bool Vst3Effect::openPlugin(const QString& file, const QString& uid)
 	m_plugin = std::move(plugin);
 	m_key.attributes["file"] = file;
 	m_key.attributes["uid"] = m_plugin->uidString();
+
+	if (m_plugin->hasAra())
+	{
+		// start following the track's clips so audio dropped onto the track
+		// after the plug-in was added is picked up. The ARA document itself
+		// is only bound when the editor opens (some plug-ins subscribe their
+		// editor playhead to the transport only at that point), so defer the
+		// initial watch until the track is attached.
+		QTimer::singleShot(500, this, [this] { watchOwnerTrack(); });
+	}
+
 	return true;
+}
+
+
+
+
+SampleTrack* Vst3Effect::findOwnerTrack() const
+{
+	// EffectChain has no parent pointer, so find the sample track whose
+	// effect chain contains this effect
+	auto* song = Engine::getSong();
+	if (song == nullptr) { return nullptr; }
+	for (Track* t : song->tracks())
+	{
+		if (t->type() != Track::Type::Sample) { continue; }
+		auto st = dynamic_cast<SampleTrack*>(t);
+		if (st != nullptr && st->audioBusHandle()->effects() == effectChain())
+		{
+			return st;
+		}
+	}
+	return nullptr;
+}
+
+
+
+
+void Vst3Effect::watchOwnerTrack()
+{
+	if (m_watchedTrack != nullptr) { return; }
+
+	SampleTrack* owner = findOwnerTrack();
+	if (owner == nullptr) { return; }
+	m_watchedTrack = owner;
+
+	connect(owner, &Track::clipAdded, this, [this](Clip* clip) {
+		watchClip(clip);
+		scheduleAraSync();
+	});
+	for (Clip* clip : owner->getClips()) { watchClip(clip); }
+}
+
+
+
+
+void Vst3Effect::watchClip(Clip* clip)
+{
+	connect(clip, &Clip::positionChanged, this, [this] { scheduleAraSync(); });
+	connect(clip, &Clip::lengthChanged, this, [this] { scheduleAraSync(); });
+	connect(clip, &Clip::destroyedClip, this, [this] { scheduleAraSync(); });
+	if (auto sc = dynamic_cast<SampleClip*>(clip))
+	{
+		connect(sc, &SampleClip::sampleChanged, this, [this] { scheduleAraSync(); });
+	}
+}
+
+
+
+
+void Vst3Effect::scheduleAraSync()
+{
+	if (m_plugin == nullptr) { return; }
+
+	// Sync when the document is already bound (refresh after clip edits) OR
+	// when the editor is open but nothing has bound yet - this is the
+	// "insert plug-in first, drop audio afterwards" case: the editor was
+	// opened with no clips, so binding must happen now that audio exists.
+	if (!m_plugin->araActive() && !m_plugin->editorVisible()) { return; }
+
+	if (m_araSyncPending) { return; }
+	m_araSyncPending = true;
+	// debounce: clip drags fire many change signals in a row
+	QTimer::singleShot(250, this, [this] {
+		m_araSyncPending = false;
+		const int n = syncAraFromTrack();
+		araDebugLog(QString("auto ARA sync: %1 region(s)").arg(n));
+	});
 }
 
 
@@ -128,23 +216,14 @@ int Vst3Effect::syncAraFromTrack()
 {
 	if (m_plugin == nullptr || !m_plugin->hasAra()) { return 0; }
 
-	// EffectChain has no parent pointer, so find the sample track whose effect
-	// chain contains this effect
-	SampleTrack* owner = nullptr;
 	auto* song = Engine::getSong();
 	if (song == nullptr) { return 0; }
-	for (Track* t : song->tracks())
-	{
-		if (t->type() != Track::Type::Sample) { continue; }
-		auto st = dynamic_cast<SampleTrack*>(t);
-		if (st != nullptr && st->audioBusHandle()->effects() == effectChain())
-		{
-			owner = st;
-			break;
-		}
-	}
+	SampleTrack* owner = findOwnerTrack();
 	araDebugLog(QString("syncAraFromTrack: owner track=%1").arg(owner ? "found" : "NOT FOUND"));
 	if (owner == nullptr) { return 0; }
+
+	// follow future clip changes on this track
+	watchOwnerTrack();
 
 	const auto bpm = song->getTempo();
 
@@ -339,9 +418,10 @@ void Vst3EffectControlDialog::toggleExternalUi()
 	auto p = plugin();
 	if (p == nullptr) { return; }
 
-	// pick up audio clips that were added after the plug-in was loaded:
-	// (re-)build the ARA document from the track's current clips before showing
-	// the editor, unless ARA is already active
+	// bind the ARA document from the track's current clips before the editor
+	// is shown, so the plug-in hooks up its editor (and its playhead) to the
+	// freshly-bound document. Only bind if not already active; live clip
+	// changes afterwards are handled by the auto-sync watchers.
 	if (p->hasAra() && !p->araActive())
 	{
 		static_cast<Vst3EffectControls*>(m_effectControls)->m_effect->syncAraFromTrack();

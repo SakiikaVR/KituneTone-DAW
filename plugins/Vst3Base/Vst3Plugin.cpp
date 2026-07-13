@@ -539,6 +539,20 @@ void Vst3Plugin::process(const SampleFrame* in, SampleFrame* out, f_cnt_t frames
 		m_processContext.timeSigDenominator = 4;
 	}
 
+#ifdef LMMS_HAVE_ARA
+	if (araActive())
+	{
+		const bool playing = (m_processContext.state & Vst::ProcessContext::kPlaying) != 0;
+		if (playing != m_lastAraPlaying)
+		{
+			m_lastAraPlaying = playing;
+			araDebugLog(QString("transport -> %1 (projectTimeSamples=%2)")
+					.arg(playing ? "PLAY" : "STOP")
+					.arg(static_cast<qlonglong>(m_processContext.projectTimeSamples)));
+		}
+	}
+#endif
+
 	m_processor->process(m_processData);
 
 	// fetch output
@@ -1058,22 +1072,34 @@ bool Vst3Plugin::enableAra(const std::vector<AraSource>& sources)
 	auto entryPoint = U::cast<ARA::IPlugInEntryPoint2>(m_component);
 	if (!entryPoint) { return false; }
 
-	// rebuild any previous ARA document
-	m_araDocument.reset();
-
 	auto* song = Engine::getSong();
 	const double tempo = song ? static_cast<double>(song->getTempo()) : 120.0;
 	const int tsNum = song ? song->getTimeSigModel().getNumerator() : 4;
 	const int tsDen = song ? song->getTimeSigModel().getDenominator() : 4;
 
-	auto doc = std::make_unique<Vst3AraDocument>();
-	if (!doc->setup(static_cast<const ARA::ARAFactory*>(m_araFactory),
-			entryPoint.get(), sources, tempo, tsNum, tsDen))
+	// A VST3 instance can be bound to an ARA document controller only once.
+	// If we already have a document, apply clip edits by updating its regions
+	// in place instead of tearing it down and rebinding (which would fail).
+	if (m_araDocument && m_araDocument->isValid())
 	{
-		return false;
+		return m_araDocument->updateRegions(sources, tempo, tsNum, tsDen);
 	}
-	m_araDocument = std::move(doc);
-	return true;
+
+	// First bind: bindToDocumentControllerWithRoles only succeeds while no
+	// editor view (IPlugView) exists. If audio was dropped onto the track
+	// while the plug-in window was already open, tear the view down, bind,
+	// then bring it back (mirrors the normal "bind, then create view" order).
+	m_araDocument.reset();
+	const bool restoreEditor = (m_editorWidget != nullptr);
+	destroyEditor();
+
+	auto doc = std::make_unique<Vst3AraDocument>();
+	const bool ok = doc->setup(static_cast<const ARA::ARAFactory*>(m_araFactory),
+			entryPoint.get(), sources, tempo, tsNum, tsDen);
+	if (ok) { m_araDocument = std::move(doc); }
+
+	if (restoreEditor) { showEditor(); }
+	return ok;
 #else
 	Q_UNUSED(sources)
 	return false;

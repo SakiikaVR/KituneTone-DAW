@@ -24,6 +24,7 @@
 #define LMMS_VST3_EFFECT_H
 
 #include <QMutex>
+#include <QPointer>
 #include <memory>
 
 #include "Effect.h"
@@ -36,6 +37,8 @@ class QPushButton;
 namespace lmms
 {
 
+class Clip;
+class SampleTrack;
 class Vst3Effect;
 class Vst3Plugin;
 
@@ -86,10 +89,20 @@ public:
 private:
 	bool openPlugin(const QString& file, const QString& uid);
 
+	//! find the sample track whose effect chain contains this effect
+	SampleTrack* findOwnerTrack() const;
+	//! start following the owner track's clips, re-syncing ARA on changes
+	void watchOwnerTrack();
+	void watchClip(Clip* clip);
+	//! debounced, GUI-thread ARA re-sync
+	void scheduleAraSync();
+
 	std::unique_ptr<Vst3Plugin> m_plugin;
 	QMutex m_pluginMutex;
 	EffectKey m_key;
 	Vst3EffectControls m_controls;
+	QPointer<SampleTrack> m_watchedTrack;
+	bool m_araSyncPending = false;
 
 	friend class Vst3EffectControls;
 };

@@ -179,6 +179,7 @@ private:
 	Steinberg::Vst::ParameterChanges m_inputParamChanges;
 	Steinberg::Vst::ParameterChanges m_outputParamChanges;
 	std::function<void(const MidiEvent&)> m_midiOutputHandler;
+	bool m_lastAraPlaying = false;
 
 	bool m_processingActive = false;
 	double m_sampleRate = 0.;
