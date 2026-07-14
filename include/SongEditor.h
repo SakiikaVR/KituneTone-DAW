@@ -92,6 +92,12 @@ public slots:
 	void updatePosition();
 	void updatePositionLine();
 	void selectAllClips( bool select );
+	//! copy the currently selected clips (across tracks) to the clipboard
+	void copySelectedClips();
+	//! paste clipboard clips at the play head, keeping their track/time layout
+	void pasteSelectedClips();
+	//! duplicate the selected clips immediately after themselves (Ctrl+B)
+	void duplicateSelectedClips();
 
 protected:
 	void mousePressEvent(QMouseEvent * me) override;

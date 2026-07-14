@@ -38,10 +38,13 @@
 #include "AudioDevice.h"
 #include "AudioEngine.h"
 #include "AutomatableSlider.h"
+#include "AutomationClip.h"
 #include "ClipView.h"
+#include "Clipboard.h"
 #include "ComboBox.h"
 #include "ConfigManager.h"
 #include "CPULoadWidget.h"
+#include "DataFile.h"
 #include "DeprecationHelper.h"
 #include "embed.h"
 #include "GuiApplication.h"
@@ -55,6 +58,7 @@
 #include "TextFloat.h"
 #include "TimeDisplayWidget.h"
 #include "TimeLineWidget.h"
+#include "Track.h"
 #include "TrackView.h"
 
 namespace lmms::gui
@@ -515,6 +519,18 @@ void SongEditor::keyPressEvent( QKeyEvent * ke )
 	{
 		selectAllClips( !isShiftPressed );
 	}
+	else if( ke->key() == Qt::Key_C && ke->modifiers() & Qt::ControlModifier )
+	{
+		copySelectedClips();
+	}
+	else if( ke->key() == Qt::Key_V && ke->modifiers() & Qt::ControlModifier )
+	{
+		pasteSelectedClips();
+	}
+	else if( ke->key() == Qt::Key_B && ke->modifiers() & Qt::ControlModifier )
+	{
+		duplicateSelectedClips();
+	}
 	else if( ke->key() == Qt::Key_Escape )
 	{
 		selectAllClips( false );
@@ -869,6 +885,132 @@ void SongEditor::selectAllClips( bool select )
 	{
 		so.at(i)->setSelected( select );
 	}
+}
+
+
+
+
+void SongEditor::copySelectedClips()
+{
+	// gather the selected clips across every track
+	QVector<ClipView*> clipViews;
+	ClipView* leftmost = nullptr;
+	for (auto obj : selectedObjects())
+	{
+		auto cv = dynamic_cast<ClipView*>(obj);
+		if (cv == nullptr) { continue; }
+		clipViews.push_back(cv);
+		if (leftmost == nullptr
+				|| cv->getClip()->startPosition() < leftmost->getClip()->startPosition())
+		{
+			leftmost = cv;
+		}
+	}
+	if (leftmost == nullptr) { return; }
+
+	// copy() records the anchor clip's position, so anchoring on the leftmost
+	// clip makes a later paste align the selection's start to the play head
+	leftmost->copy(clipViews);
+}
+
+
+
+
+void SongEditor::pasteSelectedClips()
+{
+	using namespace Clipboard;
+
+	const QMimeData* md = getMimeData();
+	if (!decodeKey(md).startsWith("clip_")) { return; }
+
+	DataFile dataFile(decodeValue(md).toUtf8());
+	QDomElement clipParent = dataFile.content().firstChildElement("clips");
+	QDomNodeList clipNodes = clipParent.childNodes();
+	QDomElement metadata = dataFile.content().firstChildElement("copyMetadata");
+	const TimePos anchor = metadata.attributeNode("grabbedClipPos").value().toInt();
+
+	// place the selection so its start lands on the play head (snapped), while
+	// keeping every clip on its original track and its timing relative to the
+	// rest of the selection
+	const float snapSize = getSnapSize();
+	const TimePos pastePos =
+			TimePos(m_song->getPlayPos(Song::PlayMode::Song).getTicks()).quantize(snapSize);
+	const TimePos offset = pastePos - anchor;
+
+	const TrackContainer::TrackList& tracks = m_song->tracks();
+
+	// the freshly pasted clips become the new selection
+	for (auto obj : selectedObjects()) { obj->setSelected(false); }
+
+	m_song->addJournalCheckPoint();
+	Engine::audioEngine()->requestChangeInModel();
+	for (int i = 0; i < clipNodes.length(); ++i)
+	{
+		QDomElement outer = clipNodes.item(i).toElement();
+		QDomElement clipElement = outer.firstChildElement();
+		const int trackIndex = outer.attributeNode("trackIndex").value().toInt();
+		if (trackIndex < 0 || trackIndex >= static_cast<int>(tracks.size())) { continue; }
+		Track* t = tracks.at(trackIndex);
+
+		TimePos pos = TimePos(clipElement.attributeNode("pos").value().toInt()) + offset;
+		if (pos < 0) { pos = 0; }
+		Clip* clip = t->createClip(pos);
+		clip->restoreState(clipElement);
+		clip->movePosition(pos);
+		clip->selectViewOnCreate(true);
+	}
+	AutomationClip::resolveAllIDs();
+	Engine::audioEngine()->doneChangeInModel();
+}
+
+
+
+
+void SongEditor::duplicateSelectedClips()
+{
+	// collect the selected clips and measure the span they cover
+	QVector<ClipView*> clipViews;
+	TimePos minStart = -1;
+	TimePos maxEnd = 0;
+	for (auto obj : selectedObjects())
+	{
+		auto cv = dynamic_cast<ClipView*>(obj);
+		if (cv == nullptr) { continue; }
+		clipViews.push_back(cv);
+		const TimePos start = cv->getClip()->startPosition();
+		const TimePos end = cv->getClip()->endPosition();
+		if (minStart < 0 || start < minStart) { minStart = start; }
+		if (end > maxEnd) { maxEnd = end; }
+	}
+	if (clipViews.isEmpty()) { return; }
+
+	// place the copies immediately after the selection, so the whole block is
+	// repeated to the right while keeping each clip on its own track
+	const TimePos shift = maxEnd - minStart;
+	if (shift <= 0) { return; }
+
+	// the freshly created copies become the new selection
+	for (auto obj : selectedObjects()) { obj->setSelected(false); }
+
+	m_song->addJournalCheckPoint();
+	Engine::audioEngine()->requestChangeInModel();
+	for (auto cv : clipViews)
+	{
+		Clip* src = cv->getClip();
+		Track* t = src->getTrack();
+
+		DataFile dataFile(DataFile::Type::DragNDropData);
+		QDomElement wrap = dataFile.createElement("clip");
+		src->saveState(dataFile, wrap);
+
+		const TimePos pos = src->startPosition() + shift;
+		Clip* dst = t->createClip(pos);
+		dst->restoreState(wrap.firstChildElement());
+		dst->movePosition(pos);
+		dst->selectViewOnCreate(true);
+	}
+	AutomationClip::resolveAllIDs();
+	Engine::audioEngine()->doneChangeInModel();
 }
 
 

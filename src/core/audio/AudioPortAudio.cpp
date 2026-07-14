@@ -173,10 +173,10 @@ AudioPortAudio::AudioPortAudio(bool& successful, AudioEngine* engine)
 	// device's mix format (e.g. 44.1 kHz project on a 48 kHz device).
 	auto wasapiInfo = PaWasapiStreamInfo{};
 	const bool wasapiUsed = backend == wasapiBackendName();
+	const bool wasapiExclusive = wasapiUsed
+			&& ConfigManager::inst()->value(tag(), wasapiExclusiveAttribute()).toInt() != 0;
 	if (wasapiUsed)
 	{
-		const bool wasapiExclusive
-				= ConfigManager::inst()->value(tag(), wasapiExclusiveAttribute()).toInt() != 0;
 		wasapiInfo.size = sizeof(PaWasapiStreamInfo);
 		wasapiInfo.hostApiType = paWASAPI;
 		wasapiInfo.version = 1;
@@ -186,14 +186,21 @@ AudioPortAudio::AudioPortAudio(bool& successful, AudioEngine* engine)
 	}
 #else
 	const bool wasapiUsed = false;
+	const bool wasapiExclusive = false;
 #endif
 
-	// try the requested configuration first, then progressively back off:
-	// without the WASAPI tuning, and finally without the input device, so a
-	// capture-side problem never takes playback down with it
+	// The main stream is output-only: recording is handled separately by
+	// AudioRecorder, which opens its own capture-only streams on demand. Opening
+	// a duplex stream here (input + output on the same device, e.g. a shared
+	// audio interface in WASAPI exclusive mode) made playback stutter/noisy even
+	// for a single note, on every PortAudio backend, so the capture side must
+	// never be part of the playback stream.
+	//
+	// Try the requested configuration first, then back off without the WASAPI
+	// tuning if the device rejects it.
 	struct Attempt { bool withInput; bool withWasapiInfo; };
 	auto attempts = std::vector<Attempt>{};
-	const bool hasInput = inputDeviceIndex != paNoDevice;
+	const bool hasInput = false;
 	attempts.push_back({hasInput, wasapiUsed});
 	if (wasapiUsed) { attempts.push_back({hasInput, false}); }
 	if (hasInput)
@@ -225,7 +232,14 @@ AudioPortAudio::AudioPortAudio(bool& successful, AudioEngine* engine)
 			continue;
 		}
 
-		err = Pa_OpenStream(&m_paStream, inputParametersPtr, outputParametersPtr, sampleRate, framesPerBuffer,
+		// In WASAPI exclusive mode the host buffer must line up with the
+		// device's own period. Forcing our configured size (e.g. 256) gave
+		// PortAudio a mismatched buffer that it serviced with audible noise, so
+		// let it negotiate the device-aligned period there. Shared mode and the
+		// other backends keep the configured size.
+		const auto requestedFrames = (attempt.withWasapiInfo && wasapiExclusive)
+				? paFramesPerBufferUnspecified : framesPerBuffer;
+		err = Pa_OpenStream(&m_paStream, inputParametersPtr, outputParametersPtr, sampleRate, requestedFrames,
 			paNoFlag, &AudioPortAudio::processCallback, this);
 		if (err == paNoError)
 		{
