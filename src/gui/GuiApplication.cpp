@@ -134,8 +134,13 @@ GuiApplication::GuiApplication()
 	QApplication::setAttribute(Qt::AA_DontShowIconsInMenus, true);
 #endif
 
-	// Show splash screen
-	QSplashScreen splashScreen( embed::getIconPixmap( "splash" ) );
+	// Show splash screen - use the user-chosen splash image if one is set and
+	// loads, otherwise the bundled default
+	QPixmap splashPixmap;
+	const QString splashFile = ConfigManager::inst()->splashPicFile();
+	if (!splashFile.isEmpty()) { splashPixmap.load(splashFile); }
+	if (splashPixmap.isNull()) { splashPixmap = embed::getIconPixmap("splash"); }
+	QSplashScreen splashScreen( splashPixmap );
 	splashScreen.setFixedSize(splashScreen.pixmap().size());
 	splashScreen.show();
 

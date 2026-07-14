@@ -95,6 +95,7 @@ void PatternClipView::paintEvent(QPaintEvent*)
 	if( !needsUpdate() )
 	{
 		painter.drawPixmap( 0, 0, m_paintPixmap );
+		drawSelectionOverlay( painter );
 		return;
 	}
 
@@ -237,8 +238,9 @@ void PatternClipView::paintEvent(QPaintEvent*)
 	}
 	
 	p.end();
-	
+
 	painter.drawPixmap( 0, 0, m_paintPixmap );
+	drawSelectionOverlay( painter );
 }
 
 

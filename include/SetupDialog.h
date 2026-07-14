@@ -124,8 +124,8 @@ private slots:
 	void setGIGDir(const QString & gigDir);
 	void openThemeDir();
 	void setThemeDir(const QString & themeDir);
-	void openBackgroundPicFile();
-	void setBackgroundPicFile(const QString & backgroundPicFile);
+	void openSplashPicFile();
+	void setSplashPicFile(const QString & splashPicFile);
 
 	void showRestartWarning();
 
@@ -200,7 +200,7 @@ private:
 	QString m_sf2File;
 #endif
 	QString m_themeDir;
-	QString m_backgroundPicFile;
+	QString m_splashPicFile;
 
 	QLineEdit * m_workingDirLineEdit;
 	QLineEdit * m_vstDirLineEdit;
@@ -211,7 +211,7 @@ private:
 #ifdef LMMS_HAVE_FLUIDSYNTH
 	QLineEdit * m_sf2FileLineEdit;
 #endif
-	QLineEdit * m_backgroundPicFileLineEdit;
+	QLineEdit * m_splashPicFileLineEdit;
 
 	QLabel * restartWarningLbl;
 };

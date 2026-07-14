@@ -156,7 +156,7 @@ SetupDialog::SetupDialog(ConfigTab tab_to_open) :
 	m_sf2File(QDir::toNativeSeparators(ConfigManager::inst()->sf2File())),
 #endif
 	m_themeDir(QDir::toNativeSeparators(ConfigManager::inst()->themeDir())),
-	m_backgroundPicFile(QDir::toNativeSeparators(ConfigManager::inst()->backgroundPicFile()))
+	m_splashPicFile(QDir::toNativeSeparators(ConfigManager::inst()->splashPicFile()))
 {
 	setWindowIcon(embed::getIconPixmap("setup_general"));
 	setWindowTitle(tr("Settings"));
@@ -849,10 +849,10 @@ SetupDialog::SetupDialog(ConfigTab tab_to_open) :
 		SLOT(setThemeDir(const QString&)),
 		SLOT(openThemeDir()),
 		m_themeDirLineEdit);
-	addPathEntry(tr("Background artwork"), m_backgroundPicFile,
-		SLOT(setBackgroundPicFile(const QString&)),
-		SLOT(openBackgroundPicFile()),
-		m_backgroundPicFileLineEdit);
+	addPathEntry(tr("Splash image"), m_splashPicFile,
+		SLOT(setSplashPicFile(const QString&)),
+		SLOT(openSplashPicFile()),
+		m_splashPicFileLineEdit);
 
 	pathSelectorsLayout->addStretch();
 
@@ -1027,7 +1027,7 @@ void SetupDialog::accept()
 #endif
 	ConfigManager::inst()->setGIGDir(QDir::fromNativeSeparators(m_gigDir));
 	ConfigManager::inst()->setThemeDir(QDir::fromNativeSeparators(m_themeDir));
-	ConfigManager::inst()->setBackgroundPicFile(m_backgroundPicFile);
+	ConfigManager::inst()->setSplashPicFile(QDir::fromNativeSeparators(m_splashPicFile));
 
 	// Tell all audio-settings-widgets to save their settings.
 	for(AswMap::iterator it = m_audioIfaceSetupWidgets.begin();
@@ -1424,7 +1424,7 @@ void SetupDialog::setThemeDir(const QString & themeDir)
 }
 
 
-void SetupDialog::openBackgroundPicFile()
+void SetupDialog::openSplashPicFile()
 {
 	QList<QByteArray> fileTypesList = QImageReader::supportedImageFormats();
 	QString fileTypes;
@@ -1440,22 +1440,22 @@ void SetupDialog::openBackgroundPicFile()
 		}
 	}
 
-	QString dir = (m_backgroundPicFile.isEmpty()) ?
+	QString dir = (m_splashPicFile.isEmpty()) ?
 		m_themeDir :
-		m_backgroundPicFile;
+		m_splashPicFile;
 	QString new_file = FileDialog::getOpenFileName(this,
-		tr("Choose your background picture"), dir, "Picture files (" + fileTypes + ")");
+		tr("Choose your splash image"), dir, "Picture files (" + fileTypes + ")");
 
 	if(!new_file.isEmpty())
 	{
-		m_backgroundPicFileLineEdit->setText(new_file);
+		m_splashPicFileLineEdit->setText(new_file);
 	}
 }
 
 
-void SetupDialog::setBackgroundPicFile(const QString & backgroundPicFile)
+void SetupDialog::setSplashPicFile(const QString & splashPicFile)
 {
-	m_backgroundPicFile = backgroundPicFile;
+	m_splashPicFile = splashPicFile;
 }
 
 

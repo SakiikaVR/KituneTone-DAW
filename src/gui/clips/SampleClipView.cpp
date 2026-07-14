@@ -228,6 +228,7 @@ void SampleClipView::paintEvent( QPaintEvent * pe )
 	if( !needsUpdate() )
 	{
 		painter.drawPixmap(m_paintPixmapXPosition, 0, m_paintPixmap);
+		drawSelectionOverlay(painter);
 		return;
 	}
 
@@ -248,12 +249,11 @@ void SampleClipView::paintEvent( QPaintEvent * pe )
 	QPainter p( &m_paintPixmap );
 
 	bool muted = m_clip->getTrack()->isMuted() || m_clip->isMuted();
-	bool selected = isSelected();
 
 	QLinearGradient lingrad(0, 0, 0, height());
 	QColor c = painter.background().color();
 	if (muted) { c = c.darker(150); }
-	if (selected) { c = c.darker(150); }
+	// selection is drawn as an overlay (drawSelectionOverlay), not baked in
 
 	lingrad.setColorAt( 1, c.darker( 300 ) );
 	lingrad.setColorAt( 0, c );
@@ -279,10 +279,6 @@ void SampleClipView::paintEvent( QPaintEvent * pe )
 		QColor penColor = p.pen().brush().color();
 		penColor.setHsv(penColor.hsvHue(), penColor.hsvSaturation() / 4, penColor.value());
 		p.setPen(penColor.darker(250));
-	}
-	if (selected)
-	{
-		p.setPen(p.pen().brush().color().darker(150));
 	}
 
 	const int spacing = BORDER_WIDTH + 1;
@@ -363,6 +359,7 @@ void SampleClipView::paintEvent( QPaintEvent * pe )
 	p.end();
 
 	painter.drawPixmap(m_paintPixmapXPosition, 0, m_paintPixmap);
+	drawSelectionOverlay(painter);
 }
 
 

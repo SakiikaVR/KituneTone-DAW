@@ -1407,37 +1407,42 @@ QColor ClipView::getColorForDisplay( QColor defaultColor )
 	// Get the pure Clip color
 	auto clipColor = m_clip->color().value_or(m_clip->getTrack()->color().value_or(defaultColor));
 
-	// Set variables
-	QColor c, mutedCustomColor;
+	// Selection is NOT considered here: it is drawn as an overlay
+	// (drawSelectionOverlay) on top of the finished pixmap, so the cached pixmap
+	// stays independent of selection state and Ctrl+A does not force every
+	// visible clip to regenerate its pixmap.
 	bool muted = m_clip->getTrack()->isMuted() || m_clip->isMuted();
-	mutedCustomColor = clipColor;
-	mutedCustomColor.setHsv( mutedCustomColor.hsvHue(), mutedCustomColor.hsvSaturation() / 4, mutedCustomColor.value() );
-
-	// Change the pure color by state: selected, muted, colored, normal
-	if( isSelected() )
+	if( muted )
 	{
-		c = hasCustomColor()
-			? ( muted
-				? mutedCustomColor.darker( 350 )
-				: clipColor.darker( 150 ) )
-			: selectedColor();
-	}
-	else
-	{
-		if( muted )
+		if( hasCustomColor() )
 		{
-			c = hasCustomColor()
-				? mutedCustomColor.darker( 250 )
-				: mutedBackgroundColor();
+			QColor mutedCustomColor = clipColor;
+			mutedCustomColor.setHsv( mutedCustomColor.hsvHue(),
+					mutedCustomColor.hsvSaturation() / 4, mutedCustomColor.value() );
+			return mutedCustomColor.darker( 250 );
 		}
-		else
-		{
-			c = clipColor;
-		}
+		return mutedBackgroundColor();
 	}
+	return clipColor;
+}
 
-	// Return color to caller
-	return c;
+
+
+
+void ClipView::drawSelectionOverlay( QPainter & painter )
+{
+	if( !isSelected() ) { return; }
+
+	// a translucent tint plus a solid border in the theme's selection colour,
+	// painted over the content so selection can toggle with a cheap repaint
+	QColor tint = selectedColor();
+	tint.setAlpha( 90 );
+	painter.fillRect( rect(), tint );
+
+	painter.setRenderHint( QPainter::Antialiasing, false );
+	painter.setBrush( Qt::NoBrush );
+	painter.setPen( QPen( selectedColor(), 2 ) );
+	painter.drawRect( rect().adjusted( 1, 1, -2, -2 ) );
 }
 
 auto ClipView::hasCustomColor() const -> bool

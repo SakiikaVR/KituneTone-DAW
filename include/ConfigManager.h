@@ -197,6 +197,12 @@ public:
 		return m_backgroundPicFile;
 	}
 
+	//! user-chosen splash image shown at startup (empty = bundled default)
+	const QString & splashPicFile() const
+	{
+		return m_splashPicFile;
+	}
+
 	QString trackIconsDir() const
 	{
 		return m_dataDir + TRACK_ICON_PATH;
@@ -263,6 +269,7 @@ public:
 	void setGIGDir(const QString & gigDir);
 	void setThemeDir(const QString & themeDir);
 	void setBackgroundPicFile(const QString & backgroundPicFile);
+	void setSplashPicFile(const QString & splashPicFile);
 
 	// Creates the working directory & subdirectories on disk.
 	void createWorkingDir();
@@ -300,6 +307,7 @@ private:
 	QString m_gigDir;
 	QString m_themeDir;
 	QString m_backgroundPicFile;
+	QString m_splashPicFile;
 	QString m_lmmsRcFile;
 	QString m_version;
 	unsigned int m_configVersion;

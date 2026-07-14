@@ -49,7 +49,10 @@ public:
 	{
 		if (m_selected == selected) { return; }
 		m_selected = selected;
-		update();
+		// plain repaint only: the virtual update() override (e.g. ClipView)
+		// would flag a full pixmap regeneration, which makes selecting many
+		// objects at once (Ctrl+A) very slow. Selection is drawn as an overlay.
+		QWidget::update();
 	}
 
 	inline bool isSelected() const

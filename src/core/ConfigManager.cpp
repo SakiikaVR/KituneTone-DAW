@@ -289,6 +289,11 @@ void ConfigManager::setBackgroundPicFile(const QString & backgroundPicFile)
 	m_backgroundPicFile = backgroundPicFile;
 }
 
+void ConfigManager::setSplashPicFile(const QString & splashPicFile)
+{
+	m_splashPicFile = splashPicFile;
+}
+
 void ConfigManager::createWorkingDir()
 {
 	QDir().mkpath(m_workingDir);
@@ -524,6 +529,7 @@ void ConfigManager::loadConfigFile(const QString & configFile)
 			setSF2File(value("paths", "defaultsf2"));
 		#endif
 			setBackgroundPicFile(value("paths", "backgroundtheme"));
+			setSplashPicFile(value("paths", "splashimage"));
 		}
 		else if (gui::getGUI() != nullptr)
 		{
@@ -619,6 +625,7 @@ void ConfigManager::saveConfigFile()
 	setValue("paths", "defaultsf2", m_sf2File);
 #endif
 	setValue("paths", "backgroundtheme", m_backgroundPicFile);
+	setValue("paths", "splashimage", m_splashPicFile);
 
 	QDomDocument doc("lmms-config-file");
 

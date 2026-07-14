@@ -556,6 +556,7 @@ void MidiClipView::paintEvent( QPaintEvent * )
 	if( !needsUpdate() )
 	{
 		painter.drawPixmap( 0, 0, m_paintPixmap );
+		drawSelectionOverlay( painter );
 		return;
 	}
 
@@ -867,6 +868,7 @@ void MidiClipView::paintEvent( QPaintEvent * )
 	}
 
 	painter.drawPixmap( 0, 0, m_paintPixmap );
+	drawSelectionOverlay( painter );
 }
 
 

@@ -179,6 +179,11 @@ protected:
 
 	virtual void paintTextLabel(QString const & text, QPainter & painter);
 
+	//! draw the selection highlight (tint + border) on top of the content
+	//! pixmap; selection is an overlay so toggling it never regenerates the
+	//! pixmap (which would make Ctrl+A regenerate every visible clip)
+	void drawSelectionOverlay(QPainter & painter);
+
 	auto hasCustomColor() const -> bool;
 
 protected slots:
