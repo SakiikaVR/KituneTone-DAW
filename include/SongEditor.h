@@ -98,6 +98,8 @@ public slots:
 	void pasteSelectedClips();
 	//! duplicate the selected clips immediately after themselves (Ctrl+B)
 	void duplicateSelectedClips();
+	//! delete the selected clips (any track type) as one undoable action
+	void deleteSelectedClips();
 
 protected:
 	void mousePressEvent(QMouseEvent * me) override;

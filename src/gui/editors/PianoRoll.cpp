@@ -4764,6 +4764,48 @@ void PianoRoll::cutSelectedNotes()
 
 
 
+void PianoRoll::duplicateSelectedNotes()
+{
+	if (!hasValidMidiClip()) { return; }
+
+	NoteVector selected = getSelectedNotes();
+	if (selected.empty()) { return; }
+
+	// measure the span so the copies land immediately after the selection
+	TimePos minPos = selected.front()->pos();
+	TimePos maxEnd = selected.front()->endPos();
+	for (const Note* n : selected)
+	{
+		if (n->pos() < minPos) { minPos = n->pos(); }
+		if (n->endPos() > maxEnd) { maxEnd = n->endPos(); }
+	}
+	const TimePos shift = maxEnd - minPos;
+	if (shift <= 0) { return; }
+
+	// snapshot the notes before adding any: addNote() may reallocate the clip's
+	// note list and invalidate the pointers returned by getSelectedNotes()
+	std::vector<Note> copies;
+	copies.reserve(selected.size());
+	for (const Note* n : selected) { copies.push_back(*n); }
+
+	m_midiClip->addJournalCheckPoint();
+	// the freshly created copies become the new selection
+	clearSelectedNotes();
+	for (Note& c : copies)
+	{
+		c.setPos(c.pos() + shift);
+		c.setSelected(true);
+		m_midiClip->addNote(c, false);
+	}
+	m_midiClip->updateLength();
+	Engine::getSong()->setModified();
+	update();
+	getGUI()->songEditor()->update();
+}
+
+
+
+
 void PianoRoll::pasteNotes()
 {
 	// For getString() and MimeType enum class
@@ -5268,6 +5310,13 @@ PianoRollWindow::PianoRollWindow() :
 	copyPasteActionsToolBar->addAction( cutAction );
 	copyPasteActionsToolBar->addAction( copyAction );
 	copyPasteActionsToolBar->addAction( pasteAction );
+
+	// duplicate the selection immediately after itself (Ctrl+B); shortcut only,
+	// no toolbar button
+	auto duplicateAction = new QAction(tr("Duplicate (%1+B)").arg(UI_CTRL_KEY), this);
+	duplicateAction->setShortcut(keySequence(Qt::CTRL, Qt::Key_B));
+	connect(duplicateAction, SIGNAL(triggered()), m_editor, SLOT(duplicateSelectedNotes()));
+	addAction(duplicateAction);
 
 
 	DropToolBar *timeLineToolBar = addDropToolBarToTop( tr( "Timeline controls" ) );

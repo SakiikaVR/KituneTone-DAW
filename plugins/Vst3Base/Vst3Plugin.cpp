@@ -519,13 +519,14 @@ void Vst3Plugin::process(const SampleFrame* in, SampleFrame* out, f_cnt_t frames
 	auto* song = Engine::getSong();
 	m_processContext = {};
 	m_processContext.sampleRate = m_sampleRate;
-	// ARA playback rendering needs the process time to follow the real song
-	// timeline so the playback region maps to the correct position; otherwise
-	// a free-running counter is fine.
-	if (araActive() && song != nullptr)
+	// Follow the real song timeline (in output-rate frames) for the transport
+	// position. Tempo-synced plug-ins (e.g. Kickstart's host-sync ducking) lock
+	// their cycle to this position, so a free-running counter would drift out of
+	// alignment with the song's bars depending on where playback started. ARA
+	// playback rendering needs it for the same reason (mapping playback regions
+	// to the correct position).
+	if (song != nullptr)
 	{
-		// follow the real song timeline (in output-rate frames) so the ARA
-		// playback region maps to the correct position
 		m_processContext.projectTimeSamples = static_cast<Steinberg::int64>(song->getFrames());
 	}
 	else

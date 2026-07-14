@@ -219,6 +219,8 @@ protected slots:
 	void copySelectedNotes();
 	void cutSelectedNotes();
 	void pasteNotes();
+	//! duplicate the selected notes immediately after themselves (Ctrl+B)
+	void duplicateSelectedNotes();
 	bool deleteSelectedNotes();
 
 	void updatePosition();

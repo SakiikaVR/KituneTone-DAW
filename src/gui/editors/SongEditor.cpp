@@ -54,6 +54,9 @@
 #include "Oscilloscope.h"
 #include "PianoRoll.h"
 #include "PositionLine.h"
+#include "ProjectJournal.h"
+
+#include <set>
 #include "SubWindow.h"
 #include "TextFloat.h"
 #include "TimeDisplayWidget.h"
@@ -508,12 +511,11 @@ void SongEditor::keyPressEvent( QKeyEvent * ke )
 	}
 	else if( ke->key() == Qt::Key_Delete || ke->key() == Qt::Key_Backspace )
 	{
-		QVector<selectableObject *> so = selectedObjects();
-		for (const auto& selectedClip : so)
-		{
-			auto clipv = dynamic_cast<ClipView*>(selectedClip);
-			clipv->remove();
-		}
+		deleteSelectedClips();
+	}
+	else if( ke->key() == Qt::Key_D && ke->modifiers() & Qt::ControlModifier )
+	{
+		deleteSelectedClips();
 	}
 	else if( ke->key() == Qt::Key_A && ke->modifiers() & Qt::ControlModifier )
 	{
@@ -942,7 +944,22 @@ void SongEditor::pasteSelectedClips()
 	// the freshly pasted clips become the new selection
 	for (auto obj : selectedObjects()) { obj->setSelected(false); }
 
-	m_song->addJournalCheckPoint();
+	// checkpoint each target track once (never the Song - that crashes on
+	// undo), suppressing per-clip checkpoints during the edit
+	std::set<Track*> targetTracks;
+	for (int i = 0; i < clipNodes.length(); ++i)
+	{
+		const int trackIndex = clipNodes.item(i).toElement().attributeNode("trackIndex").value().toInt();
+		if (trackIndex >= 0 && trackIndex < static_cast<int>(tracks.size()))
+		{
+			targetTracks.insert(tracks.at(trackIndex));
+		}
+	}
+	auto* journal = Engine::projectJournal();
+	const bool wasJournalling = journal->isJournalling();
+	for (Track* t : targetTracks) { t->addJournalCheckPoint(); }
+	journal->setJournalling(false);
+
 	Engine::audioEngine()->requestChangeInModel();
 	for (int i = 0; i < clipNodes.length(); ++i)
 	{
@@ -961,6 +978,39 @@ void SongEditor::pasteSelectedClips()
 	}
 	AutomationClip::resolveAllIDs();
 	Engine::audioEngine()->doneChangeInModel();
+	journal->setJournalling(wasJournalling);
+}
+
+
+
+
+void SongEditor::deleteSelectedClips()
+{
+	QVector<selectableObject*> so = selectedObjects();
+	if (so.isEmpty()) { return; }
+
+	QVector<ClipView*> clips;
+	std::set<Track*> tracks;
+	for (const auto& obj : so)
+	{
+		if (auto cv = dynamic_cast<ClipView*>(obj))
+		{
+			clips.push_back(cv);
+			tracks.insert(cv->getTrackView()->getTrack());
+		}
+	}
+	if (clips.isEmpty()) { return; }
+
+	// Checkpoint each affected track once, then suppress the per-clip
+	// checkpoints remove() would add. Checkpointing the whole Song instead
+	// crashes on undo (Song is never a journal checkpoint target in LMMS), and
+	// per-track means deleting many clips on a track is a single undo/redo step.
+	auto* journal = Engine::projectJournal();
+	const bool wasJournalling = journal->isJournalling();
+	for (Track* t : tracks) { t->addJournalCheckPoint(); }
+	journal->setJournalling(false);
+	for (ClipView* cv : clips) { cv->remove(); }
+	journal->setJournalling(wasJournalling);
 }
 
 
@@ -992,7 +1042,15 @@ void SongEditor::duplicateSelectedClips()
 	// the freshly created copies become the new selection
 	for (auto obj : selectedObjects()) { obj->setSelected(false); }
 
-	m_song->addJournalCheckPoint();
+	// checkpoint each affected track once (never the Song - that crashes on
+	// undo), suppressing per-clip checkpoints during the edit
+	std::set<Track*> tracks;
+	for (auto cv : clipViews) { tracks.insert(cv->getClip()->getTrack()); }
+	auto* journal = Engine::projectJournal();
+	const bool wasJournalling = journal->isJournalling();
+	for (Track* t : tracks) { t->addJournalCheckPoint(); }
+	journal->setJournalling(false);
+
 	Engine::audioEngine()->requestChangeInModel();
 	for (auto cv : clipViews)
 	{
@@ -1011,6 +1069,7 @@ void SongEditor::duplicateSelectedClips()
 	}
 	AutomationClip::resolveAllIDs();
 	Engine::audioEngine()->doneChangeInModel();
+	journal->setJournalling(wasJournalling);
 }
 
 
