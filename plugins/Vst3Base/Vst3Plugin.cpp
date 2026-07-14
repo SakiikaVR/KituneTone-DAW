@@ -129,11 +129,24 @@ public:
 		return parentWidget() != nullptr ? parentWidget() : this;
 	}
 
-	//! resize widget and subwindow so the plug-in area has the given size
+	//! resize widget and subwindow so the plug-in area has the given size.
+	//! \a w and \a h are the plug-in's size in physical pixels (as reported by
+	//! IPlugView::getSize / resizeView).
 	void setPluginSize(int w, int h, bool fixed)
 	{
+		// VST3 reports sizes in physical pixels, while Qt widget geometry is in
+		// logical (device-independent) pixels. On a scaled display (e.g. 150%
+		// on a WQHD monitor) Qt makes the native child window devicePixelRatio
+		// times larger, so using the raw plug-in size left the window frame
+		// that much bigger than the plug-in's drawing. Convert to logical
+		// pixels here. On an unscaled display (FullHD at 100%) dpr == 1, so
+		// nothing changes.
+		const qreal dpr = devicePixelRatioF();
+		const int lw = dpr > 0. ? qRound(w / dpr) : w;
+		const int lh = dpr > 0. ? qRound(h / dpr) : h;
+
 		// adopt the exact plug-in size while the container is pinned to it
-		m_container->setFixedSize(w, h);
+		m_container->setFixedSize(lw, lh);
 		adjustSize();
 
 		if (!fixed)
@@ -155,7 +168,7 @@ public:
 			const auto decoration = QSize(m.left() + m.right(), m.top() + m.bottom());
 			win->setMinimumSize(0, 0);
 			win->setMaximumSize(QWIDGETSIZE_MAX, QWIDGETSIZE_MAX);
-			win->resize(decoration + QSize(w, h));
+			win->resize(decoration + QSize(lw, lh));
 			if (fixed) { win->setFixedSize(win->size()); }
 		}
 	}
@@ -174,7 +187,11 @@ protected:
 		QWidget::resizeEvent(event);
 		if (m_view && m_view->canResize() == Steinberg::kResultTrue)
 		{
-			Steinberg::ViewRect rect(0, 0, m_container->width(), m_container->height());
+			// the plug-in works in physical pixels; convert Qt's logical
+			// widget size back up by the device-pixel ratio (see setPluginSize)
+			const qreal dpr = devicePixelRatioF();
+			Steinberg::ViewRect rect(0, 0,
+					qRound(m_container->width() * dpr), qRound(m_container->height() * dpr));
 			m_view->onSize(&rect);
 		}
 	}
