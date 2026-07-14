@@ -24,9 +24,15 @@
 
 #include "MixerView.h"
 
+#include <algorithm>
+#include <array>
+
 #include <QHBoxLayout>
+#include <QLabel>
 #include <QLayout>
 #include <QLineEdit>
+#include <QMouseEvent>
+#include <QPainter>
 #include <QPushButton>
 #include <QScrollArea>
 #include <QStyle>
@@ -34,6 +40,7 @@
 #include <QStackedLayout>
 #include <QStackedWidget>
 
+#include "AutomatableButton.h"
 #include "EffectRackView.h"
 #include "Engine.h"
 #include "Fader.h"
@@ -50,9 +57,139 @@
 #include "SubWindow.h"
 #include "TrackContainer.h" // For TrackContainer::TrackList typedef
 #include "embed.h"
+#include "lmms_math.h"
 
 namespace lmms::gui
 {
+
+// --- CurrentChannelMeter: stereo dB peak meter for the selected channel ------
+
+namespace
+{
+	// dB range shown by the current-channel meter
+	constexpr float kMeterTopDb = 3.f;
+	constexpr float kMeterBottomDb = -48.f;
+	// scale labels (dBFS) drawn next to the bars
+	constexpr std::array<int, 6> kMeterScaleDb = {3, 0, -6, -12, -24, -48};
+}
+
+CurrentChannelMeter::CurrentChannelMeter(QWidget* parent)
+	: QWidget(parent)
+{
+	setAttribute(Qt::WA_OpaquePaintEvent);
+	setCursor(Qt::PointingHandCursor);
+	setToolTip(tr("Click to add monitoring-only effects (not exported)"));
+}
+
+void CurrentChannelMeter::mousePressEvent(QMouseEvent*)
+{
+	if (m_clickHandler) { m_clickHandler(); }
+}
+
+void CurrentChannelMeter::setSelected(bool selected)
+{
+	if (selected == m_selected) { return; }
+	m_selected = selected;
+	update();
+}
+
+void CurrentChannelMeter::setPeaks(float left, float right)
+{
+	if (left == m_peakL && right == m_peakR) { return; }
+	m_peakL = left;
+	m_peakR = right;
+	update();
+}
+
+void CurrentChannelMeter::setChannelName(const QString& name)
+{
+	if (name == m_name) { return; }
+	m_name = name;
+	update();
+}
+
+void CurrentChannelMeter::paintEvent(QPaintEvent*)
+{
+	QPainter p(this);
+	p.fillRect(rect(), QColor(20, 20, 20));
+
+	const int labelH = 16;
+	const int top = labelH + 4;
+	const int bottom = height() - 4;
+	const int meterH = bottom - top;
+	if (meterH <= 0) { return; }
+
+	// channel name / header
+	p.setPen(QColor(220, 220, 220));
+	QFont f = p.font();
+	f.setPointSizeF(std::max(6., f.pointSizeF() - 1.));
+	p.setFont(f);
+	p.drawText(QRect(0, 0, width(), labelH), Qt::AlignCenter, tr("Current"));
+
+	// maps a dBFS value to a y coordinate within the meter
+	const auto dbToY = [&](float db) -> float {
+		const float clamped = std::clamp(db, kMeterBottomDb, kMeterTopDb);
+		const float t = (kMeterTopDb - clamped) / (kMeterTopDb - kMeterBottomDb);
+		return top + t * meterH;
+	};
+
+	const int barW = 16;
+	const int gap = 3;
+	const int scaleW = 22;
+	// centre the two bars + scale block
+	const int block = barW * 2 + gap + scaleW + 4;
+	int x = (width() - block) / 2;
+	if (x < 1) { x = 1; }
+	const QRect lRect(x, top, barW, meterH);
+	const QRect rRect(x + barW + gap, top, barW, meterH);
+
+	// gradient: red at the top (>0 dB), yellow around 0, green below
+	const auto fillMeter = [&](const QRect& r, float peak) {
+		p.fillRect(r, QColor(0, 0, 0));
+		const float db = ampToDbfs(std::max(0.0001f, peak));
+		const float y = dbToY(db);
+		QRect fill(r.left(), static_cast<int>(y), r.width(), r.bottom() - static_cast<int>(y) + 1);
+		QLinearGradient grad(0, top, 0, bottom);
+		grad.setColorAt(0.0, QColor(255, 70, 70));    // +3 dB
+		grad.setColorAt((kMeterTopDb - 0.f) / (kMeterTopDb - kMeterBottomDb), QColor(255, 210, 60)); // 0 dB
+		grad.setColorAt((kMeterTopDb - (-6.f)) / (kMeterTopDb - kMeterBottomDb), QColor(120, 220, 70)); // -6 dB
+		grad.setColorAt(1.0, QColor(40, 150, 60));    // -48 dB
+		p.fillRect(fill, grad);
+	};
+	fillMeter(lRect, m_peakL);
+	fillMeter(rRect, m_peakR);
+
+	// meter outlines
+	p.setPen(QColor(80, 80, 80));
+	p.drawRect(lRect);
+	p.drawRect(rRect);
+
+	// dB scale labels + tick lines to the right of the bars
+	const int scaleX = rRect.right() + 3;
+	p.setPen(QColor(170, 170, 170));
+	QFont sf = p.font();
+	sf.setPointSizeF(std::max(5.5, sf.pointSizeF() - 0.5));
+	p.setFont(sf);
+	for (int db : kMeterScaleDb)
+	{
+		const int y = static_cast<int>(dbToY(static_cast<float>(db)));
+		p.setPen(QColor(70, 70, 70));
+		p.drawLine(lRect.left(), y, rRect.right(), y);
+		p.setPen(QColor(180, 180, 180));
+		const QString txt = db > 0 ? QStringLiteral("+%1").arg(db) : QString::number(db);
+		p.drawText(QRect(scaleX, y - 7, width() - scaleX, 14), Qt::AlignLeft | Qt::AlignVCenter, txt);
+	}
+
+	// highlight when selected (its monitoring effect chain is shown in the rack)
+	if (m_selected)
+	{
+		p.setRenderHint(QPainter::Antialiasing, false);
+		p.setBrush(Qt::NoBrush);
+		p.setPen(QPen(QColor(90, 170, 255), 2));
+		p.drawRect(rect().adjusted(1, 1, -2, -2));
+	}
+}
+
 
 
 MixerView::MixerView(Mixer* mixer) :
@@ -92,6 +229,10 @@ MixerView::MixerView(Mixer* mixer) :
 	m_racksLayout = new QStackedLayout(m_racksWidget);
 	m_racksLayout->setContentsMargins(0, 0, 0, 0);
 	m_racksWidget->setLayout(m_racksLayout);
+	// keep the effect rack from collapsing when it sits next to the current
+	// channel meter (the QStackedLayout does not always propagate the page's
+	// fixed width to the container)
+	m_racksWidget->setMinimumWidth(EffectRackView::DEFAULT_WIDTH);
 
 	// add master channel
 	m_mixerChannelViews.resize(mixer->numChannels());
@@ -104,6 +245,24 @@ MixerView::MixerView(Mixer* mixer) :
 	ml->addWidget(masterView, 0);
 
 	auto mixerChannelSize = masterView->sizeHint();
+
+	// "current channel" meter at the very left of the mixer: a stereo peak
+	// meter with a dB scale that always shows the selected channel's level
+	m_currentMeter = new CurrentChannelMeter(this);
+	m_currentMeter->setFixedWidth(74);
+	m_currentMeter->setMinimumHeight(mixerChannelSize.height());
+	ml->insertWidget(0, m_currentMeter, 0);
+
+	// monitoring-only effect chain: its rack is stacked with the channel racks
+	// and shown when the current-channel meter is clicked. Effects added here
+	// are heard on the master output but are not part of the exported mix.
+	m_monitorRackView = new EffectRackView(getMixer()->monitorFxChain(), m_racksWidget);
+	m_monitorRackView->setFixedWidth(EffectRackView::DEFAULT_WIDTH);
+	m_racksLayout->addWidget(m_monitorRackView);
+	m_currentMeter->setClickHandler([this]() {
+		m_racksLayout->setCurrentWidget(m_monitorRackView);
+		m_currentMeter->setSelected(true);
+	});
 
 	// add mixer channels
 	for (int i = 1; i < m_mixerChannelViews.size(); ++i)
@@ -150,7 +309,10 @@ MixerView::MixerView(Mixer* mixer) :
 	ml->addWidget(newChannelBtn, 0);
 
 
-	// add the stacked layout for the effect racks of mixer channels
+	// effect rack of the selected channel stays at the right; it edits the
+	// current channel's effect chain (the channel's audio passes through it).
+	// The current-channel meter on the left pairs with this to form the
+	// "current channel" view.
 	ml->addWidget(m_racksWidget);
 
 	setCurrentMixerChannel(m_mixerChannelViews[0]);
@@ -328,6 +490,16 @@ void MixerView::setCurrentMixerChannel(MixerChannelView* channel)
 	// select
 	m_currentMixerChannel = channel;
 	m_racksLayout->setCurrentWidget(m_mixerChannelViews[channel->channelIndex()]->m_effectRackView);
+
+	// route the selected channel's audio through the single monitor chain
+	getMixer()->setMonitorChannelIndex(channel->channelIndex());
+
+	if (m_currentMeter != nullptr)
+	{
+		m_currentMeter->setChannelName(getMixer()->mixerChannel(channel->channelIndex())->m_name);
+		// a real channel is now selected, so the monitor chain is no longer active
+		m_currentMeter->setSelected(false);
+	}
 
 	// set up send knob
 	for (int i = 0; i < m_mixerChannelViews.size(); ++i)
@@ -585,6 +757,13 @@ void MixerView::updateFaders()
 		{
 			m_mixerChannelViews[i]->m_fader->setPeak_R(opr/fallOff);
 		}
+	}
+
+	// mirror the selected channel's (already smoothed) peak onto the left meter
+	if (m_currentMeter != nullptr && m_currentMixerChannel != nullptr)
+	{
+		auto* fader = m_currentMixerChannel->m_fader;
+		m_currentMeter->setPeaks(fader->getPeak_L(), fader->getPeak_R());
 	}
 }
 

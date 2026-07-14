@@ -12852,7 +12852,7 @@ Warning: This operation can not be undone.</source>
     <message>
         <location filename="../../src/gui/PluginBrowser.cpp" line="49"/>
         <source>Instrument Plugins</source>
-        <translation>インストゥルメントプラグイン</translation>
+        <translation>プラグイン</translation>
     </message>
     <message>
         <location filename="../../src/gui/PluginBrowser.cpp" line="52"/>

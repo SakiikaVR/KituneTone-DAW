@@ -26,6 +26,7 @@
 
 #include <QDomElement>
 #include <QFileInfo>
+#include <QTimer>
 
 #include <algorithm>
 #include <cmath>
@@ -316,13 +317,26 @@ void SampleClip::updateLength()
 void SampleClip::tempoChanged()
 {
 	Clip::setStartTimeOffset(std::round(1.0f * m_startFrameOffset / Engine::framesPerTick()));
-	// keep BPM-synced clips matched to the new song tempo
-	if (m_sourceBpm > 0)
-	{
-		setStretchFactor(static_cast<float>(m_sourceBpm) / Engine::getSong()->getTempo());
-	}
 	updateLength();
 	emit sampleChanged();
+
+	// Keep BPM-synced clips (a source BPM was set) matched to the new song
+	// tempo, pitch preserved. Defer + debounce the WSOLA re-stretch: it is far
+	// too heavy to run on every intermediate value while dragging the tempo, and
+	// tempoChanged() may fire on the audio thread (tempo automation) where the
+	// rebuild must never run. The singleShot always runs on this object's (GUI)
+	// thread.
+	if (m_sourceBpm > 0 && !m_tempoRestretchPending)
+	{
+		m_tempoRestretchPending = true;
+		QTimer::singleShot(150, this, [this]() {
+			m_tempoRestretchPending = false;
+			if (m_sourceBpm <= 0) { return; }
+			setStretchFactor(static_cast<float>(m_sourceBpm) / Engine::getSong()->getTempo());
+			updateLength();
+			emit sampleChanged();
+		});
+	}
 }
 
 void SampleClip::setStartTimeOffset(const TimePos& startTimeOffset)

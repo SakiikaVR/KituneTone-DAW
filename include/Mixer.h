@@ -160,6 +160,19 @@ public:
 		return m_mixerChannels[_ch];
 	}
 
+	//! monitoring-only effect chain: the currently monitored channel's audio
+	//! passes through it during playback, but it is NOT included in the
+	//! rendered/exported mix. Its effects persist until removed.
+	EffectChain * monitorFxChain()
+	{
+		return &m_monitorFxChain;
+	}
+
+	//! index of the channel whose audio is currently routed through the
+	//! monitoring effect chain (follows the selected mixer channel)
+	int monitorChannelIndex() const { return m_monitorChannelIndex; }
+	void setMonitorChannelIndex( int index ) { m_monitorChannelIndex = index; }
+
 	// make the output of channel fromChannel go to the input of channel toChannel
 	// it is safe to call even if the send already exists
 	MixerRoute * createChannelSend(mix_ch_t fromChannel, mix_ch_t toChannel,
@@ -217,6 +230,10 @@ public:
 private:
 	// the mixer channels in the mixer. index 0 is always master.
 	std::vector<MixerChannel*> m_mixerChannels;
+
+	//! monitoring-only insert (see monitorFxChain()) and the channel it taps
+	EffectChain m_monitorFxChain;
+	int m_monitorChannelIndex = 0;
 
 	// make sure we have at least num channels
 	void allocateChannelsTo(int num);

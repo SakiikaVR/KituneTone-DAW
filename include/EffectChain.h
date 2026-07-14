@@ -65,6 +65,9 @@ public:
 	void moveUp( Effect * _effect );
 	bool processAudioBuffer(AudioBuffer& buffer);
 
+	void setEnabled( bool enabled ) { m_enabledModel.setValue( enabled ); }
+	bool isEnabled() const { return m_enabledModel.value(); }
+
 	void clear();
 
 

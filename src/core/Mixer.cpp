@@ -214,6 +214,18 @@ void MixerChannel::doProcessing()
 
 		m_stillRunning = m_fxChain.processAudioBuffer(m_buffer);
 
+		// monitoring-only insert: the currently monitored channel's audio passes
+		// through the (single) monitor effect chain while playing back, but it is
+		// skipped when exporting so it never ends up in the rendered file
+		if (m_channelIndex == Engine::mixer()->monitorChannelIndex()
+				&& !Engine::getSong()->isExporting())
+		{
+			if (Engine::mixer()->monitorFxChain()->processAudioBuffer(m_buffer))
+			{
+				m_stillRunning = true;
+			}
+		}
+
 		const auto peakSamples = SampleFrame{m_buffer.absPeakValue(0), m_buffer.absPeakValue(1)};
 		m_peakLeft = std::max(m_peakLeft, peakSamples[0] * v);
 		m_peakRight = std::max(m_peakRight, peakSamples[1] * v);
@@ -233,10 +245,12 @@ Mixer::Mixer() :
 	Model( nullptr ),
 	JournallingObject(),
 	m_mixerChannels(),
-	m_lastSoloed(-1)
+	m_lastSoloed(-1),
+	m_monitorFxChain( this )
 {
 	// create master channel
 	createChannel();
+	m_monitorFxChain.setEnabled( true );
 }
 
 

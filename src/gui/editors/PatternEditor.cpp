@@ -203,9 +203,13 @@ void PatternEditor::updatePosition()
 
 void PatternEditor::updatePixelsPerBar()
 {
-	setPixelsPerBar(m_maxClipLength != 0
-		? (width() - m_trackHeadWidth) * TimePos::ticksPerBar() / m_maxClipLength
-		: (width() - m_trackHeadWidth));
+	// Use a fixed grid (one step = cellWidth px, so a bar = cellWidth *
+	// stepsPerBar px) instead of stretching to the window width. This keeps the
+	// timeline / playhead aligned with the fixed-size clips (see
+	// ClipView::updateLength), so the play position no longer runs off past the
+	// clips into empty space.
+	constexpr int cellWidth = 24;
+	setPixelsPerBar(cellWidth * DefaultStepsPerBar);
 	m_timeLine->setPixelsPerBar(pixelsPerBar());
 }
 

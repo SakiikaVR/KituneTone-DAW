@@ -25,6 +25,7 @@
 #include "TrackContainerView.h"
 
 
+#include <QFileInfo>
 #include <QLayout>
 #include <QMessageBox>
 #include <QMimeData>
@@ -499,6 +500,12 @@ void TrackContainerView::dropEvent( QDropEvent * _de )
 			getPluginFactory()->pluginSupportingExtension(FileItem::extension(value));
 		Instrument * i = it->loadInstrument(piakn.info.name(), &piakn.key);
 		i->loadFile( value );
+		// name the track after the plug-in file (e.g. "Vital") instead of the
+		// generic host name ("VST3" / "VeSTige")
+		if( type == "vstpluginfile" )
+		{
+			it->setName( QFileInfo( value ).completeBaseName() );
+		}
 		//it->toggledInstrumentTrackButton( true );
 		_de->accept();
 	}

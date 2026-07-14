@@ -41,6 +41,7 @@
 #include "GuiApplication.h"
 #include "KeyboardShortcuts.h"
 #include "lmms_math.h"
+#include "MidiClip.h"
 #include "MidiClipView.h"
 #include "PatternClip.h"
 #include "PatternStore.h"
@@ -313,15 +314,37 @@ void ClipView::remove()
  */
 void ClipView::updateLength()
 {
+	// width for the clip's real length (same scale as the song editor); the
+	// std::max keeps clips that don't start/end on a beat visible when zoomed
+	// out (3 px is the minimum to be visible)
+	const int naturalWidth = std::max(
+		static_cast<int>(m_clip->length() * pixelsPerBar() / TimePos::ticksPerBar() + 1), 3);
+
 	if( fixedClips() )
 	{
-		setFixedWidth( parentWidget()->width() );
+		// In the pattern editor clips are laid out on a fixed grid instead of
+		// stretching to the window: one step is cellWidth px, so a bar is
+		// cellWidth * stepsPerBar px. A beat clip is sized to its step count;
+		// every other clip (e.g. a piano-roll melody clip) is sized to its real
+		// length at the same scale, so the two line up.
+		constexpr int cellWidth = 24; // natural step-button width
+		const int barWidth = cellWidth * DefaultStepsPerBar;
+		int w = std::max(
+			static_cast<int>( m_clip->length() * barWidth / TimePos::ticksPerBar() ),
+			cellWidth );
+		if( auto* midiClip = dynamic_cast<MidiClip*>( m_clip ) )
+		{
+			if( midiClip->type() == MidiClip::Type::BeatClip )
+			{
+				const int steps = std::max( 1, midiClip->steps() );
+				w = steps * cellWidth + BORDER_WIDTH * 2;
+			}
+		}
+		setFixedWidth( w );
 	}
 	else
 	{
-		// this std::max function is needed for clips that do not start or end on the beat, otherwise, they "disappear" when zooming to min 
-		// 3 is the minimum width needed to make a clip visible
-		setFixedWidth(std::max(static_cast<int>(m_clip->length() * pixelsPerBar() / TimePos::ticksPerBar() + 1), 3));
+		setFixedWidth( naturalWidth );
 	}
 	m_trackView->trackContainerView()->update();
 }

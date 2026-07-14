@@ -31,6 +31,7 @@
 #include "Plugin.h"
 
 class QTreeWidget;
+class QTreeWidgetItem;
 
 namespace lmms::gui
 {
@@ -50,8 +51,32 @@ private:
 	void updateRootVisibility( int index );
 	void updateRootVisibilities();
 
+	//! scan the VST3 / VST2 plug-in folders and list the installed plug-ins
+	//! directly under the given root as draggable entries
+	void addVstPlugins(QTreeWidgetItem* root, const QStringList& dirs,
+			const QString& extension, bool recurseIntoDirs);
+
 	QWidget * m_view;
 	QTreeWidget * m_descTree;
+};
+
+
+//! A draggable entry for an installed VST plug-in file (a VST3 bundle or a VST2
+//! dll). Dragging it onto a track creates an instrument loaded with the plug-in.
+class VstFileWidget : public QWidget
+{
+public:
+	VstFileWidget( const QString & name, const QString & path, QWidget * parent );
+	QString name() const { return m_name; }
+
+protected:
+	void mousePressEvent( QMouseEvent * me ) override;
+	void paintEvent( QPaintEvent * pe ) override;
+
+private:
+	constexpr static int DEFAULT_HEIGHT{24};
+	QString m_name;
+	QString m_path;
 };
 
 

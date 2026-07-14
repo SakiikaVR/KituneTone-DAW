@@ -93,6 +93,12 @@ public:
 		return m_clipType;
 	}
 
+	//! number of steps in a beat/bassline clip
+	inline int steps() const
+	{
+		return m_steps;
+	}
+
 
 	// next/previous track based on position in the containing track
 	MidiClip * previousMidiClip() const;

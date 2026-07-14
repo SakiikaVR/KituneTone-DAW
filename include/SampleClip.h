@@ -116,6 +116,8 @@ private:
 	std::shared_ptr<const SampleBuffer> m_originalBuffer;
 	float m_stretchFactor = 1.0f;
 	int m_sourceBpm = 0;
+	//! debounce guard for the tempo-follow re-stretch
+	bool m_tempoRestretchPending = false;
 	BoolModel m_recordModel;
 	bool m_isPlaying;
 	int m_startFrameOffset;

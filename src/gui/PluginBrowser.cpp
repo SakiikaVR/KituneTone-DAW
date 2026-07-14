@@ -25,6 +25,12 @@
 #include "PluginBrowser.h"
 
 #include <QHeaderView>
+#include <functional>
+
+#include <QDir>
+#include <QDirIterator>
+#include <QFileInfo>
+#include <QMap>
 #include <QLabel>
 #include <QLineEdit>
 #include <QMenu>
@@ -33,6 +39,7 @@
 #include <QStyleOption>
 #include <QTreeWidget>
 
+#include "ConfigManager.h"
 #include "embed.h"
 #include "Engine.h"
 #include "InstrumentTrack.h"
@@ -125,15 +132,13 @@ void PluginBrowser::onFilterChanged( const QString & filter )
 		for (int itemIndex = 0; itemIndex < itemCount; ++itemIndex)
 		{
 			QTreeWidgetItem * item = root->child( itemIndex );
-			auto descWidget = static_cast<PluginDescWidget*>(m_descTree->itemWidget(item, 0));
-			if (descWidget->name().contains(filter, Qt::CaseInsensitive))
-			{
-				item->setHidden( false );
-			}
-			else
-			{
-				item->setHidden( true );
-			}
+			// the item widget is either a native PluginDescWidget or a scanned
+			// VstFileWidget - fetch the name from whichever it is
+			QWidget* itemWidget = m_descTree->itemWidget(item, 0);
+			QString itemName;
+			if (auto* d = dynamic_cast<PluginDescWidget*>(itemWidget)) { itemName = d->name(); }
+			else if (auto* v = dynamic_cast<VstFileWidget*>(itemWidget)) { itemName = v->name(); }
+			item->setHidden(!itemName.contains(filter, Qt::CaseInsensitive));
 		}
 	}
 }
@@ -170,9 +175,28 @@ void PluginBrowser::addPlugins()
 		}
 	);
 
-	// Add a root node to the tree for native LMMS plugins
+	// Group the VST hosts into their own categories, with VST3 on top, then
+	// VST2, then the native LMMS plugins.
+	const auto vst3Root = addRoot("VST3");
+	vst3Root->setExpanded(true);
+	const auto vst2Root = addRoot("VeSTige");
+	vst2Root->setExpanded(true);
 	const auto lmmsRoot = addRoot("LMMS");
 	lmmsRoot->setExpanded(true);
+
+	// list the installed VST3 / VST2 plug-ins directly under their categories
+	QStringList vst3Dirs;
+	for (const auto& env : {"CommonProgramFiles", "CommonProgramFiles(x86)"})
+	{
+		const auto common = qEnvironmentVariable(env);
+		if (!common.isEmpty()) { vst3Dirs << common + "/VST3"; }
+	}
+	const auto localAppData = qEnvironmentVariable("LOCALAPPDATA");
+	if (!localAppData.isEmpty()) { vst3Dirs << localAppData + "/Programs/Common/VST3"; }
+	addVstPlugins(vst3Root, vst3Dirs, ".vst3", false);
+
+	QStringList vst2Dirs{ ConfigManager::inst()->vstDir(), ConfigManager::inst()->userVstDir() };
+	addVstPlugins(vst2Root, vst2Dirs, ".dll", true);
 
 	// Add all of the descriptors to the tree
 	for (const auto desc : descs)
@@ -195,8 +219,87 @@ void PluginBrowser::addPlugins()
 		}
 		else
 		{
+			// all native plug-ins - including the VST3 and VeSTige host entries
+			// themselves - go under LMMS; the VST3 / VeSTige categories are
+			// filled with the scanned installed plug-ins instead
 			addPlugin(Plugin::Descriptor::SubPluginFeatures::Key(desc, desc->name), lmmsRoot);
 		}
+	}
+}
+
+
+
+
+void PluginBrowser::addVstPlugins(QTreeWidgetItem* root, const QStringList& dirs,
+		const QString& extension, bool recurseIntoDirs)
+{
+	// collect matching plug-in paths (deduplicated, case-insensitive names)
+	QMap<QString, QString> found; // lowercase name -> full path
+
+	// recursive helper: a VST3 plug-in is a ".vst3" file OR bundle directory, so
+	// we must not descend into a matched entry; VST2 (.dll) matches are files.
+	const std::function<void(const QString&, int)> scan =
+		[&](const QString& dirPath, int depth)
+	{
+		QDir dir(dirPath);
+		if (!dir.exists()) { return; }
+		const auto entries = dir.entryInfoList(
+			QDir::Files | QDir::Dirs | QDir::NoDotAndDotDot, QDir::Name);
+		for (const QFileInfo& fi : entries)
+		{
+			if (fi.fileName().endsWith(extension, Qt::CaseInsensitive))
+			{
+				const QString name = fi.completeBaseName();
+				found.insert(name.toLower(), fi.absoluteFilePath());
+			}
+			else if (fi.isDir() && depth > 0)
+			{
+				scan(fi.absoluteFilePath(), depth - 1);
+			}
+		}
+	};
+
+	for (const QString& d : dirs)
+	{
+		if (!d.isEmpty()) { scan(d, recurseIntoDirs ? 4 : 1); }
+	}
+
+	for (auto it = found.constBegin(); it != found.constEnd(); ++it)
+	{
+		const QString name = QFileInfo(it.value()).completeBaseName();
+		auto item = new QTreeWidgetItem();
+		root->addChild(item);
+		m_descTree->setItemWidget(item, 0, new VstFileWidget(name, it.value(), m_descTree));
+	}
+}
+
+
+
+
+VstFileWidget::VstFileWidget( const QString & name, const QString & path, QWidget * parent ) :
+	QWidget( parent ),
+	m_name( name ),
+	m_path( path )
+{
+	setFixedHeight( DEFAULT_HEIGHT );
+	setCursor( Qt::PointingHandCursor );
+	setToolTip( path );
+}
+
+void VstFileWidget::paintEvent( QPaintEvent * )
+{
+	QPainter p( this );
+	QStyleOption o;
+	o.initFrom( this );
+	style()->drawPrimitive( QStyle::PE_Widget, &o, &p, this );
+	p.drawText( 8, 15, m_name );
+}
+
+void VstFileWidget::mousePressEvent( QMouseEvent * me )
+{
+	if ( me->button() == Qt::LeftButton )
+	{
+		new StringPairDrag( "vstpluginfile", m_path, QPixmap(), this );
 	}
 }
 

@@ -25,6 +25,8 @@
 #ifndef LMMS_GUI_MIXER_VIEW_H
 #define LMMS_GUI_MIXER_VIEW_H
 
+#include <functional>
+
 #include <QWidget>
 
 #include "MixerChannelView.h"
@@ -34,16 +36,48 @@
 class QDomDocument;  // IWYU pragma: keep
 class QDomElement;  // IWYU pragma: keep
 class QHBoxLayout;
+class QLabel;
+class QMouseEvent;  // IWYU pragma: keep
 class QStackedLayout;
 class QScrollArea;
 
 namespace lmms
 {
 	class Mixer;
+	class MixerChannel;
 }
 
 namespace lmms::gui
 {
+
+class AutomatableButton;
+class EffectRackView;
+class Fader;
+
+//! Vertical stereo peak meter for the currently selected mixer channel, shown
+//! at the left edge of the mixer with a dB scale (+3 ... -48 dBFS).
+//! Display-only for the level; clicking it selects the monitoring effect chain.
+class CurrentChannelMeter : public QWidget
+{
+public:
+	explicit CurrentChannelMeter(QWidget* parent = nullptr);
+	void setPeaks(float left, float right);
+	void setChannelName(const QString& name);
+	//! called when the meter is clicked (used to select the monitor chain)
+	void setClickHandler(std::function<void()> handler) { m_clickHandler = std::move(handler); }
+	void setSelected(bool selected);
+
+protected:
+	void paintEvent(QPaintEvent* event) override;
+	void mousePressEvent(QMouseEvent* event) override;
+
+private:
+	float m_peakL = 0.f;
+	float m_peakR = 0.f;
+	QString m_name;
+	std::function<void()> m_clickHandler;
+	bool m_selected = false;
+};
 
 class LMMS_EXPORT MixerView
 	: public QWidget
@@ -115,6 +149,9 @@ private:
 	QVector<MixerChannelView*> m_mixerChannelViews;
 
 	MixerChannelView* m_currentMixerChannel;
+
+	CurrentChannelMeter* m_currentMeter = nullptr;
+	EffectRackView* m_monitorRackView = nullptr;
 
 	QScrollArea* channelArea;
 	QHBoxLayout* chLayout;
