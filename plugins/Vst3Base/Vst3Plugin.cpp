@@ -525,9 +525,17 @@ void Vst3Plugin::process(const SampleFrame* in, SampleFrame* out, f_cnt_t frames
 	// alignment with the song's bars depending on where playback started. ARA
 	// playback rendering needs it for the same reason (mapping playback regions
 	// to the correct position).
+	//
+	// Song::processNextBuffer() advances the transport by a whole period BEFORE
+	// the tracks/mixer render, so by the time an effect processes, getFrames()
+	// already points at the END of this block. Subtract the block size so the
+	// context describes the START of the block being processed - otherwise the
+	// sync is one period (e.g. ~6 ms) early, which is audible as a mis-aligned
+	// ducking start on a mixer/effect chain.
 	if (song != nullptr)
 	{
-		m_processContext.projectTimeSamples = static_cast<Steinberg::int64>(song->getFrames());
+		const auto blockStart = static_cast<Steinberg::int64>(song->getFrames()) - frames;
+		m_processContext.projectTimeSamples = blockStart > 0 ? blockStart : 0;
 	}
 	else
 	{
