@@ -31,6 +31,9 @@
 
 class QLabel;
 class QPushButton;
+class QShowEvent;
+class QTabWidget;
+class QVBoxLayout;
 
 namespace lmms
 {
@@ -81,26 +84,36 @@ private:
 namespace gui
 {
 
-class Vst3InstrumentView : public InstrumentViewFixedSize
+class Vst3InstrumentView : public InstrumentView
 {
 	Q_OBJECT
 public:
 	Vst3InstrumentView(Vst3Instrument* instrument, QWidget* parent);
 
+	// resizable so the embedded plug-in GUI can grow the instrument window
+	bool isResizable() const override { return m_resizable; }
+
 protected slots:
 	void openPlugin();
-	void toggleGui();
-	void toggleParams();
 	void updateName();
 
 protected:
 	void modelChanged() override;
+	void showEvent(QShowEvent* event) override;
 
 private:
+	//! embed the plug-in's native GUI and parameter knobs into the tabs
+	void ensureEmbedded();
+	//! grow the instrument window to fit the embedded GUI
+	void fitWindow();
+
 	QLabel* m_nameLabel;
 	QPushButton* m_openButton;
-	QPushButton* m_guiButton;
-	QPushButton* m_paramsButton;
+	QTabWidget* m_tabs = nullptr;
+	QVBoxLayout* m_guiLayout = nullptr;
+	QWidget* m_paramsTab = nullptr;
+	bool m_embedded = false;
+	bool m_resizable = false;
 };
 
 } // namespace gui

@@ -99,9 +99,6 @@ PluginBrowser::PluginBrowser( QWidget * _parent ) :
 
 	// Resize
 	m_descTree->header()->setSectionResizeMode( QHeaderView::ResizeToContents );
-
-	// Hide empty roots
-	updateRootVisibilities();
 }
 
 
@@ -124,66 +121,28 @@ void PluginBrowser::updateRootVisibilities()
 
 void PluginBrowser::onFilterChanged( const QString & filter )
 {
-	int rootCount = m_descTree->topLevelItemCount();
-	for (int rootIndex = 0; rootIndex < rootCount; ++rootIndex)
+	// the plug-ins are a flat list of top-level items (scanned VstFileWidgets)
+	const int itemCount = m_descTree->topLevelItemCount();
+	for (int i = 0; i < itemCount; ++i)
 	{
-		QTreeWidgetItem * root = m_descTree->topLevelItem( rootIndex );
-
-		int itemCount = root->childCount();
-		for (int itemIndex = 0; itemIndex < itemCount; ++itemIndex)
-		{
-			QTreeWidgetItem * item = root->child( itemIndex );
-			// the item widget is either a native PluginDescWidget or a scanned
-			// VstFileWidget - fetch the name from whichever it is
-			QWidget* itemWidget = m_descTree->itemWidget(item, 0);
-			QString itemName;
-			if (auto* d = dynamic_cast<PluginDescWidget*>(itemWidget)) { itemName = d->name(); }
-			else if (auto* v = dynamic_cast<VstFileWidget*>(itemWidget)) { itemName = v->name(); }
-			item->setHidden(!itemName.contains(filter, Qt::CaseInsensitive));
-		}
+		QTreeWidgetItem * item = m_descTree->topLevelItem( i );
+		QWidget* itemWidget = m_descTree->itemWidget(item, 0);
+		QString itemName;
+		if (auto* d = dynamic_cast<PluginDescWidget*>(itemWidget)) { itemName = d->name(); }
+		else if (auto* v = dynamic_cast<VstFileWidget*>(itemWidget)) { itemName = v->name(); }
+		item->setHidden(!itemName.contains(filter, Qt::CaseInsensitive));
 	}
 }
 
 
 void PluginBrowser::addPlugins()
 {
-	// Add a root node to the plugin tree with the specified `label` and return it
-	const auto addRoot = [this](auto label)
-	{
-		const auto root = new QTreeWidgetItem();
-		root->setText(0, label);
-		m_descTree->addTopLevelItem(root);
-		return root;
-	};
-
-	// Add the plugin identified by `key` to the tree under the root node `root`
-	const auto addPlugin = [this](const auto& key, auto root)
-	{
-		const auto item = new QTreeWidgetItem();
-		root->addChild(item);
-		m_descTree->setItemWidget(item, 0, new PluginDescWidget(key, m_descTree));
-	};
-
 	// Remove any existing plugins from the tree
 	m_descTree->clear();
 
-	// Fetch and sort all instrument plugin descriptors
-	auto descs = getPluginFactory()->descriptors(Plugin::Type::Instrument);
-	std::sort(descs.begin(), descs.end(),
-		[](auto d1, auto d2)
-		{
-			return qstricmp(d1->displayName, d2->displayName) < 0;
-		}
-	);
-
-	// VST3 category on top (this is a VST3-only build), then the built-in
-	// LMMS plug-ins (the triangle synth and the VST3 host entry).
-	const auto vst3Root = addRoot("VST3");
-	vst3Root->setExpanded(true);
-	const auto lmmsRoot = addRoot("LMMS");
-	lmmsRoot->setExpanded(true);
-
-	// list the installed VST3 plug-ins directly under the VST3 category
+	// VST3-only build: show the installed / bundled VST3 plug-ins as a single
+	// flat list (no LMMS / VST3 category headers). The bundled TriangleSynth.vst3
+	// lives in the application's own VST3 folder and shows up here too.
 	QStringList vst3Dirs;
 	for (const auto& env : {"CommonProgramFiles", "CommonProgramFiles(x86)"})
 	{
@@ -192,37 +151,9 @@ void PluginBrowser::addPlugins()
 	}
 	const auto localAppData = qEnvironmentVariable("LOCALAPPDATA");
 	if (!localAppData.isEmpty()) { vst3Dirs << localAppData + "/Programs/Common/VST3"; }
-	// the VST3 folder bundled inside the application (e.g. TriangleSynth.vst3)
 	vst3Dirs << QCoreApplication::applicationDirPath() + "/VST3";
-	addVstPlugins(vst3Root, vst3Dirs, ".vst3", false);
 
-	// Add all of the descriptors to the tree
-	for (const auto desc : descs)
-	{
-		if (desc->subPluginFeatures)
-		{
-			// Fetch and sort all subplugins for this plugin descriptor
-			auto subPluginKeys = Plugin::Descriptor::SubPluginFeatures::KeyList{};
-			desc->subPluginFeatures->listSubPluginKeys(desc, subPluginKeys);
-			std::sort(subPluginKeys.begin(), subPluginKeys.end(),
-				[](const auto& l, const auto& r)
-				{
-					return QString::compare(l.displayName(), r.displayName(), Qt::CaseInsensitive) < 0;
-				}
-			);
-
-			// Create a root node for this plugin and add the subplugins under it
-			const auto root = addRoot(desc->displayName);
-			for (const auto& key : subPluginKeys) { addPlugin(key, root); }
-		}
-		else
-		{
-			// native plug-ins (the triangle synth and the VST3 host entry) go
-			// under LMMS; the VST3 category is filled with the scanned installed
-			// plug-ins instead
-			addPlugin(Plugin::Descriptor::SubPluginFeatures::Key(desc, desc->name), lmmsRoot);
-		}
-	}
+	addVstPlugins(m_descTree->invisibleRootItem(), vst3Dirs, ".vst3", false);
 }
 
 

@@ -492,7 +492,8 @@ void InstrumentTrackWindow::updateInstrumentView()
 		m_track->dataChanged(); // Get the text on the trackButton to change
 
 		adjustTabSize(m_instrumentView);
-		m_pianoView->setVisible(m_track->m_instrument->hasNoteInput());
+		// the small on-screen keyboard is hidden (VST3 plug-ins carry their own)
+		m_pianoView->setVisible(false);
 		// adjust window size
 		layout()->invalidate();
 		resize(sizeHint());

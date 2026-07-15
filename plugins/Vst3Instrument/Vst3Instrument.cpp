@@ -25,17 +25,23 @@
 #include <QDomDocument>
 #include <QDomElement>
 #include <QFileInfo>
+#include <QHBoxLayout>
+#include <QIcon>
 #include <QInputDialog>
 #include <QLabel>
 #include <QMutexLocker>
 #include <QPushButton>
+#include <QTabWidget>
 #include <QVBoxLayout>
+
+#include <algorithm>
 
 #include "AudioEngine.h"
 #include "Engine.h"
 #include "FileDialog.h"
 #include "InstrumentPlayHandle.h"
 #include "InstrumentTrack.h"
+#include "InstrumentTrackWindow.h"
 #include "PathUtil.h"
 #include "SampleFrame.h"
 #include "Song.h"
@@ -136,11 +142,8 @@ void Vst3Instrument::loadFile(const QString& file)
 		}
 	}
 
-	if (m_plugin && m_plugin->hasEditor() && instrumentTrack() != nullptr
-			&& !instrumentTrack()->isPreviewMode())
-	{
-		m_plugin->showEditor();
-	}
+	// the GUI is shown embedded in the instrument view's "GUI" tab (see
+	// Vst3InstrumentView), so we do not open a separate editor window here
 
 	emit pluginChanged();
 	emit dataChanged();
@@ -213,11 +216,7 @@ void Vst3Instrument::loadSettings(const QDomElement& element)
 
 	m_plugin->loadState(element);
 	m_plugin->loadParameterModels(element);
-
-	const bool showGui = element.attribute("guivisible").toInt() != 0
-			&& (instrumentTrack() == nullptr || !instrumentTrack()->isPreviewMode());
-	if (showGui) { m_plugin->showEditor(); }
-	else { m_plugin->hideEditor(); }
+	// GUI is shown embedded in the instrument view, not as a separate window
 }
 
 
@@ -244,37 +243,113 @@ namespace gui
 
 
 Vst3InstrumentView::Vst3InstrumentView(Vst3Instrument* instrument, QWidget* parent) :
-	InstrumentViewFixedSize(instrument, parent)
+	InstrumentView(instrument, parent)
 {
-	auto layout = new QVBoxLayout(this);
-	layout->setContentsMargins(16, 16, 16, 16);
-	layout->setSpacing(8);
+	// always resizable so the embedded plug-in GUI can grow the window
+	m_resizable = true;
 
-	auto title = new QLabel(tr("VST3 Host"), this);
-	QFont titleFont = title->font();
-	titleFont.setBold(true);
-	title->setFont(titleFont);
-	layout->addWidget(title);
+	auto outer = new QVBoxLayout(this);
+	outer->setContentsMargins(4, 4, 4, 4);
 
-	m_nameLabel = new QLabel(tr("No plugin loaded"), this);
+	m_tabs = new QTabWidget(this);
+	outer->addWidget(m_tabs);
+
+	// GUI tab: a compact header (name + open button) above the embedded editor
+	auto guiTab = new QWidget(m_tabs);
+	m_guiLayout = new QVBoxLayout(guiTab);
+	m_guiLayout->setContentsMargins(6, 6, 6, 6);
+
+	auto header = new QHBoxLayout();
+	m_nameLabel = new QLabel(tr("No plugin loaded"), guiTab);
 	m_nameLabel->setWordWrap(true);
-	layout->addWidget(m_nameLabel);
-
-	layout->addStretch();
-
-	m_openButton = new QPushButton(tr("Open VST3 plugin..."), this);
+	m_openButton = new QPushButton(tr("Open VST3 plugin..."), guiTab);
 	connect(m_openButton, &QPushButton::clicked, this, &Vst3InstrumentView::openPlugin);
-	layout->addWidget(m_openButton);
+	header->addWidget(m_nameLabel, 1);
+	header->addWidget(m_openButton, 0);
+	m_guiLayout->addLayout(header);
+	m_tabs->addTab(guiTab, tr("GUI"));
 
-	m_guiButton = new QPushButton(tr("Show/hide GUI"), this);
-	connect(m_guiButton, &QPushButton::clicked, this, &Vst3InstrumentView::toggleGui);
-	layout->addWidget(m_guiButton);
-
-	m_paramsButton = new QPushButton(tr("Parameters"), this);
-	connect(m_paramsButton, &QPushButton::clicked, this, &Vst3InstrumentView::toggleParams);
-	layout->addWidget(m_paramsButton);
+	// Parameters tab (filled lazily with the plug-in's knobs)
+	m_paramsTab = new QWidget(m_tabs);
+	auto paramsLayout = new QVBoxLayout(m_paramsTab);
+	paramsLayout->setContentsMargins(0, 0, 0, 0);
+	m_tabs->addTab(m_paramsTab, tr("Parameters"));
 
 	updateName();
+}
+
+
+
+
+void Vst3InstrumentView::showEvent(QShowEvent* event)
+{
+	InstrumentView::showEvent(event);
+	// drop the plug-in-logo window icon (the red square in the title bar)
+	if (auto* w = instrumentTrackWindow()) { w->setWindowIcon(QIcon()); }
+	// embed the native editor the first time the window is shown, so plug-in
+	// GUIs aren't created before the instrument is actually opened
+	ensureEmbedded();
+}
+
+
+
+
+void Vst3InstrumentView::ensureEmbedded()
+{
+	if (m_embedded) { return; }
+	auto m = castModel<Vst3Instrument>();
+	auto p = (m != nullptr) ? m->plugin() : nullptr;
+	if (p == nullptr) { return; }
+	m_embedded = true;
+
+	if (p->hasEditor())
+	{
+		if (QWidget* editor = p->createEmbeddedEditor(m_tabs->widget(0)))
+		{
+			m_guiLayout->addWidget(editor, 1);
+			connect(p, &Vst3Plugin::editorResized, this, &Vst3InstrumentView::fitWindow);
+		}
+	}
+	else
+	{
+		m_guiLayout->addStretch();
+	}
+
+	if (QWidget* params = p->createParameterWidget(m_paramsTab))
+	{
+		m_paramsTab->layout()->addWidget(params);
+	}
+
+	fitWindow();
+}
+
+
+
+
+void Vst3InstrumentView::fitWindow()
+{
+	// Grow the instrument window to fit the embedded GUI. The window sizes this
+	// view (the "Plugin" tab) to (window height - 180) / (window width - 4) via
+	// InstrumentTrackWindow::adjustTabSize, so we size the window from this
+	// view's preferred size plus that fixed chrome, instead of the window's own
+	// sizeHint (which underestimates the deeply-nested plug-in GUI and clips it).
+	auto* w = instrumentTrackWindow();
+	if (w == nullptr) { return; }
+
+	if (layout() != nullptr) { layout()->activate(); }
+	const QSize hint = sizeHint();
+	constexpr int chromeHeight = 180;  // matches adjustTabSize()
+	constexpr int chromeWidth = 8;
+	const int wantW = std::max(w->width(), hint.width() + chromeWidth);
+	const int wantH = std::max(w->height(), hint.height() + chromeHeight);
+	if (wantW != w->width() || wantH != w->height())
+	{
+		w->resize(wantW, wantH);
+		if (w->parentWidget() != nullptr)
+		{
+			w->parentWidget()->resize(w->parentWidget()->sizeHint());
+		}
+	}
 }
 
 
@@ -295,15 +370,11 @@ void Vst3InstrumentView::updateName()
 	auto m = castModel<Vst3Instrument>();
 	if (m != nullptr && m->plugin() != nullptr)
 	{
-		m_nameLabel->setText(m->plugin()->name() + "\n" + m->plugin()->vendor());
-		m_guiButton->setEnabled(true);
-		m_paramsButton->setEnabled(m->plugin()->hasParameters());
+		m_nameLabel->setText(m->plugin()->name() + " - " + m->plugin()->vendor());
 	}
 	else
 	{
 		m_nameLabel->setText(tr("No plugin loaded"));
-		m_guiButton->setEnabled(false);
-		m_paramsButton->setEnabled(false);
 	}
 }
 
@@ -351,31 +422,13 @@ void Vst3InstrumentView::openPlugin()
 	Engine::audioEngine()->requestChangeInModel();
 	m->loadFile(file);
 	Engine::audioEngine()->doneChangeInModel();
+
+	// embed the newly loaded plug-in's GUI/parameters (for a fresh instrument
+	// that had no plug-in when the window was first shown)
+	ensureEmbedded();
 }
 
 
-
-
-void Vst3InstrumentView::toggleGui()
-{
-	auto m = castModel<Vst3Instrument>();
-	if (m != nullptr && m->plugin() != nullptr)
-	{
-		m->plugin()->toggleEditor();
-	}
-}
-
-
-
-
-void Vst3InstrumentView::toggleParams()
-{
-	auto m = castModel<Vst3Instrument>();
-	if (m != nullptr && m->plugin() != nullptr)
-	{
-		m->plugin()->toggleParameterWindow();
-	}
-}
 
 
 } // namespace gui
