@@ -46,6 +46,7 @@
 #include "MixerView.h"
 #include "GuiApplication.h"
 #include "ExportFilter.h"
+#include "Instrument.h"
 #include "InstrumentTrack.h"
 #include "Keymap.h"
 #include "NotePlayHandle.h"
@@ -1084,6 +1085,22 @@ void Song::clearProject()
 
 
 // create new file
+Instrument* Song::loadDefaultInstrument( InstrumentTrack* track )
+{
+	if( track == nullptr ) { return nullptr; }
+	// host the bundled TriangleSynth.vst3 through the VST3 instrument
+	Instrument* instrument = track->loadInstrument( "vst3instrument" );
+	if( instrument != nullptr )
+	{
+		instrument->loadFile( QCoreApplication::applicationDirPath()
+				+ "/VST3/TriangleSynth.vst3" );
+	}
+	return instrument;
+}
+
+
+
+
 void Song::createNewProject()
 {
 
@@ -1114,11 +1131,12 @@ void Song::createNewProject()
 	m_oldFileName = "";
 	setProjectFileName("");
 
-	auto tripleOscTrack = Track::create(Track::Type::Instrument, this);
-	dynamic_cast<InstrumentTrack*>(tripleOscTrack)->loadInstrument("tripleoscillator");
-
-	auto kickerTrack = Track::create(Track::Type::Instrument, Engine::patternStore());
-	dynamic_cast<InstrumentTrack*>(kickerTrack)->loadInstrument("kicker");
+	// VST3-only build: the bundled TriangleSynth.vst3 is the default sound
+	// source, hosted through the VST3 instrument (see loadDefaultInstrument)
+	loadDefaultInstrument(dynamic_cast<InstrumentTrack*>(
+			Track::create(Track::Type::Instrument, this)));
+	loadDefaultInstrument(dynamic_cast<InstrumentTrack*>(
+			Track::create(Track::Type::Instrument, Engine::patternStore())));
 
 	Track::create( Track::Type::Sample, this );
 	Track::create( Track::Type::Pattern, this );

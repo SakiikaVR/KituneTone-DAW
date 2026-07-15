@@ -26,7 +26,9 @@
 #ifndef LMMS_GUI_LMMS_STYLE_H
 #define LMMS_GUI_LMMS_STYLE_H
 
+#include <QColor>
 #include <QFileSystemWatcher>
+#include <QPixmap>
 #include <QProxyStyle>
 
 
@@ -55,6 +57,15 @@ public:
 	int pixelMetric( PixelMetric metric,
 					const QStyleOption * option = 0,
 					const QWidget * widget = 0 ) const override;
+
+	//! Re-read the theme with the accent colour chosen in the settings and
+	//! rebuild the palette, so a theme change applies without a restart.
+	static void applyTheme();
+
+	//! The current theme accent colour (or the default green).
+	static QColor accentColor();
+	//! Return \a pixmap with its green accent pixels re-hued to the accent.
+	static QPixmap tintAccentPixmap(const QPixmap& pixmap);
 
 	static QPalette * s_palette;
 

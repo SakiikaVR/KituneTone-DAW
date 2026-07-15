@@ -34,9 +34,11 @@
 #include <QSpinBox>
 
 #include "AudioEngine.h"
+#include "ColorChooser.h"
 #include "embed.h"
 #include "Engine.h"
 #include "FileDialog.h"
+#include "LmmsStyle.h"
 #include "MainWindow.h"
 #include "MidiSetupWidget.h"
 #include "ProjectJournal.h"
@@ -156,7 +158,10 @@ SetupDialog::SetupDialog(ConfigTab tab_to_open) :
 	m_sf2File(QDir::toNativeSeparators(ConfigManager::inst()->sf2File())),
 #endif
 	m_themeDir(QDir::toNativeSeparators(ConfigManager::inst()->themeDir())),
-	m_splashPicFile(QDir::toNativeSeparators(ConfigManager::inst()->splashPicFile()))
+	m_splashPicFile(QDir::toNativeSeparators(ConfigManager::inst()->splashPicFile())),
+	m_themeAccent(ConfigManager::inst()->value("theme", "accent", QString())),
+	m_themeMode(ConfigManager::inst()->value("theme", "mode", "dark")),
+	m_themeFont(ConfigManager::inst()->value("theme", "font", QString()))
 {
 	setWindowIcon(embed::getIconPixmap("setup_general"));
 	setWindowTitle(tr("Settings"));
@@ -823,28 +828,8 @@ SetupDialog::SetupDialog(ConfigTab tab_to_open) :
 		SLOT(setWorkingDir(const QString&)),
 		SLOT(openWorkingDir()),
 		m_workingDirLineEdit);
-	addPathEntry(tr("VST plugins directory"), m_vstDir,
-		SLOT(setVSTDir(const QString&)),
-		SLOT(openVSTDir()),
-		m_vstDirLineEdit);
-	addPathEntry(tr("LADSPA plugins directories"), m_ladspaDir,
-		SLOT(setLADSPADir(const QString&)),
-		SLOT(openLADSPADir()),
-		m_ladspaDirLineEdit, "add_folder");
-	addPathEntry(tr("SF2 directory"), m_sf2Dir,
-		SLOT(setSF2Dir(const QString&)),
-		SLOT(openSF2Dir()),
-		m_sf2DirLineEdit);
-#ifdef LMMS_HAVE_FLUIDSYNTH
-	addPathEntry(tr("Default SF2"), m_sf2File,
-		SLOT(setSF2File(const QString&)),
-		SLOT(openSF2File()),
-		m_sf2FileLineEdit);
-#endif
-	addPathEntry(tr("GIG directory"), m_gigDir,
-		SLOT(setGIGDir(const QString&)),
-		SLOT(openGIGDir()),
-		m_gigDirLineEdit);
+	// VST3-only build: the VST2 / LADSPA / SF2 / GIG plug-in directory settings
+	// are gone since those plug-in formats are no longer supported.
 	addPathEntry(tr("Theme directory"), m_themeDir,
 		SLOT(setThemeDir(const QString&)),
 		SLOT(openThemeDir()),
@@ -864,6 +849,79 @@ SetupDialog::SetupDialog(ConfigTab tab_to_open) :
 	paths_layout->addWidget(pathsScroll, 1);
 	paths_layout->addStretch();
 
+
+	// Theme widget - recolour the UI accent with presets or a custom colour
+	// (the interface layout stays the same).
+	auto theme_w = new QWidget(settings_w);
+	auto theme_layout = new QVBoxLayout(theme_w);
+	theme_layout->setSpacing(10);
+	theme_layout->setContentsMargins(0, 0, 0, 0);
+	labelWidget(theme_w, tr("Theme"));
+
+	auto themeGroupBox = new QGroupBox(tr("Accent color"), theme_w);
+	auto themeGroupLayout = new QVBoxLayout(themeGroupBox);
+
+	auto themeInfo = new QLabel(
+			tr("Keep the same interface but recolor its accent. "
+			"Choose a preset or pick your own color."), themeGroupBox);
+	themeInfo->setWordWrap(true);
+	themeGroupLayout->addWidget(themeInfo);
+
+	themeGroupLayout->addWidget(new QLabel(tr("Accent:"), themeGroupBox));
+	m_themePresetCombo = new QComboBox(themeGroupBox);
+	m_themePresetCombo->addItem(tr("Default (水色 / light blue)"), QString());
+	m_themePresetCombo->addItem(tr("Green"), QStringLiteral("#1de276"));
+	m_themePresetCombo->addItem(tr("Cute (pink)"), QStringLiteral("#ff77c8"));
+	m_themePresetCombo->addItem(tr("Colorful (purple)"), QStringLiteral("#b06bff"));
+	m_themePresetCombo->addItem(tr("Custom..."), QStringLiteral("custom"));
+	themeGroupLayout->addWidget(m_themePresetCombo);
+
+	auto themeColorRow = new QHBoxLayout();
+	auto themeColorBtn = new QPushButton(tr("Choose custom color..."), themeGroupBox);
+	m_themeSwatch = new QLabel(themeGroupBox);
+	m_themeSwatch->setFixedSize(48, 22);
+	themeColorRow->addWidget(themeColorBtn);
+	themeColorRow->addWidget(m_themeSwatch);
+	themeColorRow->addStretch();
+	themeGroupLayout->addLayout(themeColorRow);
+
+	theme_layout->addWidget(themeGroupBox);
+	theme_layout->addStretch();
+
+	auto updateThemeSwatch = [this]() {
+		const QString col = m_themeAccent.isEmpty()
+				? QStringLiteral("#5ecfe8") : m_themeAccent;
+		m_themeSwatch->setStyleSheet("background:" + col + ";border:1px solid #000;");
+	};
+
+	// restore the combo from the stored accent (preset match, else Custom)
+	{
+		int idx = m_themePresetCombo->findData(m_themeAccent);
+		if (idx < 0) { idx = m_themeAccent.isEmpty() ? 0 : m_themePresetCombo->count() - 1; }
+		m_themePresetCombo->setCurrentIndex(idx);
+	}
+	updateThemeSwatch();
+
+	connect(m_themePresetCombo, QOverload<int>::of(&QComboBox::currentIndexChanged),
+			this, [this, updateThemeSwatch](int idx) {
+		const QString data = m_themePresetCombo->itemData(idx).toString();
+		if (data != QLatin1String("custom")) { m_themeAccent = data; }
+		updateThemeSwatch();
+		showRestartWarning();
+	});
+
+	connect(themeColorBtn, &QPushButton::clicked, this, [this, updateThemeSwatch]() {
+		const QColor initial = m_themeAccent.isEmpty()
+				? QColor("#5ecfe8") : QColor(m_themeAccent);
+		const QColor chosen = ColorChooser{this}.getColor(initial);
+		if (!chosen.isValid()) { return; }
+		m_themeAccent = chosen.name();
+		m_themePresetCombo->setCurrentIndex(m_themePresetCombo->count() - 1); // Custom
+		updateThemeSwatch();
+		showRestartWarning();
+	});
+
+
 	// Add all main widgets to the layout of the settings widget
 	// This is needed so that we automatically get the correct sizes.
 	settingsLayout->addWidget(general_w);
@@ -871,6 +929,7 @@ SetupDialog::SetupDialog(ConfigTab tab_to_open) :
 	settingsLayout->addWidget(audio_w);
 	settingsLayout->addWidget(midi_w);
 	settingsLayout->addWidget(paths_w);
+	settingsLayout->addWidget(theme_w);
 
 	// Major tabs ordering.
 	m_tabBar->addTab(general_w,
@@ -886,8 +945,11 @@ SetupDialog::SetupDialog(ConfigTab tab_to_open) :
 			tr("MIDI"), 3, false, true, false)->setIcon(
 					embed::getIconPixmap("setup_midi"));
 	m_tabBar->addTab(paths_w,
-			tr("Paths"), 4, true, true, false)->setIcon(
+			tr("Paths"), 4, false, true, false)->setIcon(
 					embed::getIconPixmap("setup_directories"));
+	m_tabBar->addTab(theme_w,
+			tr("Theme"), 5, true, true, false)->setIcon(
+					embed::getIconPixmap("colorize"));
 
 	m_tabBar->setActiveTab(static_cast<int>(tab_to_open));
 
@@ -1028,6 +1090,12 @@ void SetupDialog::accept()
 	ConfigManager::inst()->setGIGDir(QDir::fromNativeSeparators(m_gigDir));
 	ConfigManager::inst()->setThemeDir(QDir::fromNativeSeparators(m_themeDir));
 	ConfigManager::inst()->setSplashPicFile(QDir::fromNativeSeparators(m_splashPicFile));
+
+	// store and apply the chosen theme accent colour (empty = default green)
+	ConfigManager::inst()->setValue("theme", "accent", m_themeAccent);
+	ConfigManager::inst()->setValue("theme", "mode", "dark");
+	ConfigManager::inst()->setValue("theme", "font", "");
+	LmmsStyle::applyTheme();
 
 	// Tell all audio-settings-widgets to save their settings.
 	for(AswMap::iterator it = m_audioIfaceSetupWidgets.begin();

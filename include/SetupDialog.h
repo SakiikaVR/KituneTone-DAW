@@ -202,6 +202,15 @@ private:
 	QString m_themeDir;
 	QString m_splashPicFile;
 
+	// theme accent colour (empty = the default green); recolours the UI accent
+	QString m_themeAccent;
+	// theme mode: "dark" (default) or "light"
+	QString m_themeMode;
+	// UI font: "zenmaru" uses Zen Maru Gothic for all text, "" uses Noto Sans
+	QString m_themeFont;
+	QComboBox * m_themePresetCombo;
+	QLabel * m_themeSwatch;
+
 	QLineEdit * m_workingDirLineEdit;
 	QLineEdit * m_vstDirLineEdit;
 	QLineEdit * m_themeDirLineEdit;

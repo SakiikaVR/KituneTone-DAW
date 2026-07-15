@@ -431,10 +431,8 @@ void MainWindow::finalize()
 
 
 	// window-toolbar
-	auto song_editor_window = new ToolButton(embed::getIconPixmap("songeditor"), tr("Song Editor") + " (Ctrl+1)", this,
-		SLOT(toggleSongEditorWin()), m_toolBar);
-	song_editor_window->setShortcut(keySequence(Qt::CTRL, Qt::Key_1));
-
+	// The Song Editor is a fixed, always-visible panel in this fork, so its
+	// toggle button is omitted.
 	auto pattern_editor_window = new ToolButton(embed::getIconPixmap("pattern_track_btn"),
 		tr("Pattern Editor") + " (Ctrl+2)", this, SLOT(togglePatternEditorWin()), m_toolBar);
 	pattern_editor_window->setShortcut(keySequence(Qt::CTRL, Qt::Key_2));
@@ -459,13 +457,12 @@ void MainWindow::finalize()
 		tr("Show/hide project notes") + " (Ctrl+7)", this, SLOT(toggleProjectNotesWin()), m_toolBar);
 	project_notes_window->setShortcut(keySequence(Qt::CTRL, Qt::Key_7));
 
-	m_toolBarLayout->addWidget( song_editor_window, 1, 1 );
-	m_toolBarLayout->addWidget( pattern_editor_window, 1, 2 );
-	m_toolBarLayout->addWidget( piano_roll_window, 1, 3 );
-	m_toolBarLayout->addWidget( automation_editor_window, 1, 4 );
-	m_toolBarLayout->addWidget( mixer_window, 1, 5 );
-	m_toolBarLayout->addWidget( controllers_window, 1, 6 );
-	m_toolBarLayout->addWidget( project_notes_window, 1, 7 );
+	m_toolBarLayout->addWidget( pattern_editor_window, 1, 1 );
+	m_toolBarLayout->addWidget( piano_roll_window, 1, 2 );
+	m_toolBarLayout->addWidget( automation_editor_window, 1, 3 );
+	m_toolBarLayout->addWidget( mixer_window, 1, 4 );
+	m_toolBarLayout->addWidget( controllers_window, 1, 5 );
+	m_toolBarLayout->addWidget( project_notes_window, 1, 6 );
 	m_toolBarLayout->setColumnStretch( 100, 1 );
 
 	// setup-dialog opened before?

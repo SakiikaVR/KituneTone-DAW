@@ -27,6 +27,7 @@
 #include <QHeaderView>
 #include <functional>
 
+#include <QCoreApplication>
 #include <QDir>
 #include <QDirIterator>
 #include <QFileInfo>
@@ -175,16 +176,14 @@ void PluginBrowser::addPlugins()
 		}
 	);
 
-	// Group the VST hosts into their own categories, with VST3 on top, then
-	// VST2, then the native LMMS plugins.
+	// VST3 category on top (this is a VST3-only build), then the built-in
+	// LMMS plug-ins (the triangle synth and the VST3 host entry).
 	const auto vst3Root = addRoot("VST3");
 	vst3Root->setExpanded(true);
-	const auto vst2Root = addRoot("VeSTige");
-	vst2Root->setExpanded(true);
 	const auto lmmsRoot = addRoot("LMMS");
 	lmmsRoot->setExpanded(true);
 
-	// list the installed VST3 / VST2 plug-ins directly under their categories
+	// list the installed VST3 plug-ins directly under the VST3 category
 	QStringList vst3Dirs;
 	for (const auto& env : {"CommonProgramFiles", "CommonProgramFiles(x86)"})
 	{
@@ -193,10 +192,9 @@ void PluginBrowser::addPlugins()
 	}
 	const auto localAppData = qEnvironmentVariable("LOCALAPPDATA");
 	if (!localAppData.isEmpty()) { vst3Dirs << localAppData + "/Programs/Common/VST3"; }
+	// the VST3 folder bundled inside the application (e.g. TriangleSynth.vst3)
+	vst3Dirs << QCoreApplication::applicationDirPath() + "/VST3";
 	addVstPlugins(vst3Root, vst3Dirs, ".vst3", false);
-
-	QStringList vst2Dirs{ ConfigManager::inst()->vstDir(), ConfigManager::inst()->userVstDir() };
-	addVstPlugins(vst2Root, vst2Dirs, ".dll", true);
 
 	// Add all of the descriptors to the tree
 	for (const auto desc : descs)
@@ -219,9 +217,9 @@ void PluginBrowser::addPlugins()
 		}
 		else
 		{
-			// all native plug-ins - including the VST3 and VeSTige host entries
-			// themselves - go under LMMS; the VST3 / VeSTige categories are
-			// filled with the scanned installed plug-ins instead
+			// native plug-ins (the triangle synth and the VST3 host entry) go
+			// under LMMS; the VST3 category is filled with the scanned installed
+			// plug-ins instead
 			addPlugin(Plugin::Descriptor::SubPluginFeatures::Key(desc, desc->name), lmmsRoot);
 		}
 	}

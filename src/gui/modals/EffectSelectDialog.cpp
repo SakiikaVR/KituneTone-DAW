@@ -106,29 +106,8 @@ EffectSelectDialog::EffectSelectDialog(QWidget* parent) :
 
 	QHBoxLayout* mainLayout = new QHBoxLayout(this);
 
-	QVBoxLayout* leftSectionLayout = new QVBoxLayout();
-
-	QStringList buttonLabels = { tr("All"), "LMMS", "LADSPA", "LV2", "VST" };
-	QStringList buttonSearchString = { "", "LMMS", "LADSPA", "LV2", "VST" };
-
-	for (int i = 0; i < buttonLabels.size(); ++i)
-	{
-		const QString& label = buttonLabels[i];
-		const QString& searchString = buttonSearchString[i];
-
-		QPushButton* button = new QPushButton(label, this);
-		button->setFixedSize(50, 50);
-		button->setFocusPolicy(Qt::NoFocus);
-		leftSectionLayout->addWidget(button);
-
-		connect(button, &QPushButton::clicked, this, [this, searchString] {
-			m_model.setEffectTypeFilter(searchString);
-			updateSelection();
-		});
-	}
-
-	leftSectionLayout->addStretch();// Add stretch to the button layout to push buttons to the top
-	mainLayout->addLayout(leftSectionLayout);
+	// This is a VST3-only build, so the per-format category filter buttons
+	// (All / LMMS / LADSPA / LV2 / VST) are gone - every effect is a VST3.
 
 	m_filterEdit = new QLineEdit(this);
 	connect(m_filterEdit, &QLineEdit::textChanged, this, [this](const QString& text) {

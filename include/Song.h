@@ -48,6 +48,8 @@ namespace lmms
 {
 
 class AutomationTrack;
+class Instrument;
+class InstrumentTrack;
 class Keymap;
 class MidiClip;
 class SampleClip;
@@ -252,6 +254,11 @@ public:
 	// file management
 	void createNewProject();
 	void createNewProjectFromTemplate( const QString & templ );
+
+	//! Load the bundled default synth (TriangleSynth.vst3, hosted via the VST3
+	//! instrument) onto the given track. Used for new projects and MIDI import
+	//! so there is always a usable sound source in this VST3-only build.
+	static Instrument* loadDefaultInstrument( InstrumentTrack* track );
 	void loadProject( const QString & filename );
 	bool guiSaveProject();
 	bool guiSaveProjectAs(const QString & filename);

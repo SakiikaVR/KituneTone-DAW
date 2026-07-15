@@ -132,6 +132,13 @@ public:
 	void toggleEditor();
 	bool editorVisible() const;
 
+	//! Create the plug-in's native editor embedded inside \a parent (instead of
+	//! a separate workspace window), e.g. to place it in a tab. Returns the
+	//! widget to add to a layout, or nullptr if the plug-in has no editor / one
+	//! is already open. The plug-in view detaches automatically when the widget
+	//! is destroyed. Emits editorResized() whenever the plug-in reports a size.
+	QWidget* createEmbeddedEditor(QWidget* parent);
+
 	//! Expose the plug-in's automatable parameters as LMMS FloatModels
 	//! (parented to the given LMMS instrument/effect model) so they can be
 	//! automated and controller-mapped. Call once after loading.
@@ -139,6 +146,11 @@ public:
 	bool hasParameters() const { return !m_params.empty(); }
 	//! Show/hide a window of LMMS knobs bound to the parameter models.
 	void toggleParameterWindow();
+	//! Build an embeddable widget of LMMS knobs bound to the parameter models
+	//! (a scroll area with a reflowing grid), so callers can place the parameter
+	//! list inside e.g. a tab instead of a separate window. Returns nullptr when
+	//! the plug-in has no automatable parameters.
+	QWidget* createParameterWidget(QWidget* parent = nullptr);
 	//! Persist parameter automation/controller connections into the project.
 	void saveParameterModels(QDomDocument& doc, QDomElement& element);
 	void loadParameterModels(const QDomElement& element);
@@ -164,6 +176,9 @@ public:
 
 signals:
 	void editorClosed();
+	//! emitted (GUI thread) whenever the plug-in reports a new editor size, so
+	//! an embedding container can resize itself to fit
+	void editorResized();
 
 private:
 	bool load(const QString& path, const QString& uid);
@@ -240,6 +255,7 @@ private:
 	Steinberg::IPtr<Steinberg::IPlugView> m_view;
 	QWidget* m_editorWidget = nullptr;
 	bool m_editorCreationTried = false;
+	bool m_editorEmbedded = false;   //!< editor lives in a caller's container
 };
 
 

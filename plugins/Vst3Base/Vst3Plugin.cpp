@@ -145,6 +145,11 @@ public:
 		const int lw = dpr > 0. ? qRound(w / dpr) : w;
 		const int lh = dpr > 0. ? qRound(h / dpr) : h;
 
+		// remember the plug-in's preferred size so sizeHint() reports it even
+		// for resizable views (whose container has no fixed size afterwards);
+		// an embedding container relies on this to size itself correctly
+		m_pluginSize = QSize(lw, lh);
+
 		// adopt the exact plug-in size while the container is pinned to it
 		m_container->setFixedSize(lw, lh);
 		adjustSize();
@@ -171,6 +176,21 @@ public:
 			win->resize(decoration + QSize(lw, lh));
 			if (fixed) { win->setFixedSize(win->size()); }
 		}
+
+		// let an embedding container (e.g. a tab in the effect dialog) resize
+		// itself to the new plug-in size; harmless for the standalone window
+		emit m_plugin->editorResized();
+	}
+
+	//! forget the plug-in view (it has been detached/destroyed elsewhere) so
+	//! later resize events don't dereference a dangling pointer
+	void clearView() { m_view = nullptr; }
+
+	//! report the plug-in's preferred size so layouts / embedding containers
+	//! size to the actual editor even when the container is not fixed-size
+	QSize sizeHint() const override
+	{
+		return m_pluginSize.isValid() ? m_pluginSize : QWidget::sizeHint();
 	}
 
 protected:
@@ -200,6 +220,7 @@ private:
 	Vst3Plugin* m_plugin;
 	Steinberg::IPlugView* m_view;
 	QWidget* m_container = nullptr;
+	QSize m_pluginSize;   //!< plug-in's preferred size in logical pixels
 };
 
 
@@ -927,6 +948,78 @@ void Vst3Plugin::showEditor()
 
 
 
+QWidget* Vst3Plugin::createEmbeddedEditor(QWidget* parent)
+{
+	using namespace Steinberg;
+
+	if (m_failed || !m_controller || gui::getGUI() == nullptr) { return nullptr; }
+	// only support embedding when no editor is open yet
+	if (m_editorWidget != nullptr) { return nullptr; }
+
+	m_view = owned(m_controller->createView(Vst::ViewType::kEditor));
+	m_editorCreationTried = true;
+	if (!m_view) { return nullptr; }
+
+	auto widget = new Vst3EditorWidget(this, m_view.get());
+	widget->setParent(parent);
+
+	ViewRect size = {};
+	int w = 640, h = 480;
+	if (m_view->getSize(&size) == kResultTrue)
+	{
+		w = size.getWidth();
+		h = size.getHeight();
+	}
+
+	widget->setPluginSize(w, h, m_view->canResize() != kResultTrue);
+
+	m_view->setFrame(this);
+	// set before attached(): plug-ins report their real size via resizeView()
+	// while attaching, which must not be rejected
+	m_editorWidget = widget;
+	m_editorEmbedded = true;
+	if (m_view->attached(reinterpret_cast<void*>(widget->container()->winId()),
+			kPlatformTypeHWND) != kResultTrue)
+	{
+		m_view->setFrame(nullptr);
+		m_view = nullptr;
+		m_editorWidget = nullptr;
+		m_editorEmbedded = false;
+		delete widget;
+		return nullptr;
+	}
+
+	// show the native window so the plug-in actually paints (some plug-ins,
+	// e.g. Ozone, only render once their window is visible), then re-apply the
+	// size since it may have changed while attaching
+	widget->show();
+	if (m_view->getSize(&size) == kResultTrue)
+	{
+		w = size.getWidth();
+		h = size.getHeight();
+	}
+	widget->setPluginSize(w, h, m_view->canResize() != kResultTrue);
+
+	// when the embedding widget goes away (dialog/effect closed), detach the
+	// plug-in view so we never touch a dead HWND
+	connect(widget, &QObject::destroyed, this, [this]()
+	{
+		if (m_view)
+		{
+			m_view->removed();
+			m_view->setFrame(nullptr);
+			m_view = nullptr;
+		}
+		m_editorWidget = nullptr;
+		m_editorEmbedded = false;
+	});
+
+	return widget;
+}
+
+
+
+
 void Vst3Plugin::hideEditor()
 {
 	if (m_editorWidget != nullptr)
@@ -965,11 +1058,22 @@ void Vst3Plugin::destroyEditor()
 	}
 	if (m_editorWidget != nullptr)
 	{
-		// delete the wrapping subwindow (which owns the widget), or the bare
-		// widget if it was never added to the workspace
-		delete static_cast<Vst3EditorWidget*>(m_editorWidget)->windowWidget();
+		auto* editor = static_cast<Vst3EditorWidget*>(m_editorWidget);
+		if (m_editorEmbedded)
+		{
+			// the embedding container (e.g. the effect dialog) owns the widget;
+			// just tell it the view is gone so its resize events stay safe
+			editor->clearView();
+		}
+		else
+		{
+			// delete the wrapping subwindow (which owns the widget), or the bare
+			// widget if it was never added to the workspace
+			delete editor->windowWidget();
+		}
 		m_editorWidget = nullptr;
 	}
+	m_editorEmbedded = false;
 }
 
 
@@ -1336,20 +1440,11 @@ void Vst3Plugin::loadParameterModels(const QDomElement& element)
 
 
 
-void Vst3Plugin::toggleParameterWindow()
+QWidget* Vst3Plugin::createParameterWidget(QWidget* parent)
 {
-	if (gui::getGUI() == nullptr || m_params.empty()) { return; }
+	if (m_params.empty()) { return nullptr; }
 
-	if (m_paramWindow != nullptr)
-	{
-		auto win = m_paramWindow->parentWidget() ? m_paramWindow->parentWidget() : m_paramWindow;
-		win->setVisible(!win->isVisible());
-		if (win->isVisible()) { win->raise(); }
-		return;
-	}
-
-	auto* content = new QWidget;
-	content->setWindowTitle(name() + tr(" - Parameters"));
+	auto* content = new QWidget(parent);
 	auto* outer = new QVBoxLayout(content);
 	outer->setContentsMargins(0, 0, 0, 0);
 
@@ -1358,8 +1453,8 @@ void Vst3Plugin::toggleParameterWindow()
 	scroll->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
 	outer->addWidget(scroll);
 
-	// knobs in a reflowing layout: columns follow the window width, and the
-	// last touched parameter is moved to the front
+	// knobs in a reflowing layout: columns follow the width, and the last
+	// touched parameter is moved to the front
 	auto* grid = new QWidget;
 	m_paramFlow = new FlowLayout(grid);
 	m_paramKnobs.assign(m_params.size(), nullptr);
@@ -1373,14 +1468,41 @@ void Vst3Plugin::toggleParameterWindow()
 	}
 	scroll->setWidget(grid);
 
+	// forget the layout/knobs when this widget is destroyed so bringParamToFront
+	// does not touch dangling pointers
+	connect(content, &QObject::destroyed, this, [this]() {
+		m_paramFlow = nullptr;
+		m_paramKnobs.clear();
+	});
+	return content;
+}
+
+
+
+
+void Vst3Plugin::toggleParameterWindow()
+{
+	if (gui::getGUI() == nullptr || m_params.empty()) { return; }
+
+	if (m_paramWindow != nullptr)
+	{
+		auto win = m_paramWindow->parentWidget() ? m_paramWindow->parentWidget() : m_paramWindow;
+		win->setVisible(!win->isVisible());
+		if (win->isVisible()) { win->raise(); }
+		return;
+	}
+
+	auto* content = createParameterWidget();
+	if (content == nullptr) { return; }
+	content->setWindowTitle(name() + tr(" - Parameters"));
+
 	auto* subWindow = gui::getGUI()->mainWindow()->addWindowedWidget(content);
 	subWindow->resize(560, 420);
 	m_paramWindow = content;
-	// forget the layout/knobs when the window is destroyed
+	// forget the window when it is destroyed (the knob cleanup is handled by
+	// createParameterWidget's own destroyed handler)
 	connect(content, &QObject::destroyed, this, [this]() {
 		m_paramWindow = nullptr;
-		m_paramFlow = nullptr;
-		m_paramKnobs.clear();
 	});
 	subWindow->show();
 	content->show();

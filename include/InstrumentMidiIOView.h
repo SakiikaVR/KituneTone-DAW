@@ -29,6 +29,7 @@
 #include <QWidget>
 
 #include "ModelView.h"
+#include "lmms_export.h"
 
 class QToolButton;
 
@@ -45,7 +46,7 @@ class LcdSpinBox;
 class LedCheckBox;
 
 
-class InstrumentMidiIOView : public QWidget, public ModelView
+class LMMS_EXPORT InstrumentMidiIOView : public QWidget, public ModelView
 {
 	Q_OBJECT
 public:

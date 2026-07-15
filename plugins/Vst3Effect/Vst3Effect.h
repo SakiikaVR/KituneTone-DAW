@@ -30,9 +30,14 @@
 #include "Effect.h"
 #include "EffectControls.h"
 #include "EffectControlDialog.h"
+#include "MidiEventProcessor.h"
+#include "MidiPort.h"
 
 class QLabel;
 class QPushButton;
+class QShowEvent;
+class QTabWidget;
+class QVBoxLayout;
 
 namespace lmms
 {
@@ -70,7 +75,7 @@ private:
 };
 
 
-class Vst3Effect : public Effect
+class Vst3Effect : public Effect, public MidiEventProcessor
 {
 public:
 	Vst3Effect(Model* parent, const Descriptor::SubPluginFeatures::Key* key);
@@ -81,6 +86,19 @@ public:
 	EffectControls* controls() override { return &m_controls; }
 
 	Vst3Plugin* plugin() const { return m_plugin.get(); }
+
+	//! MIDI in/out routing port for the hosted plug-in (disabled by default).
+	//! Enabling input feeds MIDI from the internal bus / devices into the
+	//! effect's plug-in; enabling output routes MIDI the plug-in emits back out.
+	MidiPort* midiPort() { return &m_midiPort; }
+
+	//! MidiEventProcessor: deliver an incoming MIDI event to the plug-in.
+	void processInEvent(const MidiEvent& event, const TimePos& time = TimePos(),
+			f_cnt_t offset = 0) override;
+	//! MidiEventProcessor: the plug-in's own output is routed through the port
+	//! directly, so this end is a no-op.
+	void processOutEvent(const MidiEvent& event, const TimePos& time = TimePos(),
+			f_cnt_t offset = 0) override;
 
 	//! Locate the sample track this effect is on and expose its clips to the
 	//! plug-in via ARA. Returns the number of audio regions set up (0 = failed).
@@ -101,6 +119,7 @@ private:
 	QMutex m_pluginMutex;
 	EffectKey m_key;
 	Vst3EffectControls m_controls;
+	MidiPort m_midiPort;
 	QPointer<SampleTrack> m_watchedTrack;
 	bool m_araSyncPending = false;
 
@@ -117,13 +136,23 @@ class Vst3EffectControlDialog : public EffectControlDialog
 public:
 	Vst3EffectControlDialog(Vst3EffectControls* controls);
 
-	// the "UI" button toggles the plugin's native editor window directly
-	// instead of showing this dialog
+	// this is a normal (tabbed) dialog, not an external UI toggle
 	bool togglesExternalUi() const override;
 	void toggleExternalUi() override;
 
+protected:
+	void showEvent(QShowEvent* event) override;
+
 private:
 	Vst3Plugin* plugin() const;
+	//! lazily embed the plug-in's native editor into the GUI tab on first show
+	void ensureEmbeddedEditor();
+	//! grow the enclosing workspace window to fit the current tab contents
+	void fitWindowToContents();
+
+	QTabWidget* m_tabs = nullptr;
+	QVBoxLayout* m_guiLayout = nullptr;
+	bool m_editorTried = false;
 };
 
 } // namespace gui

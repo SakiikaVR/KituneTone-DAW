@@ -47,6 +47,7 @@
 #include "Knob.h"
 #include "LcdWidget.h"
 #include "lmms_math.h"
+#include "LmmsStyle.h"
 #include "Mixer.h"
 #include "MixerView.h"
 #include "PeakIndicator.h"
@@ -202,29 +203,48 @@ void MixerChannelView::paintEvent(QPaintEvent*)
 	static constexpr auto outerBorderSize = 1;
 
 	const auto channel = mixerChannel();
-	const auto isActive = m_mixerView->currentMixerChannel() == this;
+	// not active while the "Current" monitor is the active selection, so the
+	// channel highlight and the monitor selection are mutually exclusive
+	const auto isActive = m_mixerView->currentMixerChannel() == this
+		&& !m_mixerView->monitorSelected();
 	const auto width = rect().width();
 	const auto height = rect().height();
 	auto painter = QPainter{this};
 
+	// background and borders are always drawn in the normal (non-active) style;
+	// selection is shown *only* by the accent border below - no fill highlight
 	if (channel->color().has_value() && !channel->m_muteModel.value())
 	{
-		painter.fillRect(rect(), channel->color()->darker(isActive ? 120 : 150));
+		painter.fillRect(rect(), channel->color()->darker(150));
 	}
-	else { painter.fillRect(rect(), isActive ? backgroundActive().color() : painter.background().color()); }
+	else { painter.fillRect(rect(), painter.background().color()); }
 
 	// inner border
-	painter.setPen(isActive ? strokeInnerActive() : strokeInnerInactive());
+	painter.setPen(strokeInnerInactive());
 	painter.drawRect(1, 1, width - innerBorderSize, height - innerBorderSize);
 
 	// outer border
-	painter.setPen(isActive ? strokeOuterActive() : strokeOuterInactive());
+	painter.setPen(strokeOuterInactive());
 	painter.drawRect(0, 0, width - outerBorderSize, height - outerBorderSize);
+
+	// the selected channel is marked by a theme-accent border only (matching
+	// the "Current" monitor's highlight); the two are mutually exclusive
+	if (isActive)
+	{
+		painter.setPen(QPen(LmmsStyle::accentColor(), 2));
+		painter.drawRect(1, 1, width - innerBorderSize, height - innerBorderSize);
+	}
 }
 
 void MixerChannelView::mousePressEvent(QMouseEvent*)
 {
-	if (m_mixerView->currentMixerChannel() != this) { m_mixerView->setCurrentMixerChannel(this); }
+	// re-select even when this is already the current channel but the "Current"
+	// monitor holds the selection, so clicking a channel takes the highlight
+	// back from the monitor
+	if (m_mixerView->currentMixerChannel() != this || m_mixerView->monitorSelected())
+	{
+		m_mixerView->setCurrentMixerChannel(this);
+	}
 }
 
 void MixerChannelView::mouseDoubleClickEvent(QMouseEvent*)

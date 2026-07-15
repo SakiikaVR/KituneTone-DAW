@@ -30,6 +30,7 @@
 
 #include "DeprecationHelper.h"
 #include "embed.h"
+#include "LmmsStyle.h"
 #include "FontHelper.h"
 
 namespace lmms::gui
@@ -90,7 +91,10 @@ void LedCheckBox::setLedColor(LedColor color)
 {
 	setCheckable( true );
 
-	m_ledOnPixmap = embed::getIconPixmap(names[static_cast<std::size_t>(color)].toUtf8().constData());
+	// the green LED follows the theme accent (tint only rehues green pixels, so
+	// the yellow/red LEDs are unaffected)
+	m_ledOnPixmap = LmmsStyle::tintAccentPixmap(
+			embed::getIconPixmap(names[static_cast<std::size_t>(color)].toUtf8().constData()));
 	m_ledOffPixmap = embed::getIconPixmap("led_off");
 
 	if (m_legacyMode){ setFont(adjustedToPixelSize(font(), DEFAULT_FONT_SIZE)); }

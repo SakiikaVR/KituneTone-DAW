@@ -1,6 +1,7 @@
 #include "SendButtonIndicator.h"
 
 #include "Engine.h"
+#include "LmmsStyle.h"
 #include "Mixer.h"
 #include "MixerChannelView.h"
 #include "MixerView.h"
@@ -13,6 +14,8 @@ SendButtonIndicator:: SendButtonIndicator(QWidget* parent, MixerChannelView* own
 	m_parent(owner),
 	m_mv(mv)
 {
+	// the "on" send indicator is green artwork - follow the theme accent
+	m_qpmOn = LmmsStyle::tintAccentPixmap(m_qpmOn);
 	// don't do any initializing yet, because the MixerView and MixerChannelView
 	// that were passed to this constructor are not done with their constructors
 	// yet.

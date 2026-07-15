@@ -48,6 +48,7 @@
 #include "Knob.h"
 #include "InstrumentTrack.h"
 #include "MainWindow.h"
+#include "LmmsStyle.h"
 #include "Mixer.h"
 #include "MixerChannelView.h"
 #include "PatternStore.h"
@@ -149,11 +150,14 @@ void CurrentChannelMeter::paintEvent(QPaintEvent*)
 		const float db = ampToDbfs(std::max(0.0001f, peak));
 		const float y = dbToY(db);
 		QRect fill(r.left(), static_cast<int>(y), r.width(), r.bottom() - static_cast<int>(y) + 1);
+		// the safe-level portion follows the theme accent (red/yellow warn+clip
+		// stay conventional)
+		const QColor accent = LmmsStyle::accentColor();
 		QLinearGradient grad(0, top, 0, bottom);
 		grad.setColorAt(0.0, QColor(255, 70, 70));    // +3 dB
 		grad.setColorAt((kMeterTopDb - 0.f) / (kMeterTopDb - kMeterBottomDb), QColor(255, 210, 60)); // 0 dB
-		grad.setColorAt((kMeterTopDb - (-6.f)) / (kMeterTopDb - kMeterBottomDb), QColor(120, 220, 70)); // -6 dB
-		grad.setColorAt(1.0, QColor(40, 150, 60));    // -48 dB
+		grad.setColorAt((kMeterTopDb - (-6.f)) / (kMeterTopDb - kMeterBottomDb), accent); // -6 dB
+		grad.setColorAt(1.0, accent.darker(160));    // -48 dB
 		p.fillRect(fill, grad);
 	};
 	fillMeter(lRect, m_peakL);
@@ -185,7 +189,7 @@ void CurrentChannelMeter::paintEvent(QPaintEvent*)
 	{
 		p.setRenderHint(QPainter::Antialiasing, false);
 		p.setBrush(Qt::NoBrush);
-		p.setPen(QPen(QColor(90, 170, 255), 2));
+		p.setPen(QPen(LmmsStyle::accentColor(), 2));
 		p.drawRect(rect().adjusted(1, 1, -2, -2));
 	}
 }
@@ -261,7 +265,10 @@ MixerView::MixerView(Mixer* mixer) :
 	m_racksLayout->addWidget(m_monitorRackView);
 	m_currentMeter->setClickHandler([this]() {
 		m_racksLayout->setCurrentWidget(m_monitorRackView);
+		// selecting the monitor deselects any mixer channel (mutually exclusive)
+		m_monitorSelected = true;
 		m_currentMeter->setSelected(true);
+		for (auto* view : m_mixerChannelViews) { view->update(); }
 	});
 
 	// add mixer channels
@@ -489,6 +496,8 @@ void MixerView::setCurrentMixerChannel(MixerChannelView* channel)
 {
 	// select
 	m_currentMixerChannel = channel;
+	// selecting a channel deselects the monitor (mutually exclusive)
+	m_monitorSelected = false;
 	m_racksLayout->setCurrentWidget(m_mixerChannelViews[channel->channelIndex()]->m_effectRackView);
 
 	// route the selected channel's audio through the single monitor chain

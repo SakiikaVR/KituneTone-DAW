@@ -26,12 +26,16 @@
 
 
 #include <QStyleOptionFrame>
+#include <QFont>
 #include <QPainter>
+
+#include <algorithm>
 
 #include "LcdWidget.h"
 #include "DeprecationHelper.h"
 #include "embed.h"
 #include "FontHelper.h"
+#include "LmmsStyle.h"
 
 
 namespace lmms::gui
@@ -170,17 +174,20 @@ void LcdWidget::paintEvent( QPaintEvent* )
 		p.translate( m_cellWidth, 0 );
 	}
 
-	// Digits
+	// Digits: keep the LCD cell background from the pixmap, but always draw the
+	// number itself in Noto Sans Bold (in the accent colour)
+	QFont lcdFont(QStringLiteral("Noto Sans"));
+	lcdFont.setPixelSize(std::max(6, static_cast<int>(m_cellHeight * 0.82)));
+	lcdFont.setBold(true);
+	const QColor digitColor = isEnabled() ? LmmsStyle::accentColor() : QColor(90, 90, 90);
 	for (const auto& digit : m_display)
 	{
-		int val = digit.digitValue();
-		if( val < 0 ) 
-		{
-			if (digit == '-') val = 11;
-			else
-				val = 10;
-		}
-		p.drawPixmap(cellRect, m_lcdPixmap, QRect(QPoint(val * m_cellWidth, isEnabled() ? 0 : m_cellHeight), cellSize));
+		// blank cell as the LCD background (index 10 in the digit pixmap)
+		p.drawPixmap(cellRect, m_lcdPixmap,
+			QRect(QPoint(10 * m_cellWidth, isEnabled() ? 0 : m_cellHeight), cellSize));
+		p.setFont(lcdFont);
+		p.setPen(digitColor);
+		p.drawText(cellRect, Qt::AlignCenter, QString(digit));
 		p.translate( m_cellWidth, 0 );
 	}
 
@@ -283,7 +290,8 @@ void LcdWidget::initUi(const QString& name , const QString& style)
 	//m_lcdPixmap = embed::getIconPixmap(QString("lcd_" + style).toUtf8().constData());
 	//m_lcdPixmap = embed::getIconPixmap("lcd_19green"); // TODO!!
 
-	m_lcdPixmap = embed::getIconPixmap(QString("lcd_" + style).toUtf8().constData());
+	m_lcdPixmap = LmmsStyle::tintAccentPixmap(
+			embed::getIconPixmap(QString("lcd_" + style).toUtf8().constData()));
 	m_cellWidth = m_lcdPixmap.size().width() / LcdWidget::charsPerPixmap;
 	m_cellHeight = m_lcdPixmap.size().height() / 2;
 

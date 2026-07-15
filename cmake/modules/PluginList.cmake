@@ -21,64 +21,17 @@ IF(LMMS_MINIMAL)
 	SET(PLUGIN_LIST ${MINIMAL_LIST} ${PLUGIN_LIST})
 ENDIF()
 
+# VST3-only build: this fork ships native VST3 hosting plus a single built-in
+# triangle-wave synth (the default sound source) and the MIDI import/export
+# filters. All other native instruments/effects and other plug-in formats
+# (LADSPA, LV2, SF2, VST2/VeSTige, ...) are intentionally not built.
 SET(LMMS_PLUGIN_LIST
-	${MINIMAL_LIST}
-	Amplifier
-	BassBooster
-	BitInvader
-	Bitcrush
-	Compressor
-	CrossoverEQ
-	Delay
-	Dispersion
-	DualFilter
-	DynamicsProcessor
-	Eq
-	Flanger
-	FrequencyShifter
-	GranularPitchShifter
-	HydrogenImport
-	LadspaBrowser
-	LadspaEffect
-	LOMM
-	Lv2Effect
-	Lv2Instrument
-	Lb302
+	Vst3Base
+	Vst3Instrument
+	Vst3Effect
+	TriangleVst3
 	MidiImport
 	MidiExport
-	MultitapEcho
-	Monstro
-	Nes
-	OpulenZ
-	Organic
-	Oscilloscope
-	FreeBoy
-	Patman
-	PeakControllerEffect
-	GigPlayer
-	ReverbSC
-	Sf2Player
-	Sfxr
-	Sid
-	SlewDistortion
-	SlicerT
-	SpectrumAnalyzer
-	StereoEnhancer
-	StereoMatrix
-	Stk
-	TapTempo
-	VstBase
-	Vestige
-	VstEffect
-	Vst3Base
-	Vst3Effect
-	Vst3Instrument
-	Watsyn
-	WaveShaper
-	Vectorscope
-	Vibed
-	Xpressive
-	ZynAddSubFx
 )
 
 IF("${PLUGIN_LIST}" STREQUAL "")

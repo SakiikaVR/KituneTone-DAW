@@ -55,7 +55,9 @@
 #include "CaptionMenu.h"
 #include "ConfigManager.h"
 #include "DeprecationHelper.h"
+#include "embed.h"
 #include "KeyboardShortcuts.h"
+#include "LmmsStyle.h"
 #include "SimpleTextFloat.h"
 
 namespace
@@ -82,6 +84,9 @@ Fader::Fader(FloatModel* model, const QString& name, QWidget* parent, bool model
 	}
 
 	setWindowTitle(name);
+	// follow the theme accent (the default fader knob is green artwork)
+	m_knob = LmmsStyle::tintAccentPixmap(m_knob);
+	m_knobSize = embed::logicalSize(m_knob);
 	// For now resize the widget to the size of the previous background image "fader_background.png" as it was found in the classic and default theme
 	constexpr QSize minimumSize(23, 116);
 	setMinimumSize(minimumSize);
@@ -108,7 +113,8 @@ Fader::Fader(FloatModel* model, const QString& name, QWidget* parent, bool model
 Fader::Fader(FloatModel* model, const QString& name, QWidget* parent, const QPixmap& knob, bool modelIsLinear) :
 	Fader(model, name, parent, modelIsLinear)
 {
-	m_knob = knob;
+	m_knob = LmmsStyle::tintAccentPixmap(knob);
+	m_knobSize = embed::logicalSize(m_knob);
 }
 
 void Fader::adjust(const Qt::KeyboardModifiers & modifiers, AdjustmentDirection direction)

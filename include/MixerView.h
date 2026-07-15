@@ -97,6 +97,13 @@ public:
 		return m_currentMixerChannel;
 	}
 
+	//! true when the "Current" monitor is the active selection instead of a
+	//! mixer channel; used so the two selections are mutually exclusive
+	inline bool monitorSelected() const
+	{
+		return m_monitorSelected;
+	}
+
 	inline MixerChannelView* channelView(int index)
 	{
 		return m_mixerChannelViews[index];
@@ -149,6 +156,7 @@ private:
 	QVector<MixerChannelView*> m_mixerChannelViews;
 
 	MixerChannelView* m_currentMixerChannel;
+	bool m_monitorSelected = false;
 
 	CurrentChannelMeter* m_currentMeter = nullptr;
 	EffectRackView* m_monitorRackView = nullptr;

@@ -202,9 +202,9 @@ public:
 			qApp->processEvents();
 			it = dynamic_cast<InstrumentTrack*>(Track::create(Track::Type::Instrument, tc));
 
-			// use the built-in TripleOscillator as the default instrument for
-			// imported MIDI tracks (no external dependencies, always available)
-			it_inst = it->loadInstrument("tripleoscillator");
+			// use the bundled TriangleSynth.vst3 as the default instrument for
+			// imported MIDI tracks (hosted through the VST3 instrument)
+			it_inst = Song::loadDefaultInstrument(it);
 			isSF2 = false;
 			trackName = tn;
 			if (trackName != "") { it->setName(tn); }

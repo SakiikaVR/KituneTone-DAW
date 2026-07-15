@@ -29,6 +29,7 @@
 
 #include "DeprecationHelper.h"
 #include "embed.h"
+#include "LmmsStyle.h"
 #include "FontHelper.h"
 #include "lmms_math.h"
 
@@ -134,7 +135,9 @@ void Knob::onKnobNumUpdated()
 		}
 
 		// If knobFilename is still empty here we should get the fallback pixmap of size 1x1
-		m_knobPixmap = std::make_unique<QPixmap>(QPixmap(embed::getIconPixmap(knobFilename.toUtf8().constData())));
+		// tint the (green-shaded) knob artwork to follow the theme accent
+		m_knobPixmap = std::make_unique<QPixmap>(LmmsStyle::tintAccentPixmap(
+				embed::getIconPixmap(knobFilename.toUtf8().constData())));
 		if (!this->isEnabled())
 		{
 			convertPixmapToGrayScale(*m_knobPixmap.get());

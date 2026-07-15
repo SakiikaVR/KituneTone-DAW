@@ -28,14 +28,220 @@
 #include <QApplication>
 #include <QFile>
 #include <QFileInfo>
+#include <QDir>
+#include <QFile>
+#include <QHash>
+#include <QImage>
 #include <QPainter>
 #include <QPainterPath>  // IWYU pragma: keep
+#include <QRegularExpression>
 #include <QStyleFactory>
 #include <QStyleOption>
 
+#include "ConfigManager.h"
 #include "embed.h"
+#include "LmmsPalette.h"
 #include "LmmsStyle.h"
 #include "TextFloat.h"
+
+namespace lmms::gui
+{
+namespace
+{
+
+//! The default accent colour (KitsuneTone light blue / 水色).
+QColor defaultAccentColor() { return QColor(0x5e, 0xcf, 0xe8); }
+
+//! The configured accent colour, or the default light blue.
+QColor themeAccentColor()
+{
+	const QString a = ConfigManager::inst()->value("theme", "accent", QString());
+	const QColor c(a);
+	return (a.isEmpty() || !c.isValid()) ? defaultAccentColor() : c;
+}
+
+//! The green accent family used throughout the default theme. Deliberately
+//! broad: it also catches greenish-dark/near-black tints (low saturation and/or
+//! low brightness) so nothing keeps a green cast. The blue-grey UI backgrounds
+//! sit at hue ~200-230 and are left untouched.
+bool isAccentGreen(int h, int s, int v)
+{
+	return h >= 85 && h <= 175 && s > 10 && v > 5;
+}
+
+//! A blue-tinted neutral (the dark UI backgrounds sit at hue ~180-270 with a
+//! modest blue cast); these are flattened to neutral grey.
+bool isBlueNeutral(int h, int s, int v)
+{
+	return h >= 180 && h <= 270 && s >= 8 && s <= 90 && v > 0;
+}
+
+//! Map one colour through the theme: rotate green accents to \a accentHue (when
+//! set), and strip the blue cast from neutral backgrounds to a plain grey.
+QColor mapThemeColor(const QColor& c, int accentHue)
+{
+	int h, s, v, a;
+	c.getHsv(&h, &s, &v, &a);
+	if (h >= 0 && isAccentGreen(h, s, v))
+	{
+		return accentHue >= 0 ? QColor::fromHsv(accentHue, s, v) : c;
+	}
+
+	// Neutral / near-neutral colours (backgrounds, panels, borders): strip any
+	// blue cast and pull the dark ones much closer to black, for a deep dark UI.
+	// Bright neutrals (text, highlights) are left alone.
+	const bool blueNeutral = (h >= 0 && isBlueNeutral(h, s, v));
+	if (blueNeutral || s < 40)
+	{
+		const int newS = blueNeutral ? 0 : s;
+		int newV = v;
+		if (v < 130)
+		{
+			newV = static_cast<int>(v * 0.4);  // darken backgrounds/panels
+		}
+		if (newS != s || newV != v)
+		{
+			return QColor::fromHsv(h < 0 ? 0 : h, newS, newV);
+		}
+	}
+	return c;
+}
+
+//! Re-hue an image's green accent pixels to \a targetHue in place; returns true
+//! if any pixel was changed.
+bool tintImageGreens(QImage& img, int targetHue)
+{
+	img = img.convertToFormat(QImage::Format_ARGB32);
+	bool changed = false;
+	for (int y = 0; y < img.height(); ++y)
+	{
+		auto* line = reinterpret_cast<QRgb*>(img.scanLine(y));
+		for (int x = 0; x < img.width(); ++x)
+		{
+			const QColor c = QColor::fromRgba(line[x]);
+			int h, s, v, a;
+			c.getHsv(&h, &s, &v, &a);
+			if (c.alpha() > 0 && h >= 0 && isAccentGreen(h, s, v))
+			{
+				QColor nc = QColor::fromHsv(targetHue, s, v);
+				nc.setAlpha(c.alpha());
+				line[x] = nc.rgba();
+				changed = true;
+			}
+		}
+	}
+	return changed;
+}
+
+//! Tint the green pixmaps referenced by the stylesheet's url("resources:*.png")
+//! rules (slider handles etc.) to the accent, rewriting the urls to cached,
+//! re-hued copies. Non-green images are left pointing at the original.
+QString tintUrlImages(const QString& css, int targetHue)
+{
+	static const QRegularExpression urlRe(
+			QStringLiteral("url\\(\\s*\"resources:([^\"]+\\.png)\"\\s*\\)"));
+	const QString cacheDir = QDir::tempPath()
+			+ QStringLiteral("/kitsunetone_theme/h") + QString::number(targetHue);
+	QDir().mkpath(cacheDir);
+
+	QHash<QString, QString> rewritten;  // original name -> replacement url or ""
+	QString out;
+	out.reserve(css.size());
+	qsizetype last = 0;
+	auto it = urlRe.globalMatch(css);
+	while (it.hasNext())
+	{
+		const auto match = it.next();
+		const QString name = match.captured(1);
+		out += css.mid(last, match.capturedStart() - last);
+		last = match.capturedEnd();
+
+		if (!rewritten.contains(name))
+		{
+			QString replacement;
+			const QString outPath = cacheDir + QLatin1Char('/') + name;
+			if (QFile::exists(outPath))
+			{
+				replacement = QStringLiteral("url(\"%1\")").arg(outPath);
+			}
+			else
+			{
+				QImage img(QStringLiteral("resources:") + name);
+				if (!img.isNull() && tintImageGreens(img, targetHue) && img.save(outPath, "PNG"))
+				{
+					replacement = QStringLiteral("url(\"%1\")").arg(outPath);
+				}
+			}
+			rewritten.insert(name, replacement);
+		}
+
+		const QString& replacement = rewritten[name];
+		out += replacement.isEmpty() ? match.captured(0) : replacement;
+	}
+	out += css.mid(last);
+	return out;
+}
+
+//! Apply the accent colour to a stylesheet by rewriting its colour literals.
+//! #rrggbb, rgb(...) and rgba(...) are all handled.
+QString recolorAccentCss(const QString& css)
+{
+	const QString accentStr = ConfigManager::inst()->value("theme", "accent", QString());
+	// empty = the default light-blue accent
+	const QColor accent = accentStr.isEmpty() ? defaultAccentColor() : QColor(accentStr);
+	const bool hasAccent = accent.isValid() && accent.hue() >= 0;
+	const int accentHue = hasAccent ? accent.hue() : -1;
+
+	static const QRegularExpression colorRe(QStringLiteral(
+			"#[0-9a-fA-F]{6}\\b|rgba?\\(\\s*\\d+\\s*,\\s*\\d+\\s*,\\s*\\d+\\s*(?:,\\s*\\d+\\s*)?\\)"));
+
+	QString out;
+	out.reserve(css.size());
+	qsizetype last = 0;
+	auto it = colorRe.globalMatch(css);
+	while (it.hasNext())
+	{
+		const auto match = it.next();
+		const QString token = match.captured(0);
+		out += css.mid(last, match.capturedStart() - last);
+		last = match.capturedEnd();
+
+		QColor c;
+		bool isRgbFunc = false;
+		int alpha255 = 255;
+		if (token.startsWith(QLatin1Char('#'))) { c = QColor(token); }
+		else
+		{
+			isRgbFunc = true;
+			static const QRegularExpression num(QStringLiteral("\\d+"));
+			auto ni = num.globalMatch(token);
+			QList<int> vals;
+			while (ni.hasNext()) { vals << ni.next().captured(0).toInt(); }
+			if (vals.size() >= 3)
+			{
+				c = QColor(vals[0], vals[1], vals[2]);
+				if (vals.size() >= 4) { alpha255 = vals[3]; }
+			}
+		}
+
+		if (!c.isValid()) { out += token; continue; }
+		const QColor nc = mapThemeColor(c, accentHue);
+		if (nc.rgb() == c.rgb()) { out += token; continue; }
+		if (isRgbFunc)
+		{
+			out += token.startsWith(QLatin1String("rgba"))
+					? QStringLiteral("rgba(%1,%2,%3,%4)").arg(nc.red()).arg(nc.green()).arg(nc.blue()).arg(alpha255)
+					: QStringLiteral("rgb(%1,%2,%3)").arg(nc.red()).arg(nc.green()).arg(nc.blue());
+		}
+		else { out += nc.name(); }
+	}
+	out += css.mid(last);
+	// also re-hue the green url("resources:*.png") images (slider handles, ...)
+	return accentHue >= 0 ? tintUrlImages(out, accentHue) : out;
+}
+
+} // namespace
+} // namespace lmms::gui
 
 
 namespace lmms::gui
@@ -138,7 +344,7 @@ LmmsStyle::LmmsStyle() :
 {
 	QFile file( "resources:style.css" );
 	file.open( QIODevice::ReadOnly );
-	qApp->setStyleSheet( file.readAll() );
+	qApp->setStyleSheet( recolorAccentCss( QString::fromUtf8( file.readAll() ) ) );
 
 	m_styleReloader.addPath(QFileInfo{file}.absoluteFilePath());
 	connect(&m_styleReloader, &QFileSystemWatcher::fileChanged, this,
@@ -147,7 +353,7 @@ LmmsStyle::LmmsStyle() :
 			if (auto file = QFile{path}; file.exists())
 			{
 				file.open(QIODevice::ReadOnly);
-				qApp->setStyleSheet(file.readAll());
+				qApp->setStyleSheet(recolorAccentCss(QString::fromUtf8(file.readAll())));
 				TextFloat::displayMessage(
 					tr("Theme updated"),
 					tr("LMMS theme file %1 has been reloaded.").arg(file.fileName()),
@@ -166,6 +372,49 @@ LmmsStyle::LmmsStyle() :
 	if( s_palette != nullptr ) { qApp->setPalette( *s_palette ); }
 
 	setBaseStyle( QStyleFactory::create( "Fusion" ) );
+}
+
+
+
+
+void LmmsStyle::applyTheme()
+{
+	// re-read the theme, apply the chosen accent, and rebuild the palette so a
+	// theme change from the settings takes effect without a restart
+	QFile file( "resources:style.css" );
+	if( !file.open( QIODevice::ReadOnly ) ) { return; }
+	qApp->setStyleSheet( recolorAccentCss( QString::fromUtf8( file.readAll() ) ) );
+
+	auto* lmmsPalette = new LmmsPalette( nullptr, QApplication::style() );
+	const QPalette palette = lmmsPalette->palette();
+	delete lmmsPalette;
+	qApp->setPalette( palette );
+	if( s_palette != nullptr ) { *s_palette = palette; }
+}
+
+
+
+
+QColor LmmsStyle::accentColor()
+{
+	return themeAccentColor();
+}
+
+
+
+
+QPixmap LmmsStyle::tintAccentPixmap(const QPixmap& pixmap)
+{
+	// re-hue the green accent pixels of an artwork pixmap (LCD digits, fader
+	// knob, send indicator, ...) to the theme accent, so pixmap-based greens
+	// follow the chosen theme. No-op when no accent is configured.
+	const QString accent = ConfigManager::inst()->value("theme", "accent", QString());
+	const QColor target = accent.isEmpty() ? defaultAccentColor() : QColor(accent);
+	const int targetHue = target.hue();
+	if (!target.isValid() || targetHue < 0) { return pixmap; }
+
+	QImage img = pixmap.toImage();
+	return tintImageGreens(img, targetHue) ? QPixmap::fromImage(img) : pixmap;
 }
 
 
