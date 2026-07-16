@@ -35,8 +35,8 @@ Plugin::Descriptor VST3BASE_EXPORT vst3base_plugin_descriptor =
 {
 	LMMS_STRINGIFY( PLUGIN_NAME ),
 	"VST3 Base",
-	"library for all LMMS plugins hosting native VST3 plug-ins",
-	"LMMS Developers",
+	"library for all KitsuneTone plugins hosting native VST3 plug-ins",
+	"KitsuneTone contributors",
 	0x0100,
 	Plugin::Type::Library,
 	nullptr,

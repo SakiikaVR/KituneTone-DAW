@@ -1369,7 +1369,7 @@ void Song::loadProject( const QString & fileName )
 	{
 		if ( getGUI() != nullptr )
 		{
-			QMessageBox::warning( nullptr, tr("LMMS Error report"), errorSummary(),
+			QMessageBox::warning(nullptr, tr("KitsuneTone error report"), errorSummary(),
 							QMessageBox::Ok );
 		}
 		else

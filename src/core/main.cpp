@@ -140,7 +140,7 @@ inline void loadTranslation( const QString & tname,
 
 void printVersion( char *executableName )
 {
-	printf("LMMS %s\n(%s %s, Qt %s, %s)\n\n"
+	printf("KitsuneTone (狐Tone) %s\n(%s %s, Qt %s, %s)\n\n"
 		"Build options:\n%s\n\n"
 		"Copyright (c) %s\n\n"
 		"This program is free software; you can redistribute it and/or\n"
@@ -157,11 +157,11 @@ void printVersion( char *executableName )
 
 void printHelp()
 {
-	printf( "LMMS %s\n"
+	printf( "KitsuneTone (狐Tone) %s\n"
 		"Copyright (c) %s\n\n"
-		"Usage: lmms [global options...] [<action> [action parameters...]]\n\n"
+		"Usage: KitsuneTone [global options...] [<action> [action parameters...]]\n\n"
 		"Actions:\n"
-		"  <no action> [options...] [<project>]  Start LMMS in normal GUI mode\n"
+		"  <no action> [options...] [<project>]  Start KitsuneTone in normal GUI mode\n"
 		"  dump <in>                             Dump XML of compressed file <in>\n"
 		"  compress <in>                         Compress file <in>\n"
 		"  render <project> [options...]         Render given project file\n"
@@ -356,7 +356,7 @@ int main( int argc, char * * argv )
 #if !defined(LMMS_BUILD_WIN32) && !defined(LMMS_BUILD_HAIKU)
 	if ( ( getuid() == 0 || geteuid() == 0 ) && !allowRoot )
 	{
-		printf( "LMMS cannot be run as root.\nUse \"--allowroot\" to override.\n\n" );
+		printf( "KitsuneTone cannot be run as root.\nUse \"--allowroot\" to override.\n\n" );
 		return EXIT_FAILURE;
 	}
 #endif
@@ -380,6 +380,13 @@ int main( int argc, char * * argv )
 	QCoreApplication * app = coreOnly ?
 			new QCoreApplication( argc, argv ) :
 					new gui::MainApplication(argc, argv);
+	QCoreApplication::setApplicationName(QStringLiteral("KitsuneTone"));
+	if (!coreOnly)
+	{
+		QApplication::setApplicationDisplayName(QStringLiteral("狐Tone"));
+	}
+	QCoreApplication::setOrganizationName(QStringLiteral("KitsuneTone"));
+	QCoreApplication::setOrganizationDomain(QStringLiteral("github.com/SakiikaVR"));
 
 	OutputSettings os(44100, 160, OutputSettings::BitDepth::Depth16Bit, OutputSettings::StereoMode::JointStereo);
 	ProjectRenderer::ExportFileFormat eff = ProjectRenderer::ExportFileFormat::Wave;
@@ -806,12 +813,12 @@ int main( int argc, char * * argv )
 				"</html>" ).arg(
 				MainWindow::tr( "There is a recovery file present. "
 					"It looks like the last session did not end "
-					"properly or another instance of LMMS is "
+					"properly or another instance of KitsuneTone is "
 					"already running. Do you want to recover the "
 					"project of this session?" ),
 				MainWindow::tr( "Recover" ),
 				MainWindow::tr( "Recover the file. Please don't run "
-					"multiple instances of LMMS when you do this." ),
+					"multiple instances of KitsuneTone when you do this." ),
 				MainWindow::tr( "Discard" ),
 				MainWindow::tr( "Launch a default session and delete "
 					"the restored files. This is not reversible." )
@@ -901,7 +908,7 @@ int main( int argc, char * * argv )
 			QFileInfo recentFile( f );
 
 			if ( recentFile.exists() &&
-				recentFile.suffix().toLower() != "mpt" )
+				recentFile.suffix().toLower() != "ktt" )
 			{
 				Engine::getSong()->loadProject( f );
 			}
@@ -916,7 +923,7 @@ int main( int argc, char * * argv )
 		}
 
 		// Finally we start the auto save timer and also trigger the
-		// autosave one time as recover.mmp is a signal to possible other
+		// autosave one time as recover.ktp is a signal to possible other
 		// instances of LMMS.
 		if( autoSaveEnabled )
 		{
@@ -940,6 +947,7 @@ int main( int argc, char * * argv )
 
 #ifdef LMMS_BUILD_WIN32
 	// Cleanup console
+	timeEndPeriod(1);
 	HWND hConsole = GetConsoleWindow();
 	if (hConsole)
 	{

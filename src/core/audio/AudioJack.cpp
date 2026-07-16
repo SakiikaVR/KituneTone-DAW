@@ -139,8 +139,8 @@ void AudioJack::restartAfterZombified()
 		m_active = false;
 		startProcessing();
 		QMessageBox::information(gui::getGUI()->mainWindow(), tr("JACK client restarted"),
-			tr(	"LMMS was kicked by JACK for some reason. "
-				"Therefore the JACK backend of LMMS has been "
+			tr(	"KitsuneTone was kicked by JACK for some reason. "
+				"Therefore the JACK backend of KitsuneTone has been "
 				"restarted. You will have to make manual "
 				"connections again."));
 	}

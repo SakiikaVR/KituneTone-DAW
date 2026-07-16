@@ -51,7 +51,7 @@ void TemplatesMenu::fillTemplatesMenu()
 
 
 void TemplatesMenu::addTemplatesFromDir( const QDir& dir ) {
-	QFileInfoList templates = dir.entryInfoList( QStringList( "*.mpt" ),
+	QFileInfoList templates = dir.entryInfoList(QStringList("*.ktt"),
 		QDir::Files | QDir::Readable );
 
 	if (!templates.empty() && !actions().isEmpty())

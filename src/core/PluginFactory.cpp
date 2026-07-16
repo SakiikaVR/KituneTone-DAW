@@ -185,7 +185,7 @@ void PluginFactory::discoverPlugins()
 			pluginDescriptor = reinterpret_cast<Plugin::Descriptor*>(library->resolve(descriptorName.toUtf8().constData()));
 			if(pluginDescriptor == nullptr)
 			{
-				qWarning() << qApp->translate("PluginFactory", "LMMS plugin %1 does not have a plugin descriptor named %2!").
+				qWarning() << qApp->translate("PluginFactory", "KitsuneTone plugin %1 does not have a plugin descriptor named %2!").
 							  arg(file.absoluteFilePath()).arg(descriptorName);
 				continue;
 			}

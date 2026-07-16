@@ -425,7 +425,7 @@ bool Vst3AraDocument::setup(const ARAFactory* araFactory,
 			&m_impl->modelUpdate, &m_impl->playback);
 
 	auto docProps = makeProps<ARADocumentProperties>();
-	docProps.name = "LMMS ARA Document";
+	docProps.name = "KitsuneTone ARA Document";
 	m_impl->dcInstance = araFactory->createDocumentControllerWithDocument(
 			m_impl->hostInstance.get(), &docProps);
 	if (m_impl->dcInstance == nullptr) { return false; }
@@ -436,12 +436,12 @@ bool Vst3AraDocument::setup(const ARAFactory* araFactory,
 	dc->beginEditing();
 
 	auto musicalCtxProps = makeProps<ARAMusicalContextProperties>();
-	musicalCtxProps.name = "LMMS Context";
+	musicalCtxProps.name = "KitsuneTone Context";
 	musicalCtxProps.orderIndex = 0;
 	m_musicalContext = dc->createMusicalContext(nullptr, &musicalCtxProps);
 
 	auto regionSeqProps = makeProps<ARARegionSequenceProperties>();
-	regionSeqProps.name = "LMMS Track";
+	regionSeqProps.name = "KitsuneTone Track";
 	regionSeqProps.orderIndex = 0;
 	regionSeqProps.musicalContextRef = m_musicalContext;
 	m_regionSequence = dc->createRegionSequence(nullptr, &regionSeqProps);
@@ -533,7 +533,7 @@ bool Vst3AraDocument::buildSources(const std::vector<Vst3Plugin::AraSource>& sou
 		SourceGraph g;
 
 		auto sourceProps = makeProps<ARAAudioSourceProperties>();
-		sourceProps.name = "LMMS Audio";
+		sourceProps.name = "KitsuneTone Audio";
 		sourceProps.persistentID = dataPtr->persistentID.c_str();
 		sourceProps.sampleCount = dataPtr->frames;
 		sourceProps.sampleRate = static_cast<ARASampleRate>(dataPtr->sampleRate);
@@ -545,7 +545,7 @@ bool Vst3AraDocument::buildSources(const std::vector<Vst3Plugin::AraSource>& sou
 
 		const std::string modID = "lmms-mod-" + std::to_string(index);
 		auto modProps = makeProps<ARAAudioModificationProperties>();
-		modProps.name = "LMMS Modification";
+		modProps.name = "KitsuneTone Modification";
 		modProps.persistentID = modID.c_str();
 		g.audioModification = dc->createAudioModification(g.audioSource, nullptr, &modProps);
 
@@ -562,7 +562,7 @@ bool Vst3AraDocument::buildSources(const std::vector<Vst3Plugin::AraSource>& sou
 		regionProps.durationInPlaybackTime = dur;
 		regionProps.musicalContextRef = m_musicalContext;
 		regionProps.regionSequenceRef = m_regionSequence;
-		regionProps.name = "LMMS Region";
+		regionProps.name = "KitsuneTone Region";
 		g.playbackRegion = dc->createPlaybackRegion(g.audioModification, nullptr, &regionProps);
 
 		m_sources.push_back(g);
@@ -659,7 +659,7 @@ bool Vst3AraDocument::updateRegions(const std::vector<Vst3Plugin::AraSource>& so
 			regionProps.durationInPlaybackTime = dur;
 			regionProps.musicalContextRef = m_musicalContext;
 			regionProps.regionSequenceRef = m_regionSequence;
-			regionProps.name = "LMMS Region";
+			regionProps.name = "KitsuneTone Region";
 			dc->updatePlaybackRegionProperties(m_sources[i].playbackRegion, &regionProps);
 		}
 		dc->endEditing();

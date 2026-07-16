@@ -26,6 +26,8 @@
 
 
 #include <QFileInfo>
+#include "SampleClip.h"
+#include "SampleTrack.h"
 #include <QLayout>
 #include <QMessageBox>
 #include <QMimeData>
@@ -491,7 +493,23 @@ void TrackContainerView::dropEvent( QDropEvent * _de )
 		//it->toggledInstrumentTrackButton( true );
 		_de->accept();
 	}
-	else if( type == "samplefile" || type == "pluginpresetfile"
+	else if( type == "samplefile" )
+	{
+		// dropping an audio sample onto the song editor makes a new sample track
+		// with the sample as its first clip (there is no native sample-player
+		// instrument in this VST3-only build)
+		auto st = dynamic_cast<SampleTrack*>(Track::create(Track::Type::Sample, m_tc));
+		if( st != nullptr )
+		{
+			if( auto clip = dynamic_cast<SampleClip*>(st->createClip(TimePos(0))) )
+			{
+				clip->setSampleFile( value );
+			}
+			st->setName( QFileInfo( value ).completeBaseName() );
+		}
+		_de->accept();
+	}
+	else if( type == "pluginpresetfile"
 		|| type == "soundfontfile" || type == "vstpluginfile"
 		|| type == "patchfile" )
 	{

@@ -117,7 +117,7 @@ MainWindow::MainWindow() :
 		embed::getIconPixmap("star").transformed(QTransform().rotate(90)), splitter, false, "", ""));
 
 	sideBar->appendTab(new FileBrowser(FileBrowser::Type::Normal,
-		confMgr->userProjectsDir() + "*" + confMgr->factoryProjectsDir(), "*.mmp *.mmpz *.xml *.mid *.mpt",
+		confMgr->userProjectsDir() + "*" + confMgr->factoryProjectsDir(), "*.ktp *.ktpz *.ktt *.xml *.mid",
 		tr("My Projects"), embed::getIconPixmap("project_file").transformed(QTransform().rotate(90)), splitter, false,
 		confMgr->userProjectsDir(), confMgr->factoryProjectsDir()));
 
@@ -218,7 +218,7 @@ MainWindow::MainWindow() :
 					"ui", "saveinterval" ).toInt();
 
 		// The auto save function mustn't run until there is a project
-		// to save or it will run over recover.mmp if you hesitate at the
+		// to save or it will run over recover.ktp if you hesitate at the
 		// recover messagebox for a minute. It is now started in main.
 		// See autoSaveTimerReset() in MainWindow.h
 	}
@@ -480,7 +480,7 @@ void MainWindow::finalize()
 		ConfigManager::inst()->value( "audioengine", "audiodev" ) ) )
 	{
 		QMessageBox::critical(nullptr, "Audio device setup failed",
-			tr("Failed to setup audio device for playback. Try adjusting your audio device settings (e.g. the sample rate), then restart LMMS."));
+			tr("Failed to setup audio device for playback. Try adjusting your audio device settings (e.g. the sample rate), then restart KitsuneTone."));
 
 		// if so, offer the audio settings section of the setup dialog
 		SetupDialog sd( SetupDialog::ConfigTab::AudioSettings );
@@ -764,7 +764,8 @@ void MainWindow::openProject()
 {
 	if( mayChangeProject(false) )
 	{
-		FileDialog ofd( this, tr( "Open Project" ), "", tr( "LMMS (*.mmp *.mmpz)" ) );
+		FileDialog ofd(this, tr("Open Project"), "",
+			tr("KitsuneTone Project (*.ktp *.ktpz)"));
 
 		ofd.setDirectory( ConfigManager::inst()->userProjectsDir() );
 		ofd.setFileMode( FileDialog::ExistingFiles );
@@ -808,8 +809,8 @@ bool MainWindow::saveProjectAs()
 {
 	auto optionsWidget = new SaveOptionsWidget(Engine::getSong()->getSaveOptions());
 	VersionedSaveDialog sfd( this, optionsWidget, tr( "Save Project" ), "",
-			tr( "LMMS Project" ) + " (*.mmpz *.mmp);;" +
-				tr( "LMMS Project Template" ) + " (*.mpt)" );
+			tr("KitsuneTone Project") + " (*.ktpz *.ktp);;" +
+				tr("KitsuneTone Project Template") + " (*.ktt)");
 	QString f = Engine::getSong()->projectFileName();
 	if( f != "" )
 	{
@@ -824,24 +825,24 @@ bool MainWindow::saveProjectAs()
 	// Don't write over file with suffix if no suffix is provided.
 	QString suffix = ConfigManager::inst()->value( "app",
 							"nommpz" ).toInt() == 0
-						? "mmpz"
-						: "mmp" ;
+						? "ktpz"
+						: "ktp" ;
 	sfd.setDefaultSuffix( suffix );
 
 	if( sfd.exec () == FileDialog::Accepted &&
 		!sfd.selectedFiles().isEmpty() && sfd.selectedFiles()[0] != "" )
 	{
 		QString fname = sfd.selectedFiles()[0] ;
-		if( sfd.selectedNameFilter().contains( "(*.mpt)" ) )
+		if (sfd.selectedNameFilter().contains("(*.ktt)"))
 		{
 			// Remove the default suffix
 			fname.remove( "." + suffix );
-			if( !sfd.selectedFiles()[0].endsWith( ".mpt" ) )
+			if (!sfd.selectedFiles()[0].endsWith(".ktt"))
 			{
-				if( VersionedSaveDialog::fileExistsQuery( fname + ".mpt",
+				if (VersionedSaveDialog::fileExistsQuery(fname + ".ktt",
 						tr( "Save project template" ) ) )
 				{
-					fname += ".mpt";
+					fname += ".ktt";
 				}
 			}
 		}
@@ -881,7 +882,7 @@ bool MainWindow::saveProjectAsNewVersion()
 
 void MainWindow::saveProjectAsDefaultTemplate()
 {
-	QString defaultTemplate = ConfigManager::inst()->userTemplateDir() + "default.mpt";
+	QString defaultTemplate = ConfigManager::inst()->userTemplateDir() + "default.ktt";
 
 	QFileInfo fileInfo(defaultTemplate);
 	if (fileInfo.exists())

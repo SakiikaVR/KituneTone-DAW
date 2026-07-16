@@ -15,7 +15,7 @@ BEGIN
     BEGIN
       VALUE "Comments",         "${PROJECT_URL}\0"
       VALUE "CompanyName",      "${PROJECT_AUTHOR}\0"
-      VALUE "FileDescription",  "KitsuneTone\0"
+      VALUE "FileDescription",  "KitsuneTone DAW\0"
       VALUE "FileVersion",      "@VERSION@\0"
       VALUE "LegalCopyright",   "Copyright (c) ${PROJECT_COPYRIGHT}\0"
       VALUE "OriginalFilename", "KitsuneTone.exe\0"

@@ -1,7 +1,7 @@
 /*
  * VersionedSaveDialog.h - declaration of class VersionedSaveDialog, a file save
  * dialog that provides buttons to increment or decrement a version which is
- * appended to the file name. (e.g. "MyProject-01.mmpz")
+ * appended to the file name. (e.g. "MyProject-01.ktpz")
  *
  * Copyright (c) 2014 Lukas W <lukaswhl/at/gmail.com>
  *

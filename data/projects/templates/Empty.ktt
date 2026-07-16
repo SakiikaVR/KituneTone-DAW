@@ -1,6 +1,6 @@
 <?xml version="1.0"?>
-<!DOCTYPE lmms-project>
-<lmms-project type="song" version="1.0" creator="LMMS" creatorversion="1.2.0">
+<!DOCTYPE kitsunetone-project>
+<kitsunetone-project type="song" version="1.0" creator="KitsuneTone" creatorversion="2.1.0-beta">
   <head timesig_denominator="4" bpm="140" masterpitch="0" mastervol="100" timesig_numerator="4"/>
   <song>
     <trackcontainer visible="1" width="600" height="300" type="song" x="6" y="5" maximized="0" minimized="0"/>
@@ -16,4 +16,4 @@
     <timeline lp0pos="0" lp1pos="192" lpstate="0"/>
     <controllers/>
   </song>
-</lmms-project>
+</kitsunetone-project>

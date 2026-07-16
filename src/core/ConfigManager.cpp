@@ -313,9 +313,9 @@ void ConfigManager::createWorkingDir()
 void ConfigManager::addRecentlyOpenedProject(const QString & file)
 {
 	QFileInfo recentFile(file);
-	if(recentFile.suffix().toLower() == "mmp" ||
-		recentFile.suffix().toLower() == "mmpz" ||
-		recentFile.suffix().toLower() == "mpt")
+	if(recentFile.suffix().toLower() == "ktp" ||
+		recentFile.suffix().toLower() == "ktpz" ||
+		recentFile.suffix().toLower() == "ktt")
 	{
 		m_recentlyOpenedProjects.removeAll(file);
 		if(m_recentlyOpenedProjects.size() > 50)
@@ -697,17 +697,16 @@ void ConfigManager::saveConfigFile()
 void ConfigManager::initPortableWorkingDir()
 {
 	QString applicationPath = qApp->applicationDirPath();
-	m_workingDir = applicationPath + "/lmms-workspace/";
-	m_lmmsRcFile = applicationPath + "/.lmmsrc.xml";
+	m_workingDir = applicationPath + "/kitsunetone-workspace/";
+	m_lmmsRcFile = applicationPath + "/kitsunetone-config.xml";
 }
 
 void ConfigManager::initInstalledWorkingDir()
 {
-	m_workingDir = QStandardPaths::writableLocation(QStandardPaths::DocumentsLocation) + "/lmms/";
-	m_lmmsRcFile = QDir::home().absolutePath() +"/.lmmsrc.xml";
-	// Detect < 1.2.0 working directory as a courtesy
-	if ( QFileInfo( QDir::home().absolutePath() + "/lmms/projects/" ).exists() )
-		m_workingDir = QDir::home().absolutePath() + "/lmms/";
+	m_workingDir = QStandardPaths::writableLocation(QStandardPaths::DocumentsLocation)
+		+ "/KitsuneTone/";
+	m_lmmsRcFile = QStandardPaths::writableLocation(QStandardPaths::AppConfigLocation)
+		+ "/kitsunetone-config.xml";
 }
 
 void ConfigManager::initDevelopmentWorkingDir()
@@ -738,7 +737,7 @@ void ConfigManager::initDevelopmentWorkingDir()
 			}
 			if (line.startsWith("lmms_BINARY_DIR:")) {
 				m_lmmsRcFile = line.section('=', -1).trimmed() +  QDir::separator() +
-							   ".lmmsrc.xml";
+							   "kitsunetone-config.xml";
 				done++;
 			}
 			if (done == 2)

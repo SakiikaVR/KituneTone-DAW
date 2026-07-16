@@ -145,6 +145,36 @@ void LcdWidget::paintEvent( QPaintEvent* )
 	QSize cellSize( m_cellWidth, m_cellHeight );
 
 	QRect cellRect( 0, 0, m_cellWidth, m_cellHeight );
+	QFont lcdFont(QStringLiteral("Noto Sans"));
+	lcdFont.setFamilies({QStringLiteral("Noto Sans"), QStringLiteral("Noto Sans JP")});
+	lcdFont.setPixelSize(std::max(6, static_cast<int>(m_cellHeight * 0.82)));
+	lcdFont.setBold(true);
+	p.setFont(lcdFont);
+
+	const QColor digitColor = isEnabled() ? LmmsStyle::accentColor() : QColor(90, 90, 90);
+	const auto lcdImage = m_lcdPixmap.toImage();
+	const QColor cellBackground = lcdImage.pixelColor(
+		10 * m_cellWidth + std::min(1, m_cellWidth - 1),
+		std::min(1, m_cellHeight - 1) + (isEnabled() ? 0 : m_cellHeight));
+	auto drawCell = [&](const QString& activeDigit = {})
+	{
+		p.drawPixmap(cellRect, m_lcdPixmap,
+			QRect(QPoint(10 * m_cellWidth, isEnabled() ? 0 : m_cellHeight), cellSize));
+
+		// The legacy bitmap contains a seven-segment ghost glyph. Cover it and
+		// redraw the ghost with the exact same Noto font used for active digits,
+		// so the background and foreground can never drift out of alignment.
+		p.fillRect(cellRect.adjusted(1, 0, -1, 0), cellBackground);
+		auto ghostColor = digitColor;
+		ghostColor.setAlpha(isEnabled() ? 28 : 18);
+		p.setPen(ghostColor);
+		p.drawText(cellRect, Qt::AlignCenter, QStringLiteral("8"));
+		if (!activeDigit.isEmpty())
+		{
+			p.setPen(digitColor);
+			p.drawText(cellRect, Qt::AlignCenter, activeDigit);
+		}
+	};
 
 	int margin = 1;  // QStyle::PM_DefaultFrameWidth;
 	//int lcdWidth = m_cellWidth * m_numDigits + (margin*m_marginWidth)*2;
@@ -170,24 +200,13 @@ void LcdWidget::paintEvent( QPaintEvent* )
 	// Padding
 	for( int i=0; i < m_numDigits - m_display.length(); i++ ) 
 	{
-		p.drawPixmap(cellRect, m_lcdPixmap, QRect(QPoint(10 * m_cellWidth, isEnabled() ? 0 : m_cellHeight), cellSize));
+		drawCell();
 		p.translate( m_cellWidth, 0 );
 	}
 
-	// Digits: keep the LCD cell background from the pixmap, but always draw the
-	// number itself in Noto Sans Bold (in the accent colour)
-	QFont lcdFont(QStringLiteral("Noto Sans"));
-	lcdFont.setPixelSize(std::max(6, static_cast<int>(m_cellHeight * 0.82)));
-	lcdFont.setBold(true);
-	const QColor digitColor = isEnabled() ? LmmsStyle::accentColor() : QColor(90, 90, 90);
 	for (const auto& digit : m_display)
 	{
-		// blank cell as the LCD background (index 10 in the digit pixmap)
-		p.drawPixmap(cellRect, m_lcdPixmap,
-			QRect(QPoint(10 * m_cellWidth, isEnabled() ? 0 : m_cellHeight), cellSize));
-		p.setFont(lcdFont);
-		p.setPen(digitColor);
-		p.drawText(cellRect, Qt::AlignCenter, QString(digit));
+		drawCell(QString(digit));
 		p.translate( m_cellWidth, 0 );
 	}
 

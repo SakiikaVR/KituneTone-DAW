@@ -1,6 +1,5 @@
 INCLUDE(InstallHelpers)
 
-INSTALL_DATA_SUBDIRS("projects" "*.mmp")
-INSTALL_DATA_SUBDIRS("projects" "*.mmpz")
-INSTALL_DATA_SUBDIRS("projects" "*.mpt")
-
+INSTALL_DATA_SUBDIRS("projects" "*.ktp")
+INSTALL_DATA_SUBDIRS("projects" "*.ktpz")
+INSTALL_DATA_SUBDIRS("projects" "*.ktt")

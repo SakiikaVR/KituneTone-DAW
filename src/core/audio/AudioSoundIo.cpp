@@ -57,7 +57,7 @@ AudioSoundIo::AudioSoundIo( bool & outSuccessful, AudioEngine * _audioEngine ) :
 		return;
 	}
 
-	m_soundio->app_name = "LMMS";
+	m_soundio->app_name = "KitsuneTone";
 	m_soundio->userdata = this;
 	m_soundio->on_backend_disconnect = staticOnBackendDisconnect;
 
@@ -160,7 +160,7 @@ AudioSoundIo::AudioSoundIo( bool & outSuccessful, AudioEngine * _audioEngine ) :
 		currentSampleRate = closestSupportedSampleRate;
 	}
 
-	m_outstream->name = "LMMS";
+	m_outstream->name = "KitsuneTone";
 	m_outstream->software_latency = static_cast<double>(audioEngine()->framesPerAudioBuffer()) / currentSampleRate;
 	m_outstream->userdata = this;
 	m_outstream->write_callback = staticWriteCallback;
@@ -422,7 +422,7 @@ AudioSoundIo::setupWidget::setupWidget( QWidget * _parent ) :
 	m_soundio->userdata = this;
 	m_soundio->on_backend_disconnect = setupWidgetOnBackendDisconnect;
 	m_soundio->on_devices_change = setup_widget_on_devices_change;
-	m_soundio->app_name = "LMMS";
+	m_soundio->app_name = "KitsuneTone";
 
 	int backendCount = soundio_backend_count(m_soundio);
 	for (int i = 0; i < backendCount; i += 1)

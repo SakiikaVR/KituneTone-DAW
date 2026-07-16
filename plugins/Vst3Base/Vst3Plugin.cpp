@@ -444,6 +444,7 @@ bool Vst3Plugin::setupProcessing(double sampleRate, Steinberg::int32 maxBlockSiz
 
 void Vst3Plugin::unload()
 {
+	if (m_outputSyncTimer) { m_outputSyncTimer->stop(); }
 	destroyEditor();
 
 	if (m_processingActive)
@@ -454,8 +455,14 @@ void Vst3Plugin::unload()
 	}
 	m_processData.unprepare();
 
+	// ARA objects can retain plug-in roles and worker resources. They must be
+	// released before the controller/provider and DLL module disappear.
+	m_araDocument.reset();
+	m_pendingAraArchive.clear();
+
 	m_midiMapping = nullptr;
 	m_processor = nullptr;
+	if (m_controller) { m_controller->setComponentHandler(nullptr); }
 	m_controller = nullptr;
 	m_component = nullptr;
 	if (m_provider)

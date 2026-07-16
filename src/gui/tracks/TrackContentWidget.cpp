@@ -350,10 +350,11 @@ TimePos TrackContentWidget::getPosition( int mouseX )
  */
 void TrackContentWidget::dragEnterEvent( QDragEnterEvent * dee )
 {
-	// audio files dragged in from outside (e.g. a file manager) can be
-	// dropped onto sample tracks
+	// audio files dragged in from outside (e.g. a file manager) or a sample
+	// dragged from the "My Samples" browser can be dropped onto sample tracks
 	if (getTrack()->type() == Track::Type::Sample
-			&& !localAudioFiles(dee->mimeData()).isEmpty())
+			&& (!localAudioFiles(dee->mimeData()).isEmpty()
+				|| Clipboard::decodeKey(dee->mimeData()) == "samplefile"))
 	{
 		dee->acceptProposedAction();
 		return;
@@ -616,6 +617,23 @@ void TrackContentWidget::dropEvent( QDropEvent * de )
 		}
 
 		Engine::getSong()->setModified();
+		de->accept();
+		return;
+	}
+
+	// a sample dragged in from the "My Samples" browser -> a new sample clip
+	if (getTrack()->type() == Track::Type::Sample
+			&& Clipboard::decodeKey(de->mimeData()) == "samplefile")
+	{
+		const float snapSize = getGUI()->songEditor()->m_editor->getSnapSize();
+		const TimePos insertPos = m_trackView->trackContainerView()->fixedClips()
+				? TimePos(0)
+				: TimePos(getPosition(pos.x())).quantize(snapSize, true);
+		if (auto clip = dynamic_cast<SampleClip*>(getTrack()->createClip(insertPos)))
+		{
+			clip->setSampleFile(Clipboard::decodeValue(de->mimeData()));
+			Engine::getSong()->setModified();
+		}
 		de->accept();
 		return;
 	}

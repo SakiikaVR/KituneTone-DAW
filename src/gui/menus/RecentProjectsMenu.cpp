@@ -36,7 +36,7 @@ void RecentProjectsMenu::fillMenu()
 	auto projectFileIcon = embed::getIconPixmap( "project_file" );
 
 	//	The file history goes 50 deep but we only show the 15
-	//	most recent ones that we can open and omit .mpt files.
+	//	most recent ones that we can open and omit .ktt files.
 	int shownInMenu = 0;
 	for(QString& fileName : rup)
 	{
@@ -47,7 +47,7 @@ void RecentProjectsMenu::fillMenu()
 			continue;
 		}
 
-		if( recentFile.suffix().toLower() == "mpt" )
+		if (recentFile.suffix().toLower() == "ktt")
 		{
 			continue;
 		}

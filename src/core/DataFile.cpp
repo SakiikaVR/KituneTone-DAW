@@ -48,6 +48,7 @@
 #include "Note.h"
 #include "PluginFactory.h"
 #include "ProjectVersion.h"
+#include "KitsuneToneBranding.h"
 #include "SongEditor.h"
 #include "TextFloat.h"
 #include "Track.h"
@@ -125,7 +126,9 @@ namespace
 
 
 DataFile::DataFile( Type type ) :
-	QDomDocument( "lmms-project" ),
+	QDomDocument(type == Type::SongProject || type == Type::SongProjectTemplate
+		? branding::ProjectRootElement
+		: "lmms-project"),
 	m_fileName(""),
 	m_content(),
 	m_head(),
@@ -133,10 +136,15 @@ DataFile::DataFile( Type type ) :
 	m_fileVersion( UPGRADE_METHODS.size() )
 {
 	appendChild( createProcessingInstruction("xml", "version=\"1.0\""));
-	QDomElement root = createElement( "lmms-project" );
+	const auto rootName = type == Type::SongProject || type == Type::SongProjectTemplate
+		? branding::ProjectRootElement
+		: "lmms-project";
+	QDomElement root = createElement(rootName);
 	root.setAttribute( "version", m_fileVersion );
 	root.setAttribute( "type", typeName( type ) );
-	root.setAttribute( "creator", "LMMS" );
+	root.setAttribute("creator", type == Type::SongProject || type == Type::SongProjectTemplate
+		? branding::ProductName
+		: "LMMS");
 	root.setAttribute( "creatorversion", LMMS_VERSION );
 	root.setAttribute("creatorplatform", QSysInfo::kernelType());
 	root.setAttribute("creatorplatformtype", QSysInfo::productType());
@@ -202,13 +210,14 @@ bool DataFile::validate( QString extension )
 	switch( m_type )
 	{
 	case Type::SongProject:
-		if( extension == "mmp" || extension == "mmpz" )
+		if (extension == branding::ProjectExtension ||
+			extension == branding::CompressedProjectExtension)
 		{
 			return true;
 		}
 		break;
 	case Type::SongProjectTemplate:
-		if(  extension == "mpt" )
+		if (extension == branding::TemplateExtension)
 		{
 			return true;
 		}
@@ -226,7 +235,9 @@ bool DataFile::validate( QString extension )
 		}
 		break;
 	case Type::Unknown:
-		if (! ( extension == "mmp" || extension == "mpt" || extension == "mmpz" ||
+		if (!(extension == branding::ProjectExtension ||
+				extension == branding::TemplateExtension ||
+				extension == branding::CompressedProjectExtension ||
 				extension == "xpf" || extension == "xml" ||
 				( extension == "xiz" && ! getPluginFactory()->pluginSupportingExtension(extension).isNull()) ||
 				extension == "sf2" || extension == "sf3" || extension == "pat" || extension == "mid" ||
@@ -266,22 +277,22 @@ QString DataFile::nameWithExtension( const QString & _fn ) const
 	switch( type() )
 	{
 		case Type::SongProject:
-			if( extension != "mmp" &&
-					extension != "mpt" &&
-					extension != "mmpz" )
+			if (extension != branding::ProjectExtension &&
+					extension != branding::TemplateExtension &&
+					extension != branding::CompressedProjectExtension)
 			{
 				if( ConfigManager::inst()->value( "app",
 						"nommpz" ).toInt() == 0 )
 				{
-					return _fn + ".mmpz";
+					return _fn + "." + branding::CompressedProjectExtension;
 				}
-				return _fn + ".mmp";
+				return _fn + "." + branding::ProjectExtension;
 			}
 			break;
 		case Type::SongProjectTemplate:
-			if( extension != "mpt" )
+			if (extension != branding::TemplateExtension)
 			{
-				return _fn + ".mpt";
+				return _fn + "." + branding::TemplateExtension;
 			}
 			break;
 		case Type::InstrumentTrackSettings:
@@ -402,7 +413,7 @@ bool DataFile::writeFile(const QString& filename, bool withResources)
 	}
 
 	const QString extension = fullName.section('.', -1);
-	if (extension == "mmpz" || extension == "xptz")
+	if (extension == branding::CompressedProjectExtension || extension == "xptz")
 	{
 		QString xml;
 		QTextStream ts( &xml );
@@ -2101,7 +2112,10 @@ void DataFile::upgrade()
 	// update document meta data
 	documentElement().setAttribute( "version", m_fileVersion );
 	documentElement().setAttribute( "type", typeName( type() ) );
-	documentElement().setAttribute( "creator", "LMMS" );
+	documentElement().setAttribute("creator",
+		type() == Type::SongProject || type() == Type::SongProjectTemplate
+			? branding::ProductName
+			: "LMMS");
 	documentElement().setAttribute( "creatorversion", LMMS_VERSION );
 	documentElement().setAttribute("creatorplatform", QSysInfo::kernelType());
 	documentElement().setAttribute("creatorplatformtype", QSysInfo::productType());
@@ -2160,6 +2174,25 @@ void DataFile::loadData( const QByteArray & _data, const QString & _sourceFile )
 	}
 
 	QDomElement root = documentElement();
+	const bool isSongData = root.attribute("type") == typeName(Type::SongProject) ||
+		root.attribute("type") == typeName(Type::SongProjectTemplate);
+	if (isSongData && root.tagName() != branding::ProjectRootElement)
+	{
+		using gui::SongEditor;
+		qWarning() << "Rejected incompatible project root element" << root.tagName()
+			<< "from" << _sourceFile;
+		if (gui::getGUI() != nullptr)
+		{
+			QMessageBox::critical(nullptr,
+				SongEditor::tr("Incompatible project"),
+				SongEditor::tr(
+					"This file is not a KitsuneTone project. 狐Tone projects use "
+					"the dedicated .ktp/.ktpz format and cannot open LMMS project files."));
+		}
+		clear();
+		m_type = Type::Unknown;
+		return;
+	}
 	m_type = type( root.attribute( "type" ) );
 	m_head = root.elementsByTagName( "head" ).item( 0 ).toElement();
 
@@ -2188,12 +2221,13 @@ void DataFile::loadData( const QByteArray & _data, const QString & _sourceFile )
 		 !=  openedWith.setCompareType(ProjectVersion::CompareType::Minor)
 		 && gui::getGUI() != nullptr && root.attribute("type") == "song"
 		){
-			auto projectType = _sourceFile.endsWith(".mpt") ?
+			auto projectType = _sourceFile.endsWith(
+				QStringLiteral(".") + branding::TemplateExtension) ?
 				SongEditor::tr("template") : SongEditor::tr("project");
 
 			gui::TextFloat::displayMessage(
 				SongEditor::tr("Version difference"),
-				SongEditor::tr("This %1 was created with LMMS %2")
+				SongEditor::tr("This %1 was created with KitsuneTone %2")
 				.arg(projectType).arg(createdWith.getVersion()),
 				embed::getIconPixmap("whatsthis", 24, 24),
 				2500

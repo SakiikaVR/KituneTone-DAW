@@ -1239,7 +1239,7 @@ void FileItem::determineFileType()
 	m_handling = FileHandling::NotSupported;
 
 	const QString ext = extension();
-	if( ext == "mmp" || ext == "mpt" || ext == "mmpz" )
+	if (ext == "ktp" || ext == "ktt" || ext == "ktpz")
 	{
 		m_type = FileType::Project;
 		m_handling = FileHandling::LoadAsProject;
@@ -1287,6 +1287,17 @@ void FileItem::determineFileType()
 		m_type = FileType::Preset;
 		m_handling = FileHandling::LoadByPlugin;
 	}
+	else if ( ext == "wav" || ext == "ogg" || ext == "flac" || ext == "aif"
+		|| ext == "aiff" || ext == "mp3" || ext == "spx" || ext == "voc"
+		|| ext == "au" || ext == "snd" || ext == "w64" || ext == "caf"
+		|| ext == "aac" || ext == "m4a" || ext == "opus" )
+	{
+		// audio files are samples regardless of any plug-in supporting them;
+		// they are dropped straight onto sample tracks (there is no native
+		// sample-player instrument in this VST3-only build)
+		m_type = FileType::Sample;
+		m_handling = FileHandling::LoadByPlugin;
+	}
 	else
 	{
 		m_type = FileType::Unknown;
@@ -1323,7 +1334,7 @@ QString FileItem::extension(const QString & file )
 
 QString FileItem::defaultFilters()
 {
-	const auto projectFilters = QStringList{"*.mmp", "*.mpt", "*.mmpz"};
+	const auto projectFilters = QStringList{"*.ktp", "*.ktt", "*.ktpz"};
 	const auto presetFilters = QStringList{"*.xpf", "*.xml", "*.xiz", "*.lv2"};
 	const auto soundFontFilters = QStringList{"*.sf2", "*.sf3"};
 	const auto patchFilters = QStringList{"*.pat"};

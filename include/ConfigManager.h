@@ -210,7 +210,7 @@ public:
 
 	const QString recoveryFile() const
 	{
-		return m_workingDir + "recover.mmp";
+		return m_workingDir + "recover.ktp";
 	}
 
 	inline const QStringList & recentlyOpenedProjects() const
@@ -241,7 +241,7 @@ public:
 	static QStringList availableVstEmbedMethods();
 	QString vstEmbedMethod() const;
 
-	// Returns true if the working dir (e.g. ~/lmms) exists on disk.
+	// Returns true if the KitsuneTone working directory exists on disk.
 	bool hasWorkingDir() const;
 
 	void addRecentlyOpenedProject(const QString & _file);

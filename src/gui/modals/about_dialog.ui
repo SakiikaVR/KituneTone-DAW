@@ -17,7 +17,7 @@
    </size>
   </property>
   <property name="windowTitle">
-   <string>About LMMS</string>
+   <string>狐Toneについて</string>
   </property>
   <layout class="QVBoxLayout" name="verticalLayout_3">
    <item>
@@ -40,7 +40,7 @@
           <string notr="true">font:12pt; font-weight:bold;</string>
          </property>
          <property name="text">
-          <string>LMMS</string>
+          <string>狐Tone (KitsuneTone)</string>
          </property>
         </widget>
        </item>
@@ -75,7 +75,7 @@
      </property>
      <widget class="QWidget" name="tab">
       <attribute name="title">
-       <string>About</string>
+       <string>概要</string>
       </attribute>
       <layout class="QVBoxLayout" name="verticalLayout">
        <item>
@@ -97,7 +97,7 @@
        <item>
         <widget class="QLabel" name="label_2">
          <property name="text">
-          <string>LMMS - easy music production for everyone.</string>
+          <string>狐Toneは、LMMSを基盤として独自に開発されたVST3中心のDAWです。LMMS公式版とは別のプロジェクトです。</string>
          </property>
          <property name="wordWrap">
           <bool>true</bool>
@@ -149,7 +149,7 @@
        <item>
         <widget class="QLabel" name="label_4">
          <property name="text">
-          <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;&lt;a href=&quot;https://lmms.io&quot;&gt;&lt;span style=&quot; text-decoration: underline; color:#33cc33;&quot;&gt;https://lmms.io&lt;/span&gt;&lt;/a&gt;&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
+          <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;&lt;a href=&quot;https://github.com/SakiikaVR/KituneTone-DAW&quot;&gt;&lt;span style=&quot; text-decoration: underline; color:#33ccff;&quot;&gt;GitHub: SakiikaVR/KituneTone-DAW&lt;/span&gt;&lt;/a&gt;&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
          </property>
          <property name="wordWrap">
           <bool>true</bool>
@@ -173,7 +173,7 @@
      </widget>
      <widget class="QWidget" name="tab_2">
       <attribute name="title">
-       <string>Authors</string>
+       <string>開発者</string>
       </attribute>
       <layout class="QVBoxLayout" name="verticalLayout_4">
        <item>
@@ -187,13 +187,13 @@
      </widget>
      <widget class="QWidget" name="tab_3">
       <attribute name="title">
-       <string>Involved</string>
+       <string>貢献者</string>
       </attribute>
       <layout class="QVBoxLayout" name="verticalLayout_7">
        <item>
         <widget class="QLabel" name="label_5">
          <property name="text">
-          <string>Contributors ordered by number of commits:</string>
+          <string>コミット数順の貢献者:</string>
          </property>
         </widget>
        </item>
@@ -208,7 +208,7 @@
      </widget>
      <widget class="QWidget" name="Seite">
       <attribute name="title">
-       <string>Translation</string>
+       <string>翻訳</string>
       </attribute>
       <layout class="QVBoxLayout" name="verticalLayout_5">
        <item>
@@ -217,8 +217,7 @@
           <bool>true</bool>
          </property>
          <property name="plainText">
-          <string>Current language not translated (or native English).
-If you're interested in translating LMMS in another language or want to improve existing translations, you're welcome to help us! Simply contact the maintainer!</string>
+          <string>狐Toneの標準UIは日本語です。翻訳の修正提案はGitHubのIssuesまたはPull Requestで受け付けています。</string>
          </property>
         </widget>
        </item>
@@ -226,7 +225,7 @@ If you're interested in translating LMMS in another language or want to improve 
      </widget>
      <widget class="QWidget" name="Seite_2">
       <attribute name="title">
-       <string>License</string>
+       <string>ライセンス</string>
       </attribute>
       <layout class="QVBoxLayout" name="verticalLayout_6">
        <item>
