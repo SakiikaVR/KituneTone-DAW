@@ -36,8 +36,6 @@
 class QLabel;
 class QPushButton;
 class QShowEvent;
-class QTabWidget;
-class QVBoxLayout;
 
 namespace lmms
 {
@@ -50,6 +48,7 @@ class Vst3Plugin;
 namespace gui
 {
 class Vst3EffectControlDialog;
+class Vst3PluginView;
 }
 
 
@@ -150,9 +149,7 @@ private:
 	//! grow the enclosing workspace window to fit the current tab contents
 	void fitWindowToContents();
 
-	QTabWidget* m_tabs = nullptr;
-	QVBoxLayout* m_guiLayout = nullptr;
-	bool m_editorTried = false;
+	Vst3PluginView* m_pluginView = nullptr;
 };
 
 } // namespace gui

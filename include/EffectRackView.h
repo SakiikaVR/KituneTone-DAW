@@ -40,7 +40,7 @@ class EffectView;
 class GroupBox;
 
 
-class EffectRackView : public QWidget, public ModelView
+class LMMS_EXPORT EffectRackView : public QWidget, public ModelView
 {
 	Q_OBJECT
 public:

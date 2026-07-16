@@ -22,30 +22,46 @@
 
 #include "Vst3Instrument.h"
 
+#include <QDir>
 #include <QDomDocument>
 #include <QDomElement>
 #include <QFileInfo>
+#include <QGridLayout>
 #include <QHBoxLayout>
 #include <QIcon>
-#include <QInputDialog>
 #include <QLabel>
+#include <QLineEdit>
 #include <QMutexLocker>
 #include <QPushButton>
-#include <QTabWidget>
+#include <QRegularExpression>
 #include <QVBoxLayout>
 
 #include <algorithm>
 
+#include "AudioBusHandle.h"
 #include "AudioEngine.h"
+#include "AutomatableButton.h"
+#include "ConfigManager.h"
+#include "DataFile.h"
+#include "EffectRackView.h"
 #include "Engine.h"
 #include "FileDialog.h"
+#include "GroupBox.h"
+#include "InstrumentFunctionViews.h"
+#include "InstrumentMidiIOView.h"
 #include "InstrumentPlayHandle.h"
+#include "InstrumentSoundShapingView.h"
 #include "InstrumentTrack.h"
 #include "InstrumentTrackWindow.h"
+#include "InstrumentTuningView.h"
+#include "Knob.h"
+#include "LcdSpinBox.h"
 #include "PathUtil.h"
+#include "PianoView.h"
 #include "SampleFrame.h"
 #include "Song.h"
 #include "Vst3Plugin.h"
+#include "Vst3PluginView.h"
 
 #include "embed.h"
 #include "plugin_export.h"
@@ -249,33 +265,194 @@ Vst3InstrumentView::Vst3InstrumentView(Vst3Instrument* instrument, QWidget* pare
 	m_resizable = true;
 
 	auto outer = new QVBoxLayout(this);
-	outer->setContentsMargins(4, 4, 4, 4);
+	outer->setContentsMargins(0, 0, 0, 0);
 
-	m_tabs = new QTabWidget(this);
-	outer->addWidget(m_tabs);
+	connect(instrument, &Vst3Instrument::pluginChanged,
+			this, &Vst3InstrumentView::buildTabs);
+	buildTabs();
+}
 
-	// GUI tab: a compact header (name + open button) above the embedded editor
-	auto guiTab = new QWidget(m_tabs);
-	m_guiLayout = new QVBoxLayout(guiTab);
-	m_guiLayout->setContentsMargins(6, 6, 6, 6);
 
-	auto header = new QHBoxLayout();
-	m_nameLabel = new QLabel(tr("No plugin loaded"), guiTab);
-	m_nameLabel->setWordWrap(true);
-	m_openButton = new QPushButton(tr("Open VST3 plugin..."), guiTab);
-	connect(m_openButton, &QPushButton::clicked, this, &Vst3InstrumentView::openPlugin);
-	header->addWidget(m_nameLabel, 1);
-	header->addWidget(m_openButton, 0);
-	m_guiLayout->addLayout(header);
-	m_tabs->addTab(guiTab, tr("GUI"));
 
-	// Parameters tab (filled lazily with the plug-in's knobs)
-	m_paramsTab = new QWidget(m_tabs);
-	auto paramsLayout = new QVBoxLayout(m_paramsTab);
-	paramsLayout->setContentsMargins(0, 0, 0, 0);
-	m_tabs->addTab(m_paramsTab, tr("Parameters"));
 
-	updateName();
+void Vst3InstrumentView::buildTabs()
+{
+	delete m_pluginView;
+	m_pluginView = nullptr;
+
+	auto* instrument = castModel<Vst3Instrument>();
+	if (instrument == nullptr) { return; }
+	auto* track = instrument->instrumentTrack();
+	if (track == nullptr) { return; }
+
+	m_pluginView = new Vst3PluginView(instrument->plugin(), this);
+	layout()->addWidget(m_pluginView);
+	m_pluginView->setContentsChangedCallback([this] { fitWindow(); });
+
+	// Match the VST3 effect dialog first: GUI / Parameters / MIDI.
+	auto* midiView = new InstrumentMidiIOView(m_pluginView);
+	midiView->setModel(track->midiPort());
+	m_pluginView->addTab(midiView, tr("MIDI"));
+
+	// Instrument-only functionality follows as additional tabs.
+	m_pluginView->addTab(createTrackTab(track), tr("Track"));
+
+	auto* functions = new QWidget(m_pluginView);
+	auto* functionsLayout = new QVBoxLayout(functions);
+	functionsLayout->setContentsMargins(4, 4, 4, 4);
+	functionsLayout->addWidget(
+			new InstrumentFunctionNoteStackingView(track->noteStacking()));
+	functionsLayout->addWidget(
+			new InstrumentFunctionArpeggioView(track->arpeggio()));
+	functionsLayout->addStretch();
+	m_pluginView->addTab(functions, tr("Arp/Chord"));
+
+	auto* effects = new EffectRackView(
+			track->audioBusHandle()->effects(), m_pluginView);
+	m_pluginView->addTab(effects, tr("Effects"));
+
+	auto* shaping = new InstrumentSoundShapingView(m_pluginView);
+	shaping->setModel(track->soundShaping());
+	shaping->setFunctionsHidden(instrument->isSingleStreamed());
+	m_pluginView->addTab(shaping, tr("Envelope/LFO"));
+
+	auto* tuning = new InstrumentTuningView(track, m_pluginView);
+	if (instrument->isMidiBased())
+	{
+		tuning->microtunerNotSupportedLabel()->show();
+		tuning->microtunerGroupBox()->hide();
+		track->microtuner()->enabledModel()->setValue(false);
+	}
+	m_pluginView->addTab(tuning, tr("Tuning"));
+
+	auto* keyboardPage = new QWidget(m_pluginView);
+	auto* keyboardLayout = new QVBoxLayout(keyboardPage);
+	keyboardLayout->setContentsMargins(4, 4, 4, 4);
+	auto* piano = new PianoView(keyboardPage);
+	piano->setModel(track->pianoModel());
+	piano->setMinimumHeight(100);
+	piano->setMaximumHeight(100);
+	keyboardLayout->addWidget(piano);
+	keyboardLayout->addStretch();
+	m_pluginView->addTab(keyboardPage, tr("Keyboard"), false);
+
+	resize(360, 300);
+	if (isVisible()) { ensureEmbedded(); }
+}
+
+
+
+
+QWidget* Vst3InstrumentView::createTrackTab(InstrumentTrack* track)
+{
+	auto* page = new QWidget(m_pluginView);
+	auto* outer = new QVBoxLayout(page);
+	outer->setContentsMargins(8, 8, 8, 8);
+	outer->setSpacing(8);
+
+	auto* nameRow = new QHBoxLayout;
+	nameRow->addWidget(new QLabel(tr("Track name:"), page));
+	auto* nameEdit = new QLineEdit(track->name(), page);
+	nameRow->addWidget(nameEdit, 1);
+	outer->addLayout(nameRow);
+	connect(nameEdit, &QLineEdit::textEdited, track, &InstrumentTrack::setName);
+	connect(track, &Track::nameChanged, nameEdit, [track, nameEdit]
+	{
+		if (nameEdit->text() != track->name()) { nameEdit->setText(track->name()); }
+	});
+
+	auto* stateRow = new QHBoxLayout;
+	auto* mute = new AutomatableButton(page, tr("Mute"));
+	mute->setModel(track->getMutedModel());
+	mute->setCheckable(true);
+	stateRow->addWidget(mute);
+	auto* solo = new AutomatableButton(page, tr("Solo"));
+	solo->setModel(track->getSoloModel());
+	solo->setCheckable(true);
+	stateRow->addWidget(solo);
+	stateRow->addStretch();
+	outer->addLayout(stateRow);
+
+	auto* controls = new QGridLayout;
+	controls->setHorizontalSpacing(12);
+	controls->setVerticalSpacing(4);
+
+	auto addControl = [page, controls](QWidget* control,
+			const QString& label, int column)
+	{
+		controls->addWidget(control, 0, column, Qt::AlignHCenter);
+		auto* text = new QLabel(label, page);
+		text->setAlignment(Qt::AlignHCenter);
+		controls->addWidget(text, 1, column);
+		controls->setColumnStretch(column, 1);
+	};
+
+	auto* volume = new VolumeKnob(KnobType::Bright26, page, tr("Volume"));
+	volume->setModel(track->volumeModel());
+	volume->setHintText(tr("Volume:"), "%");
+	addControl(volume, tr("VOL"), 0);
+
+	auto* pan = new Knob(KnobType::Bright26, page, tr("Panning"));
+	pan->setModel(track->panningModel());
+	pan->setHintText(tr("Panning:"), "");
+	addControl(pan, tr("PAN"), 1);
+
+	auto* pitch = new Knob(KnobType::Bright26, page, tr("Pitch"));
+	pitch->setModel(track->pitchModel());
+	pitch->setHintText(tr("Pitch:"), " " + tr("cents"));
+	addControl(pitch, tr("PITCH"), 2);
+
+	auto* pitchRange = new LcdSpinBox(2, page, tr("Pitch range"));
+	pitchRange->setModel(track->pitchRangeModel());
+	addControl(pitchRange, tr("RANGE"), 3);
+
+	auto* mixer = new LcdSpinBox(2, page, tr("Mixer channel"));
+	mixer->setModel(track->mixerChannelModel());
+	addControl(mixer, tr("MIXER"), 4);
+
+	outer->addLayout(controls);
+
+	auto* save = new QPushButton(tr("Save track preset..."), page);
+	connect(save, &QPushButton::clicked, this,
+			[this, track] { saveTrackPreset(track); });
+	outer->addWidget(save);
+	outer->addStretch();
+	return page;
+}
+
+
+
+
+void Vst3InstrumentView::saveTrackPreset(InstrumentTrack* track)
+{
+	if (track == nullptr) { return; }
+
+	const QString presetRoot = ConfigManager::inst()->userPresetsDir();
+	const QString instrumentDir = presetRoot + track->instrumentName();
+	QDir().mkpath(instrumentDir);
+
+	FileDialog dialog(this, tr("Save preset"), instrumentDir,
+			tr("XML preset file (*.xpf)"));
+	dialog.setAcceptMode(FileDialog::AcceptSave);
+	dialog.setDirectory(instrumentDir);
+	dialog.setFileMode(FileDialog::AnyFile);
+	QString fileName = track->name();
+	dialog.selectFile(fileName.remove(QRegularExpression(FILENAME_FILTER)));
+	dialog.setDefaultSuffix("xpf");
+
+	if (dialog.exec() != QDialog::Accepted || dialog.selectedFiles().isEmpty()
+			|| dialog.selectedFiles().first().isEmpty())
+	{
+		return;
+	}
+
+	DataFile dataFile(DataFile::Type::InstrumentTrackSettings);
+	QDomElement& content = dataFile.content();
+	track->savePreset(dataFile, content);
+	content.setAttribute("muted", 0);
+	content.setAttribute("solo", 0);
+	content.setAttribute("mutedBeforeSolo", 0);
+	dataFile.writeFile(dialog.selectedFiles().first());
 }
 
 
@@ -296,31 +473,7 @@ void Vst3InstrumentView::showEvent(QShowEvent* event)
 
 void Vst3InstrumentView::ensureEmbedded()
 {
-	if (m_embedded) { return; }
-	auto m = castModel<Vst3Instrument>();
-	auto p = (m != nullptr) ? m->plugin() : nullptr;
-	if (p == nullptr) { return; }
-	m_embedded = true;
-
-	if (p->hasEditor())
-	{
-		if (QWidget* editor = p->createEmbeddedEditor(m_tabs->widget(0)))
-		{
-			m_guiLayout->addWidget(editor, 1);
-			connect(p, &Vst3Plugin::editorResized, this, &Vst3InstrumentView::fitWindow);
-		}
-	}
-	else
-	{
-		m_guiLayout->addStretch();
-	}
-
-	if (QWidget* params = p->createParameterWidget(m_paramsTab))
-	{
-		m_paramsTab->layout()->addWidget(params);
-	}
-
-	fitWindow();
+	if (m_pluginView != nullptr) { m_pluginView->ensureEmbeddedEditor(); }
 }
 
 
@@ -328,23 +481,19 @@ void Vst3InstrumentView::ensureEmbedded()
 
 void Vst3InstrumentView::fitWindow()
 {
-	// Grow the instrument window to fit the embedded GUI. The window sizes this
-	// view (the "Plugin" tab) to (window height - 180) / (window width - 4) via
-	// InstrumentTrackWindow::adjustTabSize, so we size the window from this
-	// view's preferred size plus that fixed chrome, instead of the window's own
-	// sizeHint (which underestimates the deeply-nested plug-in GUI and clips it).
+	// Grow the instrument window to fit the embedded GUI. This view is the whole
+	// window content (added straight into the window's layout), so the window's
+	// own size hint already accounts for the tab bar and the embedded plug-in
+	// GUI - grow to it, but never shrink below the current size.
 	auto* w = instrumentTrackWindow();
 	if (w == nullptr) { return; }
 
 	if (layout() != nullptr) { layout()->activate(); }
-	const QSize hint = sizeHint();
-	constexpr int chromeHeight = 180;  // matches adjustTabSize()
-	constexpr int chromeWidth = 8;
-	const int wantW = std::max(w->width(), hint.width() + chromeWidth);
-	const int wantH = std::max(w->height(), hint.height() + chromeHeight);
-	if (wantW != w->width() || wantH != w->height())
+	if (w->layout() != nullptr) { w->layout()->activate(); }
+	const QSize want = w->sizeHint().expandedTo(w->size());
+	if (want != w->size())
 	{
-		w->resize(wantW, wantH);
+		w->resize(want);
 		if (w->parentWidget() != nullptr)
 		{
 			w->parentWidget()->resize(w->parentWidget()->sizeHint());
@@ -357,75 +506,7 @@ void Vst3InstrumentView::fitWindow()
 
 void Vst3InstrumentView::modelChanged()
 {
-	auto m = castModel<Vst3Instrument>();
-	connect(m, &Vst3Instrument::pluginChanged, this, &Vst3InstrumentView::updateName);
-	updateName();
-}
-
-
-
-
-void Vst3InstrumentView::updateName()
-{
-	auto m = castModel<Vst3Instrument>();
-	if (m != nullptr && m->plugin() != nullptr)
-	{
-		m_nameLabel->setText(m->plugin()->name() + " - " + m->plugin()->vendor());
-	}
-	else
-	{
-		m_nameLabel->setText(tr("No plugin loaded"));
-	}
-}
-
-
-
-
-void Vst3InstrumentView::openPlugin()
-{
-	auto m = castModel<Vst3Instrument>();
-	if (m == nullptr) { return; }
-
-	// list all installed VST3 modules from the standard locations
-	QStringList paths;
-	for (const auto& path : Vst3Plugin::modulePaths())
-	{
-		paths << QString::fromStdString(path);
-	}
-
-	QStringList names;
-	for (const QString& p : paths)
-	{
-		names << QFileInfo(p).completeBaseName();
-	}
-	names << tr("[ Browse for file... ]");
-
-	bool ok = false;
-	const QString chosen = QInputDialog::getItem(this, tr("Open VST3 plugin"),
-			tr("Installed VST3 plugins:"), names, 0, false, &ok);
-	if (!ok || chosen.isEmpty()) { return; }
-
-	QString file;
-	const int index = names.indexOf(chosen);
-	if (index >= 0 && index < paths.size())
-	{
-		file = paths[index];
-	}
-	else
-	{
-		FileDialog ofd(nullptr, tr("Open VST3 plugin"));
-		ofd.setNameFilters({tr("VST3 plugins (*.vst3)")});
-		if (ofd.exec() != QDialog::Accepted || ofd.selectedFiles().isEmpty()) { return; }
-		file = ofd.selectedFiles()[0];
-	}
-
-	Engine::audioEngine()->requestChangeInModel();
-	m->loadFile(file);
-	Engine::audioEngine()->doneChangeInModel();
-
-	// embed the newly loaded plug-in's GUI/parameters (for a fresh instrument
-	// that had no plug-in when the window was first shown)
-	ensureEmbedded();
+	// the plug-in name is shown in the window title bar; nothing to do here
 }
 
 

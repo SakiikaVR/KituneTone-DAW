@@ -29,6 +29,8 @@
 
 #include <QWidget>
 
+#include "lmms_export.h"
+
 class QLabel;
 
 namespace lmms
@@ -44,7 +46,7 @@ class GroupBox;
 class LedCheckBox;
 
 
-class InstrumentTuningView : public QWidget
+class LMMS_EXPORT InstrumentTuningView : public QWidget
 {
 	Q_OBJECT
 public:

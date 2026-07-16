@@ -28,6 +28,7 @@
 #include <QWidget>
 
 #include "ModelView.h"
+#include "lmms_export.h"
 
 class QLabel;
 
@@ -43,7 +44,7 @@ class Knob;
 class TabWidget;
 
 
-class InstrumentSoundShapingView : public QWidget, public ModelView
+class LMMS_EXPORT InstrumentSoundShapingView : public QWidget, public ModelView
 {
 	Q_OBJECT
 public:

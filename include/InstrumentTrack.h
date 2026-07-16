@@ -162,6 +162,22 @@ public:
 		return &m_midiPort;
 	}
 
+	// exposed so the instrument view can build the chord/arpeggio tab
+	InstrumentFunctionArpeggio * arpeggio()
+	{
+		return &m_arpeggio;
+	}
+
+	InstrumentFunctionNoteStacking * noteStacking()
+	{
+		return &m_noteStacking;
+	}
+
+	InstrumentSoundShaping* soundShaping()
+	{
+		return &m_soundShaping;
+	}
+
 	const IntModel *baseNoteModel() const
 	{
 		return &m_baseNoteModel;

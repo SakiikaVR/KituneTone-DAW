@@ -99,6 +99,8 @@ BUILD_PLUGIN(vst3base
 	vst3_base.cpp
 	Vst3Plugin.cpp
 	Vst3Plugin.h
+	Vst3PluginView.cpp
+	Vst3PluginView.h
 	${VST3BASE_ARA_SRC}
 	MOCFILES Vst3Plugin.h
 	EXPORT_BASE_NAME vst3base

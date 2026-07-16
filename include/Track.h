@@ -197,6 +197,7 @@ public:
 	}
 	
 	BoolModel* getMutedModel();
+	BoolModel* getSoloModel() { return &m_soloModel; }
 	//! whether this track is armed for recording (batch record captures it)
 	BoolModel* getRecordEnabledModel() { return &m_recordEnabledModel; }
 

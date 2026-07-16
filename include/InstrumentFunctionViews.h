@@ -45,7 +45,7 @@ class GroupBox;
 class Knob;
 class TempoSyncKnob;
 
-class InstrumentFunctionNoteStackingView : public QWidget, public ModelView
+class LMMS_EXPORT InstrumentFunctionNoteStackingView : public QWidget, public ModelView
 {
 	Q_OBJECT
 public:
@@ -68,7 +68,7 @@ private:
 
 
 
-class InstrumentFunctionArpeggioView : public QWidget, public ModelView
+class LMMS_EXPORT InstrumentFunctionArpeggioView : public QWidget, public ModelView
 {
 	Q_OBJECT
 public:

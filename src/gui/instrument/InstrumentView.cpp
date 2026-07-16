@@ -68,8 +68,16 @@ void InstrumentView::setModel( Model * _model, bool )
 
 InstrumentTrackWindow * InstrumentView::instrumentTrackWindow()
 {
-	return( dynamic_cast<InstrumentTrackWindow *>(
-					parentWidget()->parentWidget() ) );
+	QWidget* widget = parentWidget();
+	while (widget != nullptr)
+	{
+		if (auto* window = dynamic_cast<InstrumentTrackWindow*>(widget))
+		{
+			return window;
+		}
+		widget = widget->parentWidget();
+	}
+	return nullptr;
 }
 
 

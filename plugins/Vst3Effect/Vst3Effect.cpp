@@ -36,8 +36,6 @@
 #include "SubWindow.h"
 #include <QMutexLocker>
 #include <QPushButton>
-#include <QScrollArea>
-#include <QTabWidget>
 #include <QTimer>
 #include <QVBoxLayout>
 
@@ -57,6 +55,7 @@
 #include "Track.h"
 #include "Vst3AraHost.h"
 #include "Vst3Plugin.h"
+#include "Vst3PluginView.h"
 #include "Vst3SubPluginFeatures.h"
 
 #include "embed.h"
@@ -408,25 +407,20 @@ Vst3EffectControlDialog::Vst3EffectControlDialog(Vst3EffectControls* controls) :
 
 	auto plugin = controls->m_effect->plugin();
 
-	m_tabs = new QTabWidget(this);
-	outer->addWidget(m_tabs);
+	m_pluginView = new Vst3PluginView(plugin, this);
+	outer->addWidget(m_pluginView);
 
 	// --- "GUI" tab: the plug-in's native editor is embedded here lazily on
 	// first show (see ensureEmbeddedEditor); this tab also carries the ARA
 	// controls when the plug-in supports ARA ---
 	{
-		auto guiTab = new QWidget(m_tabs);
-		m_guiLayout = new QVBoxLayout(guiTab);
-		m_guiLayout->setContentsMargins(4, 4, 4, 4);
-		m_guiLayout->setSpacing(4);
-
 		// experimental ARA: expose the track's audio clips to the plug-in
 		// (e.g. Melodyne / Vovious) and offer a button to re-sync after the
 		// clips on the track change.
 		if (plugin != nullptr && plugin->hasAra())
 		{
-			auto araLabel = new QLabel(guiTab);
-			auto araButton = new QPushButton(tr("Sync track audio to ARA"), guiTab);
+			auto araLabel = new QLabel(m_pluginView);
+			auto araButton = new QPushButton(tr("Sync track audio to ARA"), m_pluginView);
 
 			auto doSync = [controls, araLabel]
 			{
@@ -436,48 +430,32 @@ Vst3EffectControlDialog::Vst3EffectControlDialog(Vst3EffectControls* controls) :
 						: tr("ARA: no audio clips on this track"));
 			};
 			connect(araButton, &QPushButton::clicked, this, doSync);
-			m_guiLayout->addWidget(araButton);
-			m_guiLayout->addWidget(araLabel);
+			m_pluginView->guiLayout()->addWidget(araButton);
+			m_pluginView->guiLayout()->addWidget(araLabel);
 
 			// try once immediately so it "just works" when clips already exist
 			doSync();
 		}
-
-		m_tabs->addTab(guiTab, tr("GUI"));
-	}
-
-	// --- "Parameters" tab: automatable knobs bound to the plug-in params ---
-	{
-		QWidget* paramWidget = plugin != nullptr
-				? plugin->createParameterWidget(m_tabs)
-				: nullptr;
-		if (paramWidget == nullptr)
-		{
-			auto lbl = new QLabel(tr("This plug-in exposes no automatable "
-					"parameters."), m_tabs);
-			lbl->setContentsMargins(8, 8, 8, 8);
-			lbl->setWordWrap(true);
-			paramWidget = lbl;
-		}
-		// don't let this tab drive the window size; it fills / scrolls within
-		// whatever size the embedded GUI needs
-		paramWidget->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Ignored);
-		m_tabs->addTab(paramWidget, tr("Parameters"));
 	}
 
 	// --- "MIDI" tab: route MIDI in/out of the plug-in (same UI as tracks) ---
 	{
-		auto midiView = new InstrumentMidiIOView(m_tabs);
+		auto midiView = new InstrumentMidiIOView(m_pluginView);
 		midiView->setModel(controls->m_effect->midiPort());
-		// wrap in a scroll area so this tab never forces the window taller than
-		// the embedded plug-in GUI
-		auto midiScroll = new QScrollArea(m_tabs);
-		midiScroll->setWidgetResizable(true);
-		midiScroll->setWidget(midiView);
-		// don't let this tab drive the window size (see Parameters tab)
-		midiScroll->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Ignored);
-		m_tabs->addTab(midiScroll, tr("MIDI"));
+		m_pluginView->addTab(midiView, tr("MIDI"));
 	}
+
+	m_pluginView->setBeforeEditorCallback([controls]
+	{
+		auto* effect = controls->m_effect;
+		auto* p = effect->plugin();
+		if (p != nullptr && p->hasAra() && !p->araActive())
+		{
+			effect->syncAraFromTrack();
+		}
+	});
+	m_pluginView->setContentsChangedCallback(
+			[this] { fitWindowToContents(); });
 
 	resize(360, 300);
 }
@@ -498,35 +476,7 @@ void Vst3EffectControlDialog::showEvent(QShowEvent* event)
 
 void Vst3EffectControlDialog::ensureEmbeddedEditor()
 {
-	if (m_editorTried) { return; }
-	m_editorTried = true;
-
-	auto p = plugin();
-	if (p == nullptr || m_guiLayout == nullptr) { return; }
-
-	auto* guiTab = m_tabs->widget(0);
-
-	// bind ARA from the track's clips before the editor opens, so the plug-in
-	// hooks its editor / playhead to the freshly-bound document
-	if (p->hasAra() && !p->araActive())
-	{
-		static_cast<Vst3EffectControls*>(m_effectControls)->m_effect->syncAraFromTrack();
-	}
-
-	QWidget* editor = p->hasEditor() ? p->createEmbeddedEditor(guiTab) : nullptr;
-	if (editor != nullptr)
-	{
-		// the plug-in GUI fills the GUI tab (any ARA controls sit below it)
-		m_guiLayout->insertWidget(0, editor, /* stretch */ 1);
-		connect(p, &Vst3Plugin::editorResized, this,
-				&Vst3EffectControlDialog::fitWindowToContents);
-		// the initial size was emitted before we connected, so fit once now
-		fitWindowToContents();
-	}
-	else
-	{
-		m_guiLayout->insertWidget(0, new QLabel(tr("This plug-in has no GUI."), guiTab));
-	}
+	if (m_pluginView != nullptr) { m_pluginView->ensureEmbeddedEditor(); }
 }
 
 

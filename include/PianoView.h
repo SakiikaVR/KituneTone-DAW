@@ -31,6 +31,7 @@
 #include "AutomatableModel.h"
 #include "ModelView.h"
 #include "embed.h"
+#include "lmms_export.h"
 
 namespace lmms
 {
@@ -40,7 +41,7 @@ class Piano;
 namespace gui
 {
 
-class PianoView : public QWidget, public ModelView
+class LMMS_EXPORT PianoView : public QWidget, public ModelView
 {
 	Q_OBJECT
 public:

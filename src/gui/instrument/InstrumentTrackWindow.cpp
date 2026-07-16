@@ -93,10 +93,10 @@ InstrumentTrackWindow::InstrumentTrackWindow( InstrumentTrackView * _itv ) :
 	vlayout->setContentsMargins(0, 0, 0, 0);
 	vlayout->setSpacing( 0 );
 
-	auto generalSettingsWidget = new QWidget(this);
-	auto generalSettingsLayout = new QVBoxLayout(generalSettingsWidget);
+	m_generalSettingsWidget = new QWidget(this);
+	auto generalSettingsLayout = new QVBoxLayout(m_generalSettingsWidget);
 
-	auto nameAndChangeTrackWidget = new QWidget(generalSettingsWidget);
+	auto nameAndChangeTrackWidget = new QWidget(m_generalSettingsWidget);
 	auto nameAndChangeTrackLayout = new QHBoxLayout(nameAndChangeTrackWidget);
 	nameAndChangeTrackLayout->setContentsMargins( 0, 0, 0, 0 );
 	nameAndChangeTrackLayout->setSpacing( 2 );
@@ -273,11 +273,11 @@ InstrumentTrackWindow::InstrumentTrackWindow( InstrumentTrackView * _itv ) :
 	m_pianoView->setMaximumHeight( PIANO_HEIGHT );
 
 	// setup sizes and policies
-	generalSettingsWidget->setMaximumHeight(90);
-	generalSettingsWidget->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+	m_generalSettingsWidget->setMaximumHeight(90);
+	m_generalSettingsWidget->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
 	m_tabWidget->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
 
-	vlayout->addWidget( generalSettingsWidget );
+	vlayout->addWidget(m_generalSettingsWidget);
 	// Use QWidgetItem explicitly to make the size hint change on instrument changes
 	// QLayout::addWidget() uses QWidgetItemV2 with size hint caching
 	vlayout->insertItem(1, new QWidgetItem(m_tabWidget));
@@ -296,8 +296,13 @@ InstrumentTrackWindow::InstrumentTrackWindow( InstrumentTrackView * _itv ) :
 }
 
 void InstrumentTrackWindow::resizeEvent(QResizeEvent * event) {
-	/* m_instrumentView->resize(QSize(size().width()-1, maxHeight)); */
-	adjustTabSize(m_instrumentView);
+	if (m_instrumentView != nullptr && m_instrumentView->usesUnifiedTrackWindow())
+	{
+		QWidget::resizeEvent(event);
+		return;
+	}
+
+	if (m_instrumentView != nullptr) { adjustTabSize(m_instrumentView); }
 	adjustTabSize(m_instrumentFunctionsView);
 	adjustTabSize(m_ssView);
 	adjustTabSize(m_effectView);
@@ -463,37 +468,51 @@ void InstrumentTrackWindow::updateInstrumentView()
 	delete m_instrumentView;
 	if( m_track->m_instrument != nullptr )
 	{
-		m_instrumentView = m_track->m_instrument->createView( m_tabWidget );
-		m_tabWidget->addTab( m_instrumentView, tr( "Plugin" ), "plugin_tab", 0 );
-		m_tabWidget->setActiveTab( 0 );
+		m_instrumentView = m_track->m_instrument->createView(m_tabWidget);
+		const bool unified = m_instrumentView->usesUnifiedTrackWindow();
 
-		// If instrument is resizable, unset size constraints on tabs.
-		// Otherwise, prevent other tabs from exceeding the size of the
-		// instrument tab
-		const auto maxSize = m_instrumentView->isResizable()
-			? QSize{QWIDGETSIZE_MAX, QWIDGETSIZE_MAX}
-			: QSize{
-				std::max(INSTRUMENT_WIDTH, m_instrumentView->width()),
-				std::max(INSTRUMENT_HEIGHT, m_instrumentView->maximumHeight()),
-			};
-		m_tabWidget->setMaximumSize(maxSize);
-		// Individual tabs must also have their maximum widths set,
-		// otherwise they will remain wide, and their overflowing contents
-		// will get clipped.
-		m_ssView->setMaximumSize(maxSize);
-		m_instrumentFunctionsView->setMaximumSize(maxSize);
-		m_effectView->setMaximumSize(maxSize);
-		m_midiView->setMaximumSize(maxSize);
-		m_tuningView->setMaximumSize(maxSize);
+		m_generalSettingsWidget->setVisible(!unified);
+		m_tabWidget->setVisible(!unified);
+
+		if (unified)
+		{
+			// VST3 instruments provide the complete GUI / Parameters tab set
+			// and their track-specific tabs, so place the view directly in the
+			// window just like the VST3 effect control dialog.
+			if (auto* vl = qobject_cast<QVBoxLayout*>(layout()))
+			{
+				vl->insertWidget(0, m_instrumentView, 1);
+			}
+		}
+		else
+		{
+			m_tabWidget->addTab(m_instrumentView, tr("Plugin"), "plugin_tab", 0);
+			m_tabWidget->setActiveTab(0);
+
+			// If instrument is resizable, unset size constraints on tabs.
+			// Otherwise, prevent other tabs from exceeding the size of the
+			// instrument tab.
+			const auto maxSize = m_instrumentView->isResizable()
+				? QSize{QWIDGETSIZE_MAX, QWIDGETSIZE_MAX}
+				: QSize{
+					std::max(INSTRUMENT_WIDTH, m_instrumentView->width()),
+					std::max(INSTRUMENT_HEIGHT, m_instrumentView->maximumHeight()),
+				};
+			m_tabWidget->setMaximumSize(maxSize);
+			m_ssView->setMaximumSize(maxSize);
+			m_instrumentFunctionsView->setMaximumSize(maxSize);
+			m_effectView->setMaximumSize(maxSize);
+			m_midiView->setMaximumSize(maxSize);
+			m_tuningView->setMaximumSize(maxSize);
+		}
+		m_instrumentView->show();
 
 		m_ssView->setFunctionsHidden(m_track->m_instrument->isSingleStreamed());
 
 		modelChanged(); 		// Get the instrument window to refresh
 		m_track->dataChanged(); // Get the text on the trackButton to change
 
-		adjustTabSize(m_instrumentView);
-		// the small on-screen keyboard is hidden (VST3 plug-ins carry their own)
-		m_pianoView->setVisible(false);
+		m_pianoView->setVisible(!unified && m_track->m_instrument->hasNoteInput());
 		// adjust window size
 		layout()->invalidate();
 		resize(sizeHint());
@@ -754,6 +773,18 @@ void InstrumentTrackWindow::updateSubWindow()
 	auto subWindow = findSubWindowInParents();
 	if (subWindow && m_instrumentView)
 	{
+		if (m_instrumentView->usesUnifiedTrackWindow())
+		{
+			setMinimumSize(320, 240);
+			setMaximumSize(QWIDGETSIZE_MAX, QWIDGETSIZE_MAX);
+			subWindow->setWindowFlag(Qt::WindowMaximizeButtonHint, true);
+			if (auto* subWin = dynamic_cast<SubWindow*>(subWindow))
+			{
+				subWin->updateTitleBar();
+			}
+			return;
+		}
+
 		const auto instrumentViewResizable = m_instrumentView->isResizable();
 
 		if (instrumentViewResizable)

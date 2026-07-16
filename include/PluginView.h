@@ -42,6 +42,9 @@ public:
 	}
 
 	virtual bool isResizable() const { return false; }
+	//! Whether an instrument view replaces the legacy instrument window chrome
+	//! with its own complete tab set.
+	virtual bool usesUnifiedTrackWindow() const { return false; }
 };
 
 } // namespace lmms::gui

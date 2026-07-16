@@ -29,11 +29,7 @@
 #include "Instrument.h"
 #include "InstrumentView.h"
 
-class QLabel;
-class QPushButton;
 class QShowEvent;
-class QTabWidget;
-class QVBoxLayout;
 
 namespace lmms
 {
@@ -43,6 +39,7 @@ class Vst3Plugin;
 namespace gui
 {
 class Vst3InstrumentView;
+class Vst3PluginView;
 }
 
 
@@ -92,27 +89,24 @@ public:
 
 	// resizable so the embedded plug-in GUI can grow the instrument window
 	bool isResizable() const override { return m_resizable; }
-
-protected slots:
-	void openPlugin();
-	void updateName();
+	bool usesUnifiedTrackWindow() const override { return true; }
 
 protected:
 	void modelChanged() override;
 	void showEvent(QShowEvent* event) override;
 
 private:
-	//! embed the plug-in's native GUI and parameter knobs into the tabs
+	//! Rebuild the shared VST3 tabs after the hosted plug-in changes.
+	void buildTabs();
+	//! Build track-level controls which do not exist in an effect window.
+	QWidget* createTrackTab(InstrumentTrack* track);
+	void saveTrackPreset(InstrumentTrack* track);
+	//! Embed the plug-in's native GUI lazily.
 	void ensureEmbedded();
 	//! grow the instrument window to fit the embedded GUI
 	void fitWindow();
 
-	QLabel* m_nameLabel;
-	QPushButton* m_openButton;
-	QTabWidget* m_tabs = nullptr;
-	QVBoxLayout* m_guiLayout = nullptr;
-	QWidget* m_paramsTab = nullptr;
-	bool m_embedded = false;
+	Vst3PluginView* m_pluginView = nullptr;
 	bool m_resizable = false;
 };
 
