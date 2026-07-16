@@ -502,19 +502,23 @@ void MainWindow::finalize()
 	// maximized.
 	songEditorWindow->setClosable(false);
 	songEditorWindow->setWindowFlags(Qt::SubWindow | Qt::FramelessWindowHint);
+	connect(songEditorWindow, &QMdiSubWindow::windowStateChanged,
+		songEditorWindow,
+		[songEditorWindow](Qt::WindowStates, Qt::WindowStates newState)
+		{
+			if (!newState.testFlag(Qt::WindowMaximized))
+			{
+				QTimer::singleShot(0, songEditorWindow,
+					[songEditorWindow] { songEditorWindow->showMaximized(); });
+			}
+		});
 
 	getGUI()->automationEditor()->parentWidget()->hide();
 	getGUI()->patternEditor()->parentWidget()->move(610, 5);
 	getGUI()->patternEditor()->parentWidget()->hide();
 	getGUI()->pianoRoll()->parentWidget()->move(5, 5);
 	getGUI()->pianoRoll()->parentWidget()->hide();
-	getGUI()->songEditor()->parentWidget()->move(5, 5);
-	getGUI()->songEditor()->parentWidget()->show();
-
-	// the Song Editor starts maximized: the default project template
-	// (data/projects/templates/default.mpt) sets maximized="1" on the song
-	// track container, so it is restored maximized as part of the initial
-	// layout without any post-startup resizing.
+	songEditorWindow->showMaximized();
 
 	// reset window title every time we change the state of a subwindow to show the correct title
 	for( const QMdiSubWindow * subWindow : workspace()->subWindowList() )
@@ -1706,6 +1710,22 @@ void MainWindow::MovableQMdiArea::mouseReleaseEvent(QMouseEvent* event)
 {
 	setCursor(Qt::ArrowCursor);
 	m_isBeingMoved = false;
+}
+
+void MainWindow::MovableQMdiArea::resizeEvent(QResizeEvent* event)
+{
+	QMdiArea::resizeEvent(event);
+
+	// The non-closable Song Editor is the permanent workspace surface.
+	// Keep it maximized when the main window or sidebar changes size.
+	for (auto* window : subWindowList())
+	{
+		auto* subWindow = qobject_cast<SubWindow*>(window);
+		if (subWindow && !subWindow->isClosable() && !subWindow->isMaximized())
+		{
+			subWindow->showMaximized();
+		}
+	}
 }
 
 } // namespace lmms::gui
