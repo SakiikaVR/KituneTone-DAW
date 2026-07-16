@@ -28,6 +28,7 @@
 #include <QWidget>
 
 class QPushButton;
+class QMenu;
 
 namespace lmms::gui
 {
@@ -69,6 +70,7 @@ private:
 
 	TrackGrip* m_trackGrip;
 	QPushButton * m_trackOps;
+	QMenu* m_trackOpsMenu = nullptr;
 	AutomatableButton* m_muteBtn;
 	AutomatableButton* m_soloBtn;
 	AutomatableButton* m_recordBtn;

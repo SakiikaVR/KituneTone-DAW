@@ -70,6 +70,7 @@ TrackOperationsWidget::TrackOperationsWidget( TrackView * parent ) :
 
 	auto toMenu = new QMenu(this);
 	connect( toMenu, SIGNAL(aboutToShow()), this, SLOT(updateMenu()));
+	m_trackOpsMenu = toMenu;
 
 
 	setObjectName( "automationEnabled" );
@@ -91,9 +92,19 @@ TrackOperationsWidget::TrackOperationsWidget( TrackView * parent ) :
 
 	m_trackOps = new QPushButton(operationsWidget);
 	m_trackOps->setFocusPolicy( Qt::NoFocus );
-	m_trackOps->setMenu( toMenu );
 	m_trackOps->setToolTip(tr("Actions"));
 	m_trackOps->setCursor(Qt::PointingHandCursor);
+	connect(m_trackOps, &QPushButton::clicked, this, [this]
+	{
+		if (m_trackOpsMenu->isVisible()) { return; }
+
+		// QPushButton::setMenu() opens on mouse press. With these very small
+		// track buttons that can immediately close again when the pointer
+		// moves by a pixel or the release lands on the popup edge. Open only
+		// after a complete click and anchor the menu below the button.
+		m_trackOpsMenu->popup(
+				m_trackOps->mapToGlobal(QPoint(0, m_trackOps->height())));
+	});
 
 	m_muteBtn = new AutomatableButton(operationsWidget, tr("Mute"));
 	m_muteBtn->setCheckable(true);
@@ -308,7 +319,7 @@ void TrackOperationsWidget::resetClipColors()
  */
 void TrackOperationsWidget::updateMenu()
 {
-	QMenu * toMenu = m_trackOps->menu();
+	QMenu * toMenu = m_trackOpsMenu;
 	toMenu->clear();
 	toMenu->addAction( embed::getIconPixmap( "edit_copy", 16, 16 ),
 						tr( "Clone this track" ),
