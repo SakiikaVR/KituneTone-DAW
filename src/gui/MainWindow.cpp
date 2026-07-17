@@ -357,6 +357,10 @@ void MainWindow::finalize()
 	m_toolsMenu = new QMenu( this );
 	for( const Plugin::Descriptor* desc : getPluginFactory()->descriptors(Plugin::Type::Tool) )
 	{
+		if (QString::fromLatin1(desc->name) == QStringLiteral("ladspabrowser"))
+		{
+			continue;
+		}
 		m_toolsMenu->addAction( desc->logo->pixmap(), desc->displayName );
 		m_tools.push_back( ToolPlugin::instantiate( desc->name, /*this*/nullptr )
 						   ->createView(this) );
@@ -372,21 +376,6 @@ void MainWindow::finalize()
 	// help-popup-menu
 	auto help_menu = new QMenu(this);
 	menuBar()->addMenu( help_menu )->setText( tr( "&Help" ) );
-	// May use offline help
-	if( true )
-	{
-		help_menu->addAction( embed::getIconPixmap( "help" ),
-						tr( "Online Help" ),
-						this, SLOT(browseHelp()));
-	}
-	else
-	{
-		help_menu->addAction( embed::getIconPixmap( "help" ),
-							tr( "Help" ),
-							this, SLOT(help()));
-	}
-
-	help_menu->addSeparator();
 	help_menu->addAction( embed::getIconPixmap( "icon_small" ), tr( "About" ),
 				  this, SLOT(aboutLMMS()));
 
@@ -1073,10 +1062,6 @@ void MainWindow::updateViewMenu()
 	// TODO: get current visibility for these and indicate in menu?
 	// Not that it's straight visible <-> invisible, more like
 	// not on top -> top <-> invisible
-	m_viewMenu->addAction(embed::getIconPixmap( "songeditor" ),
-			      tr( "Song Editor" ) + "\tCtrl+1",
-			      this, SLOT(toggleSongEditorWin())
-		);
 	m_viewMenu->addAction(embed::getIconPixmap("pattern_track"),
 					tr("Pattern Editor") + "\tCtrl+2",
 					this, SLOT(togglePatternEditorWin())
