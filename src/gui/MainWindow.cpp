@@ -1254,6 +1254,21 @@ void MainWindow::closeEvent( QCloseEvent * _ce )
 			sessionCleanup();
 		}
 		_ce->accept();
+
+		// Detached editor/tool windows have no QObject parent.  Closing the
+		// main window therefore does not synchronously hide them, and on some
+		// platforms a tool such as the Controller Rack can remain visible while
+		// the application is shutting down.  Hide every detached SubWindow
+		// before leaving the event loop so shutdown is atomic from the user's
+		// point of view.
+		for (QWidget* widget : QApplication::topLevelWidgets())
+		{
+			if (widget != this && qobject_cast<SubWindow*>(widget) != nullptr)
+			{
+				widget->hide();
+			}
+		}
+
 		// the floating subwindows are parentless top-level windows; their
 		// native windows die with the main window (owner), but Qt never
 		// registers them as closed, so lastWindowClosed alone would not

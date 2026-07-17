@@ -45,6 +45,17 @@
 namespace lmms
 {
 
+namespace
+{
+
+bool isPianoRollRecording()
+{
+	auto* appGui = gui::getGUI();
+	return appGui != nullptr && appGui->pianoRoll() != nullptr && appGui->pianoRoll()->isRecording();
+}
+
+} // namespace
+
 
 InstrumentTrack::InstrumentTrack(TrackContainer* tc) :
 	Track(Track::Type::Instrument, tc),
@@ -336,12 +347,20 @@ void InstrumentTrack::processInEvent( const MidiEvent& event, const TimePos& tim
 				// play a note only if it is not already playing and if it is within configured bounds
 				if (m_notes[event.key()] == nullptr && event.key() >= firstKey() && event.key() <= lastKey())
 				{
+					// Keep the controller's note-on velocity in the Note object.  When
+					// recording, also allocate a per-note detuning curve so pitch-wheel
+					// movement can be stored as an editable expression envelope.
+					Note inputNote(TimePos(), Engine::getSong()->getPlayPos(Engine::getSong()->playMode()),
+						event.key(), event.volume(midiPort()->baseVelocity()));
+					if (isMidiRecording() || isPianoRollRecording())
+					{
+						inputNote.createDetuning();
+					}
 					NotePlayHandle* nph =
 						NotePlayHandleManager::acquire(
 								this, offset,
 								std::numeric_limits<f_cnt_t>::max() / 2,
-								Note(TimePos(), Engine::getSong()->getPlayPos(Engine::getSong()->playMode()),
-										event.key(), event.volume(midiPort()->baseVelocity())),
+								inputNote,
 								nullptr, event.channel(),
 								NotePlayHandle::Origin::MidiInput);
 					m_notes[event.key()] = nph;
@@ -724,7 +743,7 @@ bool InstrumentTrack::play( const TimePos & _start, const f_cnt_t _frames,
 	for (const auto& processHandle : m_processHandles)
 	{
 		processHandle->processTimePos(
-			_start, m_pitchModel.value(), gui::getGUI() && gui::getGUI()->pianoRoll()->isRecording());
+			_start, m_pitchModel.value(), isMidiRecording() || isPianoRollRecording());
 	}
 
 	if ( clips.size() == 0 )

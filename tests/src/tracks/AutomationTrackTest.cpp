@@ -30,6 +30,7 @@
 #include "DetuningHelper.h"
 #include "InstrumentTrack.h"
 #include "MidiClip.h"
+#include "NotePlayHandle.h"
 #include "PatternClip.h"
 #include "PatternTrack.h"
 #include "PatternStore.h"
@@ -170,6 +171,18 @@ private slots:
 		QCOMPARE(clip->valueAt(TimePos(1, 0)), 0.25f);
 		QCOMPARE(clip->valueAt(TimePos(2, 0)), 0.5f);
 		QCOMPARE(clip->valueAt(TimePos(4, 0)), 1.0f);
+
+		Note inputNote(TimePos(1), TimePos(0), 60, 147);
+		inputNote.createDetuning();
+
+		NotePlayHandle handle(&instrumentTrack, 0, 10000, inputNote,
+			nullptr, 0, NotePlayHandle::Origin::MidiInput);
+		handle.processTimePos(TimePos(0), 250.0f, true);
+
+		// Recording expression must not replace the note-on velocity.
+		QCOMPARE(handle.getVolume(), static_cast<volume_t>(147));
+		QVERIFY(handle.detuning() != nullptr);
+		QCOMPARE(handle.detuning()->automationClip()->valueAt(TimePos(0)), 2.5f);
 	}
 
 	void testPatternTrack()
