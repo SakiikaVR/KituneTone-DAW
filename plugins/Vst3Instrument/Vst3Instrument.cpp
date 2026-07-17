@@ -298,10 +298,14 @@ void Vst3InstrumentView::buildTabs()
 	auto* functions = new QWidget(m_pluginView);
 	auto* functionsLayout = new QVBoxLayout(functions);
 	functionsLayout->setContentsMargins(4, 4, 4, 4);
-	functionsLayout->addWidget(
-			new InstrumentFunctionNoteStackingView(track->noteStacking()));
-	functionsLayout->addWidget(
-			new InstrumentFunctionArpeggioView(track->arpeggio()));
+	auto* noteStackingView = new InstrumentFunctionNoteStackingView(
+			track->noteStacking(), functions);
+	noteStackingView->setModel(track->noteStacking());
+	functionsLayout->addWidget(noteStackingView);
+	auto* arpeggioView = new InstrumentFunctionArpeggioView(
+			track->arpeggio(), functions);
+	arpeggioView->setModel(track->arpeggio());
+	functionsLayout->addWidget(arpeggioView);
 	functionsLayout->addStretch();
 	m_pluginView->addTab(functions, QStringLiteral("アルペジオ/コード"));
 
