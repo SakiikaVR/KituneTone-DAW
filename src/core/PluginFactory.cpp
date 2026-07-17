@@ -157,8 +157,8 @@ void PluginFactory::discoverPlugins()
 	// Apply any plugin filters from environment LMMS_EXCLUDE_PLUGINS
 	filterPlugins(files);
 
-	// Cheap dependency handling: zynaddsubfx needs ZynAddSubFxCore. By loading
-	// all libraries twice we ensure that libZynAddSubFxCore is found.
+	// Load dependencies such as vst3base before resolving the host plug-ins.
+	// The first pass is intentionally separate because QSet iteration is unordered.
 	for (const QFileInfo& file : files)
 	{
 		QLibrary(file.absoluteFilePath()).load();
@@ -269,19 +269,31 @@ QList<QRegularExpression> PluginFactory::getExcludePatterns(const char* envVar) 
 
 // Filter plugins based on environment variable, e.g. export LMMS_EXCLUDE_PLUGINS="libcarla"
 void PluginFactory::filterPlugins(QSet<QFileInfo>& files) {
-	// Get filter
-	QList<QRegularExpression> excludePatterns = getExcludePatterns("LMMS_EXCLUDE_PLUGINS");
-	if (excludePatterns.isEmpty()) {
-		return;
-	}
+	// KitsuneTone only ships the native VST3 hosts and MIDI file filters.
+	// Keep this allow-list at runtime as well as in PluginList.cmake so stale
+	// plug-in binaries left by an older build cannot re-enable removed formats.
+	static const QSet<QString> supportedPlugins{
+		QStringLiteral("vst3base"),
+		QStringLiteral("vst3effect"),
+		QStringLiteral("vst3instrument"),
+		QStringLiteral("midiimport"),
+		QStringLiteral("midiexport"),
+	};
 
-  	// Get files to remove
+	const QList<QRegularExpression> excludePatterns = getExcludePatterns("LMMS_EXCLUDE_PLUGINS");
 	QSet<QFileInfo> filesToRemove;
 	for (const QFileInfo& fileInfo : files) {
-		bool exclude = false;
-		QString filePath = fileInfo.filePath();
+		QString pluginName = fileInfo.completeBaseName().toLower();
+		if (pluginName.startsWith(QStringLiteral("lib")))
+		{
+			pluginName.remove(0, 3);
+		}
 
-		for (const QRegularExpression& pattern : excludePatterns) {
+		bool exclude = !supportedPlugins.contains(pluginName);
+		const QString filePath = fileInfo.filePath();
+
+		for (const QRegularExpression& pattern : excludePatterns)
+		{
 			if (pattern.match(filePath).hasMatch()) {
 				exclude = true;
 				break;

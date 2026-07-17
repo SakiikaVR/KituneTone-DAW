@@ -93,6 +93,15 @@ void EffectChain::loadSettings( const QDomElement & _this )
 			QDomElement effectData = node.toElement();
 
 			const QString name = effectData.attribute( "name" );
+			if (name != QStringLiteral("vst3effect"))
+			{
+				// Non-VST3 effect formats are intentionally unsupported. Do not
+				// create a compatibility placeholder when opening an old project.
+				++fx_loaded;
+				node = node.nextSibling();
+				continue;
+			}
+
 			EffectKey key( effectData.elementsByTagName( "key" ).item( 0 ).toElement() );
 
 			Effect* e = Effect::instantiate( name.toUtf8(), this, &key );

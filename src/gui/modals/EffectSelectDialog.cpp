@@ -62,20 +62,17 @@ EffectSelectDialog::EffectSelectDialog(QWidget* parent) :
 	
 	setWindowIcon(embed::getIconPixmap("setup_audio"));
 
-	// Query effects
-	EffectKeyList subPluginEffectKeys;
+	// Query only the VST3 effect host. PluginFactory also rejects removed
+	// formats, but keeping the picker explicit prevents them from resurfacing
+	// if another descriptor is ever registered internally.
 	for (const auto desc : getPluginFactory()->descriptors(Plugin::Type::Effect))
 	{
-		if (desc->subPluginFeatures)
+		if (qstrcmp(desc->name, "vst3effect") == 0 && desc->subPluginFeatures)
 		{
-			desc->subPluginFeatures->listSubPluginKeys(desc, subPluginEffectKeys);
-		}
-		else
-		{
-			m_effectKeys << EffectKey(desc, desc->name);
+			desc->subPluginFeatures->listSubPluginKeys(desc, m_effectKeys);
+			break;
 		}
 	}
-	m_effectKeys += subPluginEffectKeys;
 
 	// Fill the source model
 	m_sourceModel.setHorizontalHeaderItem(0, new QStandardItem(tr("Name")));
