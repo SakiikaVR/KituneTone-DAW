@@ -309,36 +309,10 @@ void Vst3InstrumentView::buildTabs()
 			track->audioBusHandle()->effects(), m_pluginView);
 	m_pluginView->addTab(effects, QStringLiteral("エフェクト"));
 
-	auto* expressionHelp = new QWidget(m_pluginView);
-	auto* expressionLayout = new QVBoxLayout(expressionHelp);
-	expressionLayout->setContentsMargins(12, 12, 12, 12);
-	auto* expressionLabel = new QLabel(QStringLiteral(
-			"VST3音源のエンベロープとLFOは「GUI」タブで編集します。\n\n"
-			"録音したノートごとのピッチベンドは、ピアノロールでノートを選択し、"
-			"折れ線アイコンまたは Shift+T を押して編集します。\n"
-			"左ドラッグ: 点の追加・移動 / 右ドラッグ: 点の削除 / "
-			"Shift+クリック: 詳細エディター"), expressionHelp);
-	expressionLabel->setWordWrap(true);
-	expressionLabel->setAlignment(Qt::AlignLeft | Qt::AlignTop);
-	expressionLayout->addWidget(expressionLabel);
-	expressionLayout->addStretch();
-	m_pluginView->addTab(expressionHelp, QStringLiteral("エンベロープ/LFO"));
-
 	if (instrument->isMidiBased())
 	{
 		track->microtuner()->enabledModel()->setValue(false);
 	}
-
-	auto* keyboardPage = new QWidget(m_pluginView);
-	auto* keyboardLayout = new QVBoxLayout(keyboardPage);
-	keyboardLayout->setContentsMargins(4, 4, 4, 4);
-	auto* piano = new PianoView(keyboardPage);
-	piano->setModel(track->pianoModel());
-	piano->setMinimumHeight(100);
-	piano->setMaximumHeight(100);
-	keyboardLayout->addWidget(piano);
-	keyboardLayout->addStretch();
-	m_pluginView->addTab(keyboardPage, QStringLiteral("キーボード"), false);
 
 	resize(360, 300);
 	if (isVisible()) { ensureEmbedded(); }
@@ -440,7 +414,15 @@ QWidget* Vst3InstrumentView::createTrackTab(InstrumentTrack* track)
 	connect(save, &QPushButton::clicked, this,
 			[this, track] { saveTrackPreset(track); });
 	outer->addWidget(save);
+
 	outer->addStretch();
+	auto* keyboardLabel = new QLabel(QStringLiteral("キーボード"), page);
+	outer->addWidget(keyboardLabel);
+	auto* piano = new PianoView(page);
+	piano->setModel(track->pianoModel());
+	piano->setMinimumHeight(100);
+	piano->setMaximumHeight(100);
+	outer->addWidget(piano);
 	return page;
 }
 
