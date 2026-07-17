@@ -8257,17 +8257,17 @@ Please make sure you have write permission to the file and the directory contain
         <message>
             <location filename="../../src/gui/FileBrowser.cpp" line="185" />
             <source>User content</source>
-            <translation>User content</translation>
+            <translation>ユーザーコンテンツ</translation>
         </message>
         <message>
             <location filename="../../src/gui/FileBrowser.cpp" line="190" />
             <source>Factory content</source>
-            <translation>Factory content</translation>
+            <translation>標準コンテンツ</translation>
         </message>
         <message>
             <location filename="../../src/gui/FileBrowser.cpp" line="194" />
             <source>Hidden content</source>
-            <translation>Hidden content</translation>
+            <translation>隠し項目</translation>
         </message>
     </context>
     <context>
@@ -10518,7 +10518,7 @@ Please make sure you have write permission to the file and the directory contain
         <message>
             <location filename="../../src/core/main.cpp" line="804" />
             <source>Launch a default session and delete the restored files. This is not reversible.</source>
-            <translation>Launch a default session and delete the restored files. This is not reversible.</translation>
+            <translation>既定のセッションを開始し、復元ファイルを削除します。この操作は元に戻せません。</translation>
         </message>
         <message>
             <location filename="../../src/gui/GuiApplication.cpp" line="136" />
@@ -10534,6 +10534,11 @@ Please make sure you have write permission to the file and the directory contain
             <location filename="../../src/gui/MainWindow.cpp" line="112" />
             <source>Preparing file browsers</source>
             <translation>ファイルブラウザを準備しています</translation>
+        </message>
+        <message>
+            <location filename="../../src/gui/MainWindow.cpp" line="116" />
+            <source>My Favorites</source>
+            <translation>お気に入り</translation>
         </message>
         <message>
             <location filename="../../src/gui/MainWindow.cpp" line="119" />
@@ -10573,7 +10578,7 @@ Please make sure you have write permission to the file and the directory contain
         <message>
             <location filename="../../src/gui/MainWindow.cpp" line="161" />
             <source>Loading background picture</source>
-            <translation>Loading background picture</translation>
+            <translation>背景画像を読み込んでいます</translation>
         </message>
         <message>
             <location filename="../../src/gui/MainWindow.cpp" line="270" />
@@ -10623,7 +10628,7 @@ Please make sure you have write permission to the file and the directory contain
         <message>
             <location filename="../../src/gui/MainWindow.cpp" line="314" />
             <source>Export &amp;Tracks...</source>
-            <translation>Export &amp;Tracks...</translation>
+            <translation>トラックを書き出し(&amp;T)...</translation>
         </message>
         <message>
             <location filename="../../src/gui/MainWindow.cpp" line="320" />
@@ -10653,7 +10658,7 @@ Please make sure you have write permission to the file and the directory contain
         <message>
             <location filename="../../src/gui/MainWindow.cpp" line="351" />
             <source>Scales and keymaps</source>
-            <translation>Scales and keymaps</translation>
+            <translation>スケールとキーマップ</translation>
         </message>
         <message>
             <location filename="../../src/gui/MainWindow.cpp" line="353" />
@@ -10753,7 +10758,7 @@ Please make sure you have write permission to the file and the directory contain
             <location filename="../../src/gui/MainWindow.cpp" line="461" />
             <location filename="../../src/gui/MainWindow.cpp" line="1066" />
             <source>Mixer</source>
-            <translation>Mixer</translation>
+            <translation>ミキサー</translation>
         </message>
         <message>
             <location filename="../../src/gui/MainWindow.cpp" line="465" />
@@ -10865,7 +10870,7 @@ Please visit http://lmms.sf.net/wiki for documentation on LMMS.</source>
         <message>
             <location filename="../../src/gui/MainWindow.cpp" line="1081" />
             <source>Fullscreen</source>
-            <translation>Fullscreen</translation>
+            <translation>全画面表示</translation>
         </message>
         <message>
             <location filename="../../src/gui/MainWindow.cpp" line="1090" />
@@ -11731,7 +11736,7 @@ Warning: This operation can not be undone.</translation>
         <message>
             <location filename="../../src/gui/MixerView.cpp" line="82" />
             <source>Mixer</source>
-            <translation>Mixer</translation>
+            <translation>ミキサー</translation>
         </message>
     </context>
     <context>

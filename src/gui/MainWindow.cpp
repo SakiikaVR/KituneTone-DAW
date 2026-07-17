@@ -113,7 +113,7 @@ MainWindow::MainWindow() :
 	sideBar->appendTab( new PluginBrowser( splitter ) );
 	emit initProgress(tr("Preparing file browsers"));
 
-	sideBar->appendTab(new FileBrowser(FileBrowser::Type::Favorites, ConfigManager::inst()->favoriteItems().join("*"), FileItem::defaultFilters(), "My Favorites",
+	sideBar->appendTab(new FileBrowser(FileBrowser::Type::Favorites, ConfigManager::inst()->favoriteItems().join("*"), FileItem::defaultFilters(), tr("My Favorites"),
 		embed::getIconPixmap("star").transformed(QTransform().rotate(90)), splitter, false, "", ""));
 
 	sideBar->appendTab(new FileBrowser(FileBrowser::Type::Normal,
