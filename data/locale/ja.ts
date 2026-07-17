@@ -12885,7 +12885,7 @@ Warning: This operation can not be undone.</translation>
         <message>
             <location filename="../../src/gui/PluginBrowser.cpp" line="63" />
             <source>Drag an instrument into either the Song Editor, the Pattern Editor or an existing instrument track.</source>
-            <translation>音源をソングエディター、パターンエディター、または既存の音源トラックへドラッグしてください。</translation>
+            <translation>音源をソングエディター、パターンエディターへドラッグしてください。</translation>
         </message>
         <message>
             <location filename="../../src/gui/PluginBrowser.cpp" line="71" />
