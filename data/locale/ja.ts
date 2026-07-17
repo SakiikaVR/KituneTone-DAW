@@ -8257,12 +8257,12 @@ Please make sure you have write permission to the file and the directory contain
         <message>
             <location filename="../../src/gui/FileBrowser.cpp" line="185" />
             <source>User content</source>
-            <translation>ユーザーコンテンツ</translation>
+            <translation>ユーザー</translation>
         </message>
         <message>
             <location filename="../../src/gui/FileBrowser.cpp" line="190" />
             <source>Factory content</source>
-            <translation>標準コンテンツ</translation>
+            <translation>標準</translation>
         </message>
         <message>
             <location filename="../../src/gui/FileBrowser.cpp" line="194" />
@@ -12885,7 +12885,7 @@ Warning: This operation can not be undone.</translation>
         <message>
             <location filename="../../src/gui/PluginBrowser.cpp" line="63" />
             <source>Drag an instrument into either the Song Editor, the Pattern Editor or an existing instrument track.</source>
-            <translation>Drag an instrument into either the Song Editor, the Pattern Editor or an existing instrument track.</translation>
+            <translation>音源をソングエディター、パターンエディター、または既存の音源トラックへドラッグしてください。</translation>
         </message>
         <message>
             <location filename="../../src/gui/PluginBrowser.cpp" line="71" />
