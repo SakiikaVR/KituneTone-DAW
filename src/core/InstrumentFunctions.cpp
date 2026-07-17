@@ -329,6 +329,10 @@ InstrumentFunctionArpeggio::InstrumentFunctionArpeggio( Model * _parent ) :
 	m_arpModeModel.addItem( tr( "Free" ), std::make_unique<PixmapLoader>( "arp_free" ) );
 	m_arpModeModel.addItem( tr( "Sort" ), std::make_unique<PixmapLoader>( "arp_sort" ) );
 	m_arpModeModel.addItem( tr( "Sync" ), std::make_unique<PixmapLoader>( "arp_sync" ) );
+
+	// Keep newly created arpeggiators locked to the project tempo by default.
+	// Existing projects override this value when their saved state is loaded.
+	m_arpTimeModel.setSyncMode(TempoSyncKnobModel::SyncMode::EighthNote);
 }
 
 

@@ -24,6 +24,7 @@
 
 #include "MainWindow.h"
 
+#include <QAbstractButton>
 #include <QApplication>
 #include <QCloseEvent>
 #include <QDesktopServices>
@@ -650,6 +651,11 @@ bool MainWindow::mayChangeProject(bool stopPlayback)
 		| QMessageBox::Cancel;
 
 	auto mb = QMessageBox{QMessageBox::Question, title, text, buttons, this};
+	mb.button(QMessageBox::Save)->setText(QStringLiteral("保存"));
+	mb.button(QMessageBox::Discard)->setText(QStringLiteral("保存しない"));
+	mb.button(QMessageBox::Cancel)->setText(QStringLiteral("キャンセル"));
+	mb.setDefaultButton(QMessageBox::Save);
+	mb.setEscapeButton(QMessageBox::Cancel);
 	int answer = mb.exec();
 
 	if( answer == QMessageBox::Save )

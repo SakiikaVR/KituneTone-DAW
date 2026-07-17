@@ -23,10 +23,14 @@
  */
 
 
+#include <QDomDocument>
 #include <QtTest>
 #include "AutomatableModel.h"
 #include "ComboBoxModel.h"
 #include "Engine.h"
+#include "InstrumentFunctions.h"
+#include "Song.h"
+#include "TempoSyncKnobModel.h"
 
 class AutomatableModelTest : public QObject
 {
@@ -72,6 +76,38 @@ private slots: // tests
 		QCOMPARE(&intModel, imPtr->dynamicCast<AutomatableModel>()); // parent class
 		QCOMPARE(&intModel, imPtr->dynamicCast<IntModel>()); // same class
 		QVERIFY(nullptr == imPtr->dynamicCast<ComboBoxModel>()); // child class
+	}
+
+	void TempoSyncTests()
+	{
+		using namespace lmms;
+
+		Engine::getSong()->setTempo(120);
+		TempoSyncKnobModel model(200.0f, 25.0f, 2000.0f, 1.0f,
+				2000.0f, nullptr, QStringLiteral("Arpeggio time"));
+
+		model.setSyncMode(TempoSyncKnobModel::SyncMode::QuarterNote);
+		QCOMPARE(model.value(), 500.0f);
+
+		Engine::getSong()->setTempo(60);
+		QCOMPARE(model.value(), 1000.0f);
+
+		model.setSyncMode(TempoSyncKnobModel::SyncMode::EighthNote);
+		QCOMPARE(model.value(), 500.0f);
+	}
+
+	void ArpeggioDefaultsToTempoSync()
+	{
+		using namespace lmms;
+
+		InstrumentFunctionArpeggio arpeggio(nullptr);
+		QDomDocument document;
+		auto element = document.createElement(QStringLiteral("arpeggiator"));
+		document.appendChild(element);
+		arpeggio.saveSettings(document, element);
+
+		QCOMPARE(element.attribute(QStringLiteral("arptime_syncmode")).toInt(),
+				static_cast<int>(TempoSyncKnobModel::SyncMode::EighthNote));
 	}
 
 	void LinkTests()
