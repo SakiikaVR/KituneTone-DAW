@@ -2,7 +2,7 @@
 param(
     [string]$BuildDir,
     [string]$OutputDir,
-    [string]$Version = "2.1.0",
+    [string]$Version = "2.1.1",
     [string]$MakeNsis
 )
 
@@ -71,9 +71,13 @@ Copy-Item -LiteralPath (Join-Path $build "plugins\TriangleSynth.vst3") -Destinat
 $dataDir = Join-Path $appDir "data"
 New-Item -ItemType Directory -Path $dataDir | Out-Null
 foreach ($directory in @("backgrounds", "fonts", "locale", "themes")) {
-    $source = Join-Path $build "data\$directory"
+    $source = Join-Path $repoRoot "data\$directory"
     if (Test-Path -LiteralPath $source -PathType Container) {
-        Copy-Item -LiteralPath $source -Destination $dataDir -Recurse
+        $destination = Join-Path $dataDir $directory
+        New-Item -ItemType Directory -Path $destination -Force | Out-Null
+        Get-ChildItem -LiteralPath $source -Force |
+            Where-Object { $_.Name -ne "CMakeLists.txt" } |
+            Copy-Item -Destination $destination -Recurse -Force
     }
 }
 $builtJapaneseLocale = Join-Path $repoRoot "data\locale\ja.qm"
@@ -81,6 +85,22 @@ if (Test-Path -LiteralPath $builtJapaneseLocale -PathType Leaf) {
     $localeDir = Join-Path $dataDir "locale"
     New-Item -ItemType Directory -Path $localeDir -Force | Out-Null
     Copy-Item -LiteralPath $builtJapaneseLocale -Destination $localeDir -Force
+}
+$requiredDataFiles = @(
+    "themes\default\style.css",
+    "themes\default\project_new.png",
+    "fonts\NotoSansJP-Regular.otf",
+    "locale\ja.qm"
+)
+foreach ($relativePath in $requiredDataFiles) {
+    $packagedPath = Join-Path $dataDir $relativePath
+    if (-not (Test-Path -LiteralPath $packagedPath -PathType Leaf)) {
+        throw "Required UI asset is missing from the package: $packagedPath"
+    }
+}
+$themeAssetCount = @(Get-ChildItem -LiteralPath (Join-Path $dataDir "themes\default") -Recurse -File).Count
+if ($themeAssetCount -lt 250) {
+    throw "Default theme is incomplete: only $themeAssetCount files were packaged."
 }
 $projectsDir = Join-Path $dataDir "projects"
 $templatesDir = Join-Path $projectsDir "templates"
