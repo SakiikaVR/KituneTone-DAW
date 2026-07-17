@@ -27,12 +27,15 @@
 
 #include "AutomatableModelView.h"
 #include "AutomationClip.h"
+#include "AutomationTrack.h"
 #include "ControllerConnectionDialog.h"
 #include "ControllerConnection.h"
 #include "embed.h"
+#include "Engine.h"
 #include "GuiApplication.h"
 #include "KeyboardShortcuts.h"
 #include "MainWindow.h"
+#include "Song.h"
 #include "StringPairDrag.h"
 #include "Clipboard.h"
 
@@ -82,6 +85,12 @@ void AutomatableModelView::addDefaultActions( QMenu* menu )
 						pasteDesc, amvSlots, SLOT(pasteFromClipboard()));
 	pasteAction->setEnabled(canPaste);
 
+	menu->addSeparator();
+	menu->addAction(embed::getIconPixmap("automation"),
+			model->isAutomated()
+				? QStringLiteral("オートメーションを編集")
+				: QStringLiteral("オートメーショントラックへ接続"),
+			amvSlots, SLOT(connectToAutomationTrack()));
 	menu->addSeparator();
 
 	if (model->isLinked())
@@ -192,6 +201,32 @@ AutomatableModelViewSlots::AutomatableModelViewSlots( AutomatableModelView* amv,
 	m_amv( amv )
 {
 	connect( parent, SIGNAL(destroyed()), this, SLOT(deleteLater()), Qt::QueuedConnection );
+}
+
+
+
+
+void AutomatableModelViewSlots::connectToAutomationTrack()
+{
+	AutomatableModel* model = m_amv->modelUntyped();
+	if (model == nullptr || getGUI() == nullptr) { return; }
+
+	auto clips = AutomationClip::clipsForModel(model);
+	AutomationClip* clip = clips.empty() ? nullptr : clips.front();
+	if (clip == nullptr)
+	{
+		auto* track = dynamic_cast<AutomationTrack*>(
+				Track::create(Track::Type::Automation, Engine::getSong()));
+		if (track == nullptr) { return; }
+
+		track->setName(model->fullDisplayName());
+		clip = dynamic_cast<AutomationClip*>(track->createClip(TimePos(0)));
+		if (clip == nullptr) { return; }
+		clip->addObject(model);
+		Engine::getSong()->setModified();
+	}
+
+	getGUI()->automationEditor()->open(clip);
 }
 
 

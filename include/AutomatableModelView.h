@@ -95,6 +95,7 @@ public:
 	AutomatableModelViewSlots( AutomatableModelView* amv, QObject* parent );
 
 public slots:
+	void connectToAutomationTrack();
 	void execConnectionDialog();
 	void removeConnection();
 
