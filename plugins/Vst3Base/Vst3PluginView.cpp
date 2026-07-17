@@ -37,7 +37,7 @@ Vst3PluginView::Vst3PluginView(Vst3Plugin* plugin, QWidget* parent) :
 	m_guiLayout = new QVBoxLayout(m_guiTab);
 	m_guiLayout->setContentsMargins(4, 4, 4, 4);
 	m_guiLayout->setSpacing(4);
-	m_tabs->addTab(m_guiTab, tr("GUI"));
+	m_tabs->addTab(m_guiTab, QStringLiteral("プラグイン画面"));
 
 	QWidget* parameters = m_plugin != nullptr
 			? m_plugin->createParameterWidget(m_tabs)
@@ -45,13 +45,13 @@ Vst3PluginView::Vst3PluginView(Vst3Plugin* plugin, QWidget* parent) :
 	if (parameters == nullptr)
 	{
 		auto* label = new QLabel(
-				tr("This plug-in exposes no automatable parameters."), m_tabs);
+				QStringLiteral("このプラグインには自動化できるパラメーターがありません。"), m_tabs);
 		label->setContentsMargins(8, 8, 8, 8);
 		label->setWordWrap(true);
 		parameters = label;
 	}
 	parameters->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Ignored);
-	m_tabs->addTab(parameters, tr("Parameters"));
+	m_tabs->addTab(parameters, QStringLiteral("パラメーター"));
 }
 
 
@@ -101,7 +101,7 @@ void Vst3PluginView::ensureEmbeddedEditor()
 	if (m_plugin == nullptr)
 	{
 		m_guiLayout->insertWidget(0,
-				new QLabel(tr("The VST3 plug-in is not available."), m_guiTab));
+				new QLabel(QStringLiteral("VST3プラグインを利用できません。"), m_guiTab));
 		return;
 	}
 
