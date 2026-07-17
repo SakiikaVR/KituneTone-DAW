@@ -39,10 +39,12 @@
 #include "Mixer.h"
 #include "MixerChannelLcdSpinBox.h"
 #include "MixerView.h"
+#include "PatternStore.h"
 #include "GuiApplication.h"
 #include "Knob.h"
 #include "SampleClip.h"
 #include "SampleTrackWindow.h"
+#include "Song.h"
 #include "SongEditor.h"
 #include "StringPairDrag.h"
 #include "TrackContainerView.h"
@@ -210,14 +212,29 @@ void SampleTrackView::dropEvent(QDropEvent *de)
 				: deX;
 
 		const float snapSize = getGUI()->songEditor()->m_editor->getSnapSize();
-		TimePos clipPos = trackContainerView()->fixedClips()
-				? TimePos(0)
+		const bool fixedClips = trackContainerView()->fixedClips();
+		TimePos clipPos = fixedClips
+				? TimePos(Engine::patternStore()->currentPattern(), 0)
 				: TimePos(((xPos - trackHeadWidth) / trackContainerView()->pixelsPerBar()
 							* TimePos::ticksPerBar()) + trackContainerView()->currentPosition()
 						).quantize(snapSize, true);
 
-		auto sClip = static_cast<SampleClip*>(getTrack()->createClip(clipPos));
-		if (sClip) { sClip->setSampleFile(value); }
+		auto anchor = fixedClips
+				? dynamic_cast<SampleClip*>(getTrack()->getClip(
+						Engine::patternStore()->currentPattern())) : nullptr;
+		auto sClip = fixedClips && anchor != nullptr && anchor->sampleFile().isEmpty()
+				? anchor
+				: dynamic_cast<SampleClip*>(getTrack()->createClip(clipPos));
+		if (sClip)
+		{
+			if (fixedClips)
+			{
+				sClip->setPatternIndex(Engine::patternStore()->currentPattern());
+			}
+			sClip->setSampleFile(value);
+			if (fixedClips) { Engine::patternStore()->updatePatternTrack(sClip); }
+			Engine::getSong()->setModified();
+		}
 	}
 }
 

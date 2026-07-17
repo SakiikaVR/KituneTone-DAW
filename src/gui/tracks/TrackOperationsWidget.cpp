@@ -351,22 +351,37 @@ void TrackOperationsWidget::updateMenu()
 
 		const QString backend = ConfigManager::inst()->value("audioportaudio", "backend");
 		const QString current = st->recordingDevice();
-
-		auto addDevice = [&](const QString& text, const QString& key) {
+		auto addDevice = [micMenu, st, current](const QString& text, const QString& key) {
 			QAction* action = micMenu->addAction(text);
 			action->setCheckable(true);
 			action->setChecked(key == current);
-			connect(action, &QAction::triggered, this,
+			connect(action, &QAction::triggered, micMenu,
 					[st, key]() { st->setRecordingDevice(key); Engine::getSong()->setModified(); });
 		};
 
 		addDevice(tr("Default input device"), QString());
-		for (const auto& device : AudioRecorder::availableInputDevices())
-		{
-			// only show devices of the configured backend (WASAPI, DirectSound, ...)
-			if (!backend.isEmpty() && device.hostApi != backend) { continue; }
-			addDevice(device.name, AudioRecorder::deviceKey(device));
-		}
+		// PortAudio device discovery can block for a noticeable amount of time
+		// on Windows when an audio device is connecting or disconnecting.  Do
+		// not run it while the gear menu itself is opening.  Populate this
+		// submenu only if the user actually opens it.
+		connect(micMenu, &QMenu::aboutToShow, micMenu,
+				[micMenu, st, backend, current]() {
+			if (micMenu->property("devicesLoaded").toBool()) { return; }
+			micMenu->setProperty("devicesLoaded", true);
+			for (const auto& device : AudioRecorder::availableInputDevices())
+			{
+				if (!backend.isEmpty() && device.hostApi != backend) { continue; }
+				const QString key = AudioRecorder::deviceKey(device);
+				QAction* action = micMenu->addAction(device.name);
+				action->setCheckable(true);
+				action->setChecked(key == current);
+				connect(action, &QAction::triggered, micMenu,
+						[st, key]() {
+					st->setRecordingDevice(key);
+					Engine::getSong()->setModified();
+				});
+			}
+		});
 	}
 
 	if( dynamic_cast<AutomationTrackView *>( m_trackView ) )

@@ -499,6 +499,25 @@ void Track::swapPositionOfClips( int clipNum1, int clipNum2 )
 
 void Track::createClipsForPattern(int pattern)
 {
+	if (type() == Type::Sample)
+	{
+		// Sample tracks may contain additional clips after the fixed per-pattern
+		// anchor clips. Keep the anchors at indices 0..pattern so getClip(pattern)
+		// remains compatible with the rest of the pattern engine.
+		for (int i = 0; i <= pattern; ++i)
+		{
+			if (i < static_cast<int>(m_clips.size())
+					&& m_clips[i]->startPosition() == TimePos(i, 0))
+			{
+				continue;
+			}
+			Clip* anchor = createClip(TimePos(i, 0));
+			anchor->changeLength(TimePos(1, 0));
+			std::rotate(m_clips.begin() + i, m_clips.end() - 1, m_clips.end());
+		}
+		return;
+	}
+
 	while( numOfClips() < pattern + 1 )
 	{
 		TimePos position = TimePos( numOfClips(), 0 );

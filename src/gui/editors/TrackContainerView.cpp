@@ -50,6 +50,7 @@
 #include "ImportFilter.h"
 #include "Instrument.h"
 #include "InstrumentTrack.h"
+#include "PatternStore.h"
 #include "PatternTrack.h"
 #include "Song.h"
 #include "StringPairDrag.h"
@@ -501,7 +502,18 @@ void TrackContainerView::dropEvent( QDropEvent * _de )
 		auto st = dynamic_cast<SampleTrack*>(Track::create(Track::Type::Sample, m_tc));
 		if( st != nullptr )
 		{
-			if( auto clip = dynamic_cast<SampleClip*>(st->createClip(TimePos(0))) )
+			SampleClip* clip = nullptr;
+			if (fixedClips())
+			{
+				const int pattern = Engine::patternStore()->currentPattern();
+				clip = dynamic_cast<SampleClip*>(st->getClip(pattern));
+				if (clip != nullptr) { clip->setPatternIndex(pattern); }
+			}
+			else
+			{
+				clip = dynamic_cast<SampleClip*>(st->createClip(TimePos(0)));
+			}
+			if (clip != nullptr)
 			{
 				clip->setSampleFile( value );
 			}

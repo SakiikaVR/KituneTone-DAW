@@ -80,26 +80,31 @@ bool SampleTrack::play( const TimePos & _start, const f_cnt_t _frames,
 	class PatternTrack * pattern_track = nullptr;
 	if( _clip_num >= 0 )
 	{
-		auto sClip = dynamic_cast<SampleClip*>(getClip(_clip_num));
+		bool nowPlaying = false;
+		for (Clip* clip : getClips())
+		{
+			auto sClip = dynamic_cast<SampleClip*>(clip);
+			if (sClip == nullptr || sClip->patternIndex() != _clip_num) { continue; }
 
-		if (_start > sClip->length())
-		{
-			setPlaying(false);
+			const TimePos relativeStart = sClip->patternOffset();
+			if (_start >= relativeStart && _start < relativeStart + sClip->length())
+			{
+				if (!sClip->isPlaying() && !sClip->sampleFile().isEmpty())
+				{
+					auto framesPerTick = Engine::framesPerTick(sClip->sample().sampleRate());
+					sClip->setSampleStartFrame(framesPerTick * (_start - relativeStart));
+					sClip->setIsPlaying(true);
+					clips.push_back(sClip);
+				}
+			}
+			else
+			{
+				sClip->setIsPlaying(false);
+			}
+			nowPlaying = nowPlaying || sClip->isPlaying();
 		}
-		if (sClip->isPlaying())
-		{
-			return false;
-		}
-		clips.push_back(sClip);
-		if (trackContainer() == Engine::patternStore())
-		{
-			auto bufferFramesPerTick = Engine::framesPerTick(sClip->sample().sampleRate());
-			f_cnt_t sampleStart = bufferFramesPerTick * _start;
-			pattern_track = PatternTrack::findPatternTrack(_clip_num);
-			sClip->setSampleStartFrame(sampleStart);
-			sClip->setIsPlaying(true);
-			setPlaying(true);
-		}
+		pattern_track = PatternTrack::findPatternTrack(_clip_num);
+		setPlaying(nowPlaying);
 	}
 	else
 	{
@@ -186,6 +191,10 @@ Clip * SampleTrack::createClip(const TimePos & pos)
 {
 	auto sClip = new SampleClip(this);
 	sClip->movePosition(pos);
+	if (trackContainer() == Engine::patternStore())
+	{
+		sClip->setPatternIndex(pos.getBar());
+	}
 	return sClip;
 }
 

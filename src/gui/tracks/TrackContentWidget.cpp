@@ -26,10 +26,12 @@
 
 #include <QApplication>
 #include <QContextMenuEvent>
+#include <QCursor>
 #include <QFileInfo>
 #include <QMenu>
 #include <QMimeData>
 #include <QPainter>
+#include <QTimer>
 #include <QUrl>
 
 #include <algorithm>
@@ -267,9 +269,19 @@ void TrackContentWidget::changePosition( const TimePos & newPos )
 		// first show clip for current pattern...
 		for (const auto& clipView : m_clipViews)
 		{
-			if (clipView->getClip()->startPosition().getBar() == curPattern)
+			Clip* clip = clipView->getClip();
+			auto sample = dynamic_cast<SampleClip*>(clip);
+			const bool belongsToPattern = sample != nullptr
+					? sample->patternIndex() == curPattern
+					: clip->startPosition().getBar() == curPattern;
+			if (belongsToPattern)
 			{
-				clipView->move(0, clipView->y());
+				const TimePos relativePosition = sample != nullptr
+						? sample->patternOffset() : TimePos(0);
+				const int x = relativePosition.getTicks()
+						* m_trackView->trackContainerView()->pixelsPerBar()
+						/ TimePos::ticksPerBar();
+				clipView->move(x, clipView->y());
 				clipView->raise();
 				clipView->show();
 			}
@@ -278,7 +290,12 @@ void TrackContentWidget::changePosition( const TimePos & newPos )
 		// ...then hide others to avoid flickering
 		for (const auto& clipView : m_clipViews)
 		{
-			if (clipView->getClip()->startPosition().getBar() != curPattern) { clipView->hide(); }
+			Clip* clip = clipView->getClip();
+			auto sample = dynamic_cast<SampleClip*>(clip);
+			const bool belongsToPattern = sample != nullptr
+					? sample->patternIndex() == curPattern
+					: clip->startPosition().getBar() == curPattern;
+			if (!belongsToPattern) { clipView->hide(); }
 		}
 		setUpdatesEnabled( true );
 		return;
@@ -335,6 +352,12 @@ void TrackContentWidget::changePosition( const TimePos & newPos )
 TimePos TrackContentWidget::getPosition( int mouseX )
 {
 	TrackContainerView * tv = m_trackView->trackContainerView();
+	if (tv->fixedClips())
+	{
+		return TimePos(TimePos(Engine::patternStore()->currentPattern(), 0)
+				+ mouseX * TimePos::ticksPerBar()
+				/ static_cast<int>(tv->pixelsPerBar()));
+	}
 	return TimePos( tv->currentPosition() +
 					 mouseX *
 					 TimePos::ticksPerBar() /
@@ -439,8 +462,8 @@ bool TrackContentWidget::canPasteSelection( TimePos clipPos, const QMimeData* md
 
 	// If we are pasting into the PatternEditor, only a single Clip is allowed to be pasted
 	// so we don't have the unexpected behavior of pasting on different PatternTracks
-	if (m_trackView->trackContainerView()->fixedClips() == true &&
-			clipNodes.length() > 1)
+	if (m_trackView->trackContainerView()->fixedClips() == true
+			&& t->type() != Track::Type::Sample && clipNodes.length() > 1)
 	{
 		return false;
 	}
@@ -486,6 +509,99 @@ bool TrackContentWidget::pasteSelection( TimePos clipPos, QDropEvent * de )
 
 	// We set skipSafetyCheck to true because we already called canPasteSelection
 	return pasteSelection( clipPos, mimeData, true );
+}
+
+
+
+
+bool TrackContentWidget::moveFixedPatternSample( QDropEvent * de )
+{
+	if (!m_trackView->trackContainerView()->fixedClips()
+			|| getTrack()->type() != Track::Type::Sample)
+	{
+		return false;
+	}
+
+	auto sourceView = qobject_cast<ClipView*>(de->source());
+	auto source = sourceView != nullptr
+			? dynamic_cast<SampleClip*>(sourceView->getClip())
+			: nullptr;
+	if (source == nullptr
+			|| source->getTrack()->trackContainer() != getTrack()->trackContainer())
+	{
+		return false;
+	}
+
+	const int pattern = Engine::patternStore()->currentPattern();
+	const float snapSize = getGUI()->songEditor()->m_editor->getSnapSize();
+	const int localX = std::max(0, mapFromGlobal(QCursor::pos()).x());
+	TimePos relativePosition(localX * TimePos::ticksPerBar()
+			/ static_cast<int>(m_trackView->trackContainerView()->pixelsPerBar()));
+	relativePosition = relativePosition.quantize(snapSize, true);
+	const TimePos destinationPosition = TimePos(pattern, 0) + relativePosition;
+
+	auto sourceTrack = source->getTrack();
+	const bool sourceIsAnchor = sourceTrack->getClip(source->patternIndex()) == source;
+	if (sourceTrack == getTrack() && !sourceIsAnchor)
+	{
+		sourceTrack->addJournalCheckPoint();
+		source->setPatternIndex(pattern);
+		source->movePosition(destinationPosition);
+		Engine::patternStore()->updatePatternTrack(source);
+		m_trackView->getTrackContentWidget()->changePosition();
+		Engine::getSong()->setModified();
+		de->acceptProposedAction();
+		return true;
+	}
+	if (sourceTrack == getTrack() && sourceIsAnchor && relativePosition == TimePos(0))
+	{
+		de->acceptProposedAction();
+		return true;
+	}
+
+	sourceTrack->addJournalCheckPoint();
+	getTrack()->addJournalCheckPoint();
+	auto anchor = dynamic_cast<SampleClip*>(getTrack()->getClip(pattern));
+	SampleClip* destination = relativePosition == TimePos(0)
+			&& anchor != nullptr && anchor->sampleFile().isEmpty()
+			? anchor
+			: dynamic_cast<SampleClip*>(getTrack()->createClip(destinationPosition));
+	if (destination == nullptr) { return false; }
+
+	Clip::copyStateTo(source, destination);
+	destination->setPatternIndex(pattern);
+	destination->movePosition(destinationPosition);
+
+	if (sourceIsAnchor)
+	{
+		source->setSampleFile(QString());
+		source->setName(QString());
+		source->setStartTimeOffset(0);
+		source->setSourceBpm(0);
+	}
+	else
+	{
+		QTimer::singleShot(0, this, [source, sourceTrack, pattern]() {
+			delete source;
+			Engine::patternStore()->updatePatternTrack(sourceTrack->getClip(pattern));
+		});
+	}
+
+	Engine::patternStore()->updatePatternTrack(destination);
+	Engine::getSong()->setModified();
+
+	sourceView->setSelected(false);
+	for (ClipView* view : m_clipViews)
+	{
+		if (view->getClip() == destination)
+		{
+			view->setSelected(true);
+			break;
+		}
+	}
+
+	de->acceptProposedAction();
+	return true;
 }
 
 // Overloaded method so we can call it without a Drag&Drop event
@@ -578,6 +694,13 @@ bool TrackContentWidget::pasteSelection( TimePos clipPos, const QMimeData * md, 
 		Clip * clip = t->createClip( pos );
 		clip->restoreState( clipElement );
 		clip->movePosition(pos); // Because we restored the state, we need to move the Clip again.
+		if (m_trackView->trackContainerView()->fixedClips()
+				&& t->type() == Track::Type::Sample)
+		{
+			auto sample = static_cast<SampleClip*>(clip);
+			sample->setPatternIndex(Engine::patternStore()->currentPattern());
+			Engine::patternStore()->updatePatternTrack(sample);
+		}
 		if( wasSelection )
 		{
 			clip->selectViewOnCreate( true );
@@ -603,17 +726,37 @@ void TrackContentWidget::dropEvent( QDropEvent * de )
 	if (getTrack()->type() == Track::Type::Sample && !audioFiles.isEmpty())
 	{
 		const float snapSize = getGUI()->songEditor()->m_editor->getSnapSize();
-		TimePos insertPos = m_trackView->trackContainerView()->fixedClips()
-				? TimePos(0)
+		const bool fixedClips = m_trackView->trackContainerView()->fixedClips();
+		const int pattern = Engine::patternStore()->currentPattern();
+		TimePos relativePosition = fixedClips
+				? TimePos(pos.x() * TimePos::ticksPerBar()
+						/ static_cast<int>(m_trackView->trackContainerView()->pixelsPerBar()))
+						.quantize(snapSize, true)
+				: TimePos(0);
+		TimePos insertPos = fixedClips
+				? TimePos(TimePos(pattern, 0) + relativePosition)
 				: TimePos(getPosition(pos.x())).quantize(snapSize, true);
 
 		for (const QString& file : audioFiles)
 		{
-			auto clip = dynamic_cast<SampleClip*>(getTrack()->createClip(insertPos));
+			// Reuse the fixed anchor at pattern start when it is empty; otherwise
+			// create another independently positioned sample in this pattern.
+			auto anchor = fixedClips
+					? dynamic_cast<SampleClip*>(getTrack()->getClip(pattern)) : nullptr;
+			auto clip = fixedClips && relativePosition == TimePos(0)
+					&& anchor != nullptr && anchor->sampleFile().isEmpty()
+					? anchor
+					: dynamic_cast<SampleClip*>(getTrack()->createClip(insertPos));
 			if (clip == nullptr) { break; }
+			if (fixedClips) { clip->setPatternIndex(pattern); }
 			clip->setSampleFile(file);
+			if (fixedClips)
+			{
+				Engine::patternStore()->updatePatternTrack(clip);
+			}
 			// put any additional files one after another
 			insertPos = clip->startPosition() + clip->length();
+			relativePosition = insertPos - TimePos(pattern, 0);
 		}
 
 		Engine::getSong()->setModified();
@@ -626,17 +769,34 @@ void TrackContentWidget::dropEvent( QDropEvent * de )
 			&& Clipboard::decodeKey(de->mimeData()) == "samplefile")
 	{
 		const float snapSize = getGUI()->songEditor()->m_editor->getSnapSize();
-		const TimePos insertPos = m_trackView->trackContainerView()->fixedClips()
-				? TimePos(0)
+		const bool fixedClips = m_trackView->trackContainerView()->fixedClips();
+		const int pattern = Engine::patternStore()->currentPattern();
+		const TimePos relativePosition = fixedClips
+				? TimePos(pos.x() * TimePos::ticksPerBar()
+						/ static_cast<int>(m_trackView->trackContainerView()->pixelsPerBar()))
+						.quantize(snapSize, true)
+				: TimePos(0);
+		const TimePos insertPos = fixedClips
+				? TimePos(TimePos(pattern, 0) + relativePosition)
 				: TimePos(getPosition(pos.x())).quantize(snapSize, true);
-		if (auto clip = dynamic_cast<SampleClip*>(getTrack()->createClip(insertPos)))
+		auto anchor = fixedClips
+				? dynamic_cast<SampleClip*>(getTrack()->getClip(pattern)) : nullptr;
+		auto clip = fixedClips && relativePosition == TimePos(0)
+				&& anchor != nullptr && anchor->sampleFile().isEmpty()
+				? anchor
+				: dynamic_cast<SampleClip*>(getTrack()->createClip(insertPos));
+		if (clip != nullptr)
 		{
+			if (fixedClips) { clip->setPatternIndex(pattern); }
 			clip->setSampleFile(Clipboard::decodeValue(de->mimeData()));
+			if (fixedClips) { Engine::patternStore()->updatePatternTrack(clip); }
 			Engine::getSong()->setModified();
 		}
 		de->accept();
 		return;
 	}
+
+	if (moveFixedPatternSample(de)) { return; }
 
 	TimePos clipPos = TimePos(getPosition(pos.x()));
 	if( pasteSelection( clipPos, de ) == true )

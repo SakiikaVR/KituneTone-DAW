@@ -45,6 +45,7 @@
 #include "MidiClipView.h"
 #include "PatternClip.h"
 #include "PatternStore.h"
+#include "SampleClip.h"
 #include "Song.h"
 #include "SongEditor.h"
 #include "StringPairDrag.h"
@@ -283,6 +284,23 @@ bool ClipView::close()
 void ClipView::remove()
 {
 	m_trackView->getTrack()->addJournalCheckPoint();
+	if (fixedClips())
+	{
+		if (auto sample = dynamic_cast<SampleClip*>(m_clip))
+		{
+			const bool anchor = sample->getTrack()->getClip(sample->patternIndex()) == sample;
+			if (anchor)
+			{
+				sample->setSampleFile(QString());
+				sample->setName(QString());
+				sample->setStartTimeOffset(0);
+				sample->setSourceBpm(0);
+				Engine::patternStore()->updatePatternTrack(sample);
+				m_trackView->update();
+				return;
+			}
+		}
+	}
 
 	// delete ourself
 	close();
@@ -477,6 +495,15 @@ void ClipView::dropEvent( QDropEvent * de )
 		return;
 	}
 
+	// Pattern samples can be repositioned in time or moved vertically between
+	// sample tracks while retaining the fixed per-pattern anchor slots.
+	if (fixedClips()
+			&& dynamic_cast<SampleClip*>(m_clip) != nullptr
+			&& getTrackView()->getTrackContentWidget()->moveFixedPatternSample(de))
+	{
+		return;
+	}
+
 	// Defer to rubberband paste if we're in that mode
 	if( m_trackView->trackContainerView()->allowRubberband() == true )
 	{
@@ -653,6 +680,13 @@ void ClipView::mousePressEvent( QMouseEvent * me )
 
 	setInitialPos(pos);
 	setInitialOffsets();
+	if (fixedClips() && me->button() == Qt::LeftButton
+			&& dynamic_cast<SampleClip*>(m_clip) != nullptr)
+	{
+		// A click selects the pattern sample; moving the pointer starts the
+		// existing clip drag operation so it can be moved to another row.
+		m_action = Action::ToggleSelected;
+	}
 	if( !fixedClips() && me->button() == Qt::LeftButton )
 	{
 		const bool knifeMode = m_trackView->trackContainerView()->knifeMode();
@@ -772,7 +806,8 @@ void ClipView::mousePressEvent( QMouseEvent * me )
 		{
 			toggleMute( active );
 		}
-		else if( me->modifiers() & Qt::ShiftModifier && !fixedClips() )
+		else if( me->modifiers() & Qt::ShiftModifier
+				&& (!fixedClips() || dynamic_cast<SampleClip*>(m_clip) != nullptr) )
 		{
 			remove( active );
 		}
@@ -789,7 +824,7 @@ void ClipView::mousePressEvent( QMouseEvent * me )
 		{
 			toggleMute( active );
 		}
-		else if( !fixedClips() )
+		else if( !fixedClips() || dynamic_cast<SampleClip*>(m_clip) != nullptr )
 		{
 			remove( active );
 		}
@@ -1105,7 +1140,7 @@ void ClipView::contextMenuEvent( QContextMenuEvent * cme )
 
 	QMenu contextMenu( this );
 
-	if( fixedClips() == false )
+	if( fixedClips() == false || dynamic_cast<SampleClip*>(m_clip) != nullptr )
 	{
 		contextMenu.addAction(
 			embed::getIconPixmap( "cancel" ),
@@ -1200,7 +1235,7 @@ void ClipView::contextMenuAction( ContextMenuAction action )
 QVector<ClipView *> ClipView::getClickedClips()
 {
 	// Get a list of selected selectableObjects
-	QVector<selectableObject *> sos = getGUI()->songEditor()->m_editor->selectedObjects();
+	QVector<selectableObject *> sos = m_trackView->trackContainerView()->selectedObjects();
 
 	// Convert to a list of selected ClipVs
 	QVector<ClipView *> selection;

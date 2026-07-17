@@ -25,6 +25,7 @@
 #include "PatternEditor.h"
 
 #include <QAction>
+#include <QScrollBar>
 #include <QVBoxLayout>
 
 #include "ClipView.h"
@@ -34,6 +35,7 @@
 #include "MainWindow.h"
 #include "PatternStore.h"
 #include "PatternTrack.h"
+#include "SampleClip.h"
 #include "Song.h"
 #include "StringPairDrag.h"
 #include "TimeLineWidget.h"
@@ -61,10 +63,16 @@ PatternEditor::PatternEditor(PatternStore* ps) :
 		m_currentPosition, this
 	);
 	connect(m_timeLine->timeline(), &Timeline::positionChanged, this, &PatternEditor::updatePosition);
+	connect(contentWidget()->horizontalScrollBar(), &QScrollBar::valueChanged,
+			this, [this](int value) {
+		m_timeLine->setXOffset(m_trackHeadWidth - value);
+	});
 	static_cast<QVBoxLayout*>(layout())->insertWidget(0, m_timeLine);
 
 	connect(m_ps, &PatternStore::trackUpdated,
 		this, &PatternEditor::updateMaxSteps);
+	connect(this, &TrackContainerView::tracksRealigned,
+			this, &PatternEditor::updateMaxSteps);
 
 	setFocusPolicy(Qt::StrongFocus);
 	setFocus();
@@ -156,10 +164,11 @@ void PatternEditor::dropEvent(QDropEvent* de)
 
 		// Ensure pattern clips exist
 		bool hasValidPatternClips = false;
-		if (t->getClips().size() == static_cast<std::size_t>(m_ps->numOfPatterns()))
+		const auto requiredClips = static_cast<std::size_t>(m_ps->numOfPatterns());
+		if (t->getClips().size() >= requiredClips)
 		{
 			hasValidPatternClips = true;
-			for (auto i = std::size_t{0}; i < t->getClips().size(); ++i)
+			for (auto i = std::size_t{0}; i < requiredClips; ++i)
 			{
 				if (t->getClips()[i]->startPosition() != TimePos(i, 0))
 				{
@@ -221,14 +230,34 @@ void PatternEditor::updateMaxSteps()
 	for (const auto& track : tl)
 	{
 		auto clip = track->getClip(m_ps->currentPattern());
-		if (track->type() == Track::Type::Automation || track->type() == Track::Type::Sample)
+		if (track->type() == Track::Type::Sample)
 		{
-			// The length of automation and sample clips is updated to match the pattern length.
+			for (Clip* candidate : track->getClips())
+			{
+				auto sample = static_cast<SampleClip*>(candidate);
+				if (sample->patternIndex() != m_ps->currentPattern()) { continue; }
+				sample->updateLength();
+				m_maxClipLength = std::max(m_maxClipLength,
+						static_cast<tick_t>(sample->patternOffset().getTicks()
+								+ sample->length().getTicks()));
+			}
+			continue;
+		}
+		if (track->type() == Track::Type::Automation)
+		{
+			// Automation follows the complete pattern length.
 			clip->updateLength();
 		}
 		m_maxClipLength = std::max(m_maxClipLength, static_cast<tick_t>(clip->length()));
 	}
 	updatePixelsPerBar();
+	const int patternWidth = std::max(TimePos::ticksPerBar(),
+			Engine::patternStore()->lengthOfCurrentPattern() * TimePos::ticksPerBar())
+			* pixelsPerBar() / TimePos::ticksPerBar();
+	for (TrackView* trackView : trackViews())
+	{
+		trackView->setMinimumWidth(m_trackHeadWidth + patternWidth);
+	}
 }
 
 
