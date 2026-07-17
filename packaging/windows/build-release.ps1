@@ -2,7 +2,7 @@
 param(
     [string]$BuildDir,
     [string]$OutputDir,
-    [string]$Version = "2.1.3",
+    [string]$Version = "2.1.4",
     [string]$MakeNsis
 )
 

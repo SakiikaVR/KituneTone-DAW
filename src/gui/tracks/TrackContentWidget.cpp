@@ -671,9 +671,13 @@ void TrackContentWidget::mousePressEvent( QMouseEvent * me )
 	{
 		QWidget::mousePressEvent( me );
 	}
-	// For an unmodified click, create a new Clip
+	// For an unmodified click, create a new clip on tracks that have a useful
+	// empty-clip editing workflow. Sample clips only become meaningful after an
+	// audio file is dropped/selected or recording starts, so a plain click on a
+	// sample track must not leave an empty silent clip behind.
 	else if( me->button() == Qt::LeftButton &&
-			!m_trackView->trackContainerView()->fixedClips() )
+			!m_trackView->trackContainerView()->fixedClips() &&
+			getTrack()->type() != Track::Type::Sample )
 	{
 		QVector<selectableObject*> so =  m_trackView->trackContainerView()->rubberBand()->selectedObjects();
 		for( int i = 0; i < so.count(); ++i )
