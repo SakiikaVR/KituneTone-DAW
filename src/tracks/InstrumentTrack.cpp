@@ -28,6 +28,7 @@
 #include "ConfigManager.h"
 #include "ControllerConnection.h"
 #include "DataFile.h"
+#include "DetuningHelper.h"
 #include "GuiApplication.h"
 #include "Mixer.h"
 #include "InstrumentTrackView.h"
@@ -355,6 +356,11 @@ void InstrumentTrack::processInEvent( const MidiEvent& event, const TimePos& tim
 					if (isMidiRecording() || isPianoRollRecording())
 					{
 						inputNote.createDetuning();
+						// Capture the bend already held when the key is pressed. Without
+						// a point at zero, playback starts centered until the first later
+						// sample and differs from the recorded performance.
+						inputNote.detuning()->automationClip()->putValue(
+								TimePos(0), m_pitchModel.value() / 100.f, false);
 					}
 					NotePlayHandle* nph =
 						NotePlayHandleManager::acquire(

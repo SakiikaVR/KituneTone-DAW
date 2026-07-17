@@ -438,7 +438,10 @@ void AutomationClip::recordValue(TimePos time, float value)
 
 	if( value != m_lastRecordedValue )
 	{
-		putValue(time - startTimeOffset(), value, true);
+		// Recording must preserve the event time. Using the editor's current
+		// quantization here folds fast controller movements onto the same grid
+		// point and can turn a detailed pitch bend into a different curve.
+		putValue(time - startTimeOffset(), value, false);
 		m_lastRecordedValue = value;
 	}
 	else if( valueAt(time - startTimeOffset()) != value )

@@ -71,6 +71,32 @@ private slots:
 		QCOMPARE(c.valueAt(150), 1.0f);
 	}
 
+	void testRecordedAutomationIsNotQuantized()
+	{
+		using namespace lmms;
+
+		struct QuantizationGuard
+		{
+			int previous = AutomationClip::quantization();
+			~QuantizationGuard() { AutomationClip::setQuantization(previous); }
+		} guard;
+
+		AutomationClip::setQuantization(12);
+		AutomationClip clip(nullptr);
+		clip.setProgressionType(AutomationClip::ProgressionType::Linear);
+		clip.recordValue(TimePos(2), -0.75f);
+		clip.recordValue(TimePos(5), 0.5f);
+		clip.recordValue(TimePos(9), -0.25f);
+
+		const auto& points = clip.getTimeMap();
+		QVERIFY(points.contains(TimePos(2)));
+		QVERIFY(points.contains(TimePos(5)));
+		QVERIFY(points.contains(TimePos(9)));
+		QVERIFY(!points.contains(TimePos(0)));
+		QVERIFY(!points.contains(TimePos(12)));
+		QCOMPARE(clip.valueAt(TimePos(5)), 0.5f);
+	}
+
 	void testClipDiscrete()
 	{
 		using namespace lmms;
