@@ -226,6 +226,10 @@ void NotePlayHandle::play( SampleFrame* _working_buffer )
 		m_hasMidiNote = true;
 
 		const int baseVelocity = m_instrumentTrack->midiPort()->baseVelocity();
+		// MIDI-based instruments do not use updateFrequency(). Send the note's
+		// initial pitch curve value before Note On so VST3 starts at the right
+		// pitch instead of inheriting the previous note's bend.
+		sendMidiPitchBend(offset());
 
 		// send MidiNoteOn event
 		m_instrumentTrack->processOutEvent(
@@ -557,6 +561,23 @@ void NotePlayHandle::updateFrequency()
 
 
 
+void NotePlayHandle::sendMidiPitchBend(f_cnt_t offset)
+{
+	if (m_instrumentTrack->instrument() == nullptr
+			|| !m_instrumentTrack->instrument()->isMidiBased())
+	{
+		return;
+	}
+
+	m_instrumentTrack->processOutEvent(
+			MidiEvent(MidiPitchBend, midiChannel(),
+					m_instrumentTrack->midiPitch(currentDetuning())),
+			TimePos::fromFrames(offset, Engine::framesPerTick()), offset);
+}
+
+
+
+
 void NotePlayHandle::processTimePos(const TimePos& time, float pitchValue, bool isRecording)
 {
 	if (!detuning() || time < songGlobalParentOffset() + pos()) { return; }
@@ -572,6 +593,7 @@ void NotePlayHandle::processTimePos(const TimePos& time, float pitchValue, bool 
 		{
 			m_baseDetuning->setValue(v);
 			updateFrequency();
+			sendMidiPitchBend();
 		}
 	}
 }

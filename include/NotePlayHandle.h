@@ -291,6 +291,7 @@ private:
 	} ;
 
 	void updateFrequency();
+	void sendMidiPitchBend(f_cnt_t offset = 0);
 
 	InstrumentTrack* m_instrumentTrack;		// needed for calling
 											// InstrumentTrack::playNote

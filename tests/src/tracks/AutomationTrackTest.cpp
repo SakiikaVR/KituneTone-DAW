@@ -183,6 +183,19 @@ private slots:
 		QCOMPARE(handle.getVolume(), static_cast<volume_t>(147));
 		QVERIFY(handle.detuning() != nullptr);
 		QCOMPARE(handle.detuning()->automationClip()->valueAt(TimePos(0)), 2.5f);
+
+		// Playback must evaluate the recorded per-note pitch curve. MIDI-based
+		// instruments use the same value to generate their VST3 Pitch Bend.
+		Note playbackNote(TimePos(4), TimePos(0), 60, 100);
+		playbackNote.createDetuning();
+		playbackNote.detuning()->automationClip()->putValue(TimePos(0), 0.f, false);
+		playbackNote.detuning()->automationClip()->putValue(TimePos(1), 0.5f, false);
+		NotePlayHandle playbackHandle(&instrumentTrack, 0, 10000, playbackNote);
+		playbackHandle.processTimePos(TimePos(1), 0.f, false);
+		QCOMPARE(playbackHandle.currentDetuning(), 0.5f);
+		QCOMPARE(instrumentTrack.midiPitch(playbackHandle.currentDetuning()), 12287);
+		QCOMPARE(instrumentTrack.midiPitch(0.f), 8192);
+		QCOMPARE(instrumentTrack.midiPitch(5.f), MidiMaxPitchBend);
 	}
 
 	void testPatternTrack()

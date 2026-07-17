@@ -50,7 +50,6 @@
 #include "InstrumentFunctionViews.h"
 #include "InstrumentMidiIOView.h"
 #include "InstrumentPlayHandle.h"
-#include "InstrumentSoundShapingView.h"
 #include "InstrumentTrack.h"
 #include "InstrumentTrackWindow.h"
 #include "InstrumentTuningView.h"
@@ -311,10 +310,20 @@ void Vst3InstrumentView::buildTabs()
 			track->audioBusHandle()->effects(), m_pluginView);
 	m_pluginView->addTab(effects, tr("Effects"));
 
-	auto* shaping = new InstrumentSoundShapingView(m_pluginView);
-	shaping->setModel(track->soundShaping());
-	shaping->setFunctionsHidden(instrument->isSingleStreamed());
-	m_pluginView->addTab(shaping, tr("Envelope/LFO"));
+	auto* expressionHelp = new QWidget(m_pluginView);
+	auto* expressionLayout = new QVBoxLayout(expressionHelp);
+	expressionLayout->setContentsMargins(12, 12, 12, 12);
+	auto* expressionLabel = new QLabel(QStringLiteral(
+			"VST3音源のエンベロープとLFOは「GUI」タブで編集します。\n\n"
+			"録音したノートごとのピッチベンドは、ピアノロールでノートを選択し、"
+			"折れ線アイコンまたは Shift+T を押して編集します。\n"
+			"左ドラッグ: 点の追加・移動 / 右ドラッグ: 点の削除 / "
+			"Shift+クリック: 詳細エディター"), expressionHelp);
+	expressionLabel->setWordWrap(true);
+	expressionLabel->setAlignment(Qt::AlignLeft | Qt::AlignTop);
+	expressionLayout->addWidget(expressionLabel);
+	expressionLayout->addStretch();
+	m_pluginView->addTab(expressionHelp, QStringLiteral("エンベロープ/LFO"));
 
 	auto* tuning = new InstrumentTuningView(track, m_pluginView);
 	if (instrument->isMidiBased())

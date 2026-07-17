@@ -4538,8 +4538,8 @@ void PianoRoll::setEditMode(int mode)
 {
 	if (static_cast<EditMode>(mode) == EditMode::Detuning)
 	{
-		TextFloat::displayMessage(tr("Pitch Bending"),
-			tr("Click and drag on a note or selection to edit its detuning curve\nShift-click to open the note in Automation Editor"),
+		TextFloat::displayMessage(QStringLiteral("ピッチベンド編集"),
+			QStringLiteral("ノートまたは選択範囲を左ドラッグしてカーブを編集します\n右ドラッグ: 点を削除 / Shift+クリック: 詳細エディター"),
 			embed::getIconPixmap("automation"), 4000);
 	}
 	m_ctrlMode = m_editMode = (EditMode) mode;
@@ -5233,7 +5233,8 @@ PianoRollWindow::PianoRollWindow() :
 	QAction* drawAction = editModeGroup->addAction( embed::getIconPixmap( "edit_draw" ), tr( "Draw mode (Shift+D)" ) );
 	QAction* eraseAction = editModeGroup->addAction( embed::getIconPixmap( "edit_erase" ), tr("Erase mode (Shift+E)" ) );
 	QAction* selectAction = editModeGroup->addAction( embed::getIconPixmap( "edit_select" ), tr( "Select mode (Shift+S)" ) );
-	QAction* pitchBendAction = editModeGroup->addAction( embed::getIconPixmap( "automation" ), tr("Pitch Bend mode (Shift+T)" ) );
+	QAction* pitchBendAction = editModeGroup->addAction(
+			embed::getIconPixmap("automation"), QStringLiteral("ピッチベンド編集 (Shift+T)"));
 
 	drawAction->setChecked( true );
 

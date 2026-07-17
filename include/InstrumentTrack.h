@@ -26,6 +26,8 @@
 #ifndef LMMS_INSTRUMENT_TRACK_H
 #define LMMS_INSTRUMENT_TRACK_H
 
+#include <algorithm>
+#include <cmath>
 
 #include "AudioBusHandle.h"
 #include "InstrumentFunctions.h"
@@ -119,9 +121,15 @@ public:
 	int masterKey( int _midi_key ) const;
 
 	// translate pitch to midi-pitch [0,16383]
-	int midiPitch() const
+	int midiPitch(float noteDetuning = 0.f) const
 	{
-		return static_cast<int>( ( ( m_pitchModel.value() + m_pitchModel.range()/2 ) * MidiMaxPitchBend ) / m_pitchModel.range() );
+		const float range = m_pitchModel.range();
+		const float pitch = std::clamp(
+				m_pitchModel.value() + noteDetuning * 100.f,
+				-range / 2.f, range / 2.f);
+		return std::clamp(
+				static_cast<int>(std::lround((pitch + range / 2.f) * MidiMaxPitchBend / range)),
+				0, MidiMaxPitchBend);
 	}
 
 	/*! \brief Returns current range for pitch bend in semitones */
