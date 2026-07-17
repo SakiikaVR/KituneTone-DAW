@@ -2,7 +2,7 @@
 param(
     [string]$BuildDir,
     [string]$OutputDir,
-    [string]$Version = "2.1.1",
+    [string]$Version = "2.1.2",
     [string]$MakeNsis
 )
 
@@ -158,7 +158,14 @@ $signTargets = Get-ChildItem -LiteralPath $appDir -Recurse -File |
 & $signScript -Path $signTargets
 
 $zipPath = Join-Path $output "KitsuneTone-$Version-win64-portable.zip"
-Compress-Archive -LiteralPath $appDir -DestinationPath $zipPath -CompressionLevel Optimal
+$portableModeFile = Join-Path $appDir "portable_mode.txt"
+try {
+    New-Item -ItemType File -Path $portableModeFile -Force | Out-Null
+    Compress-Archive -LiteralPath $appDir -DestinationPath $zipPath -CompressionLevel Optimal
+}
+finally {
+    Remove-Item -LiteralPath $portableModeFile -Force -ErrorAction SilentlyContinue
+}
 
 if (-not $MakeNsis) {
     $MakeNsis = @(

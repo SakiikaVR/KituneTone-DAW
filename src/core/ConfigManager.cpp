@@ -667,6 +667,11 @@ void ConfigManager::saveConfigFile()
 
 	QString xml = "<?xml version=\"1.0\"?>\n" + doc.toString(2);
 
+	// QStandardPaths returns the intended configuration path but does not
+	// create it. This is especially visible on the first installed launch.
+	// Also cover custom --config paths here so every save has a valid parent.
+	QDir().mkpath(QFileInfo(m_lmmsRcFile).absolutePath());
+
 	QFile outfile(m_lmmsRcFile);
 	if(!outfile.open(QIODevice::WriteOnly | QIODevice::Truncate))
 	{
@@ -705,8 +710,10 @@ void ConfigManager::initInstalledWorkingDir()
 {
 	m_workingDir = QStandardPaths::writableLocation(QStandardPaths::DocumentsLocation)
 		+ "/KitsuneTone/";
-	m_lmmsRcFile = QStandardPaths::writableLocation(QStandardPaths::AppConfigLocation)
-		+ "/kitsunetone-config.xml";
+	const QString configDirectory =
+		QStandardPaths::writableLocation(QStandardPaths::AppConfigLocation);
+	QDir().mkpath(configDirectory);
+	m_lmmsRcFile = QDir(configDirectory).filePath("kitsunetone-config.xml");
 }
 
 void ConfigManager::initDevelopmentWorkingDir()
