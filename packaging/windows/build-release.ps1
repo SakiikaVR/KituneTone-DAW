@@ -2,7 +2,7 @@
 param(
     [string]$BuildDir,
     [string]$OutputDir,
-    [string]$Version = "2.1.0-beta",
+    [string]$Version = "2.1.0",
     [string]$MakeNsis
 )
 
@@ -98,6 +98,10 @@ foreach ($file in @(
     }
 }
 
+$manualDir = Join-Path $appDir "docs"
+New-Item -ItemType Directory -Path $manualDir | Out-Null
+Copy-Item -LiteralPath (Join-Path $repoRoot "docs\USER_MANUAL.md") -Destination $manualDir
+
 $licensesDir = Join-Path $appDir "licenses"
 New-Item -ItemType Directory -Path $licensesDir | Out-Null
 $thirdPartyLicenses = @{
@@ -156,11 +160,5 @@ if ($LASTEXITCODE -ne 0) {
 }
 & $signScript -Path $installerPath
 
-$hashFile = Join-Path $output "SHA256SUMS.txt"
-$hashLines = Get-FileHash -Algorithm SHA256 -LiteralPath $zipPath, $installerPath |
-    ForEach-Object { "$($_.Hash.ToLowerInvariant())  $([System.IO.Path]::GetFileName($_.Path))" }
-Set-Content -LiteralPath $hashFile -Value $hashLines -Encoding utf8
-
 Write-Host "Portable:  $zipPath"
 Write-Host "Installer: $installerPath"
-Write-Host "Hashes:    $hashFile"
