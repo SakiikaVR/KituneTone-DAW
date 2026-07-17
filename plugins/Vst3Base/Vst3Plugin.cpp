@@ -25,6 +25,7 @@
 #include "lmmsconfig.h"
 
 #include <QCloseEvent>
+#include <QBoxLayout>
 #include <QDomDocument>
 #include <QDomElement>
 #include <QLayout>
@@ -1258,6 +1259,14 @@ bool Vst3Plugin::enableAra(const std::vector<AraSource>& sources)
 	// then bring it back (mirrors the normal "bind, then create view" order).
 	m_araDocument.reset();
 	const bool restoreEditor = (m_editorWidget != nullptr);
+	const bool restoreEmbeddedEditor = restoreEditor && m_editorEmbedded;
+	QWidget* oldEmbeddedEditor = restoreEmbeddedEditor ? m_editorWidget : nullptr;
+	QWidget* embeddedParent = oldEmbeddedEditor != nullptr
+			? oldEmbeddedEditor->parentWidget() : nullptr;
+	auto* embeddedLayout = embeddedParent != nullptr
+			? qobject_cast<QBoxLayout*>(embeddedParent->layout()) : nullptr;
+	const int embeddedLayoutIndex = embeddedLayout != nullptr
+			? embeddedLayout->indexOf(oldEmbeddedEditor) : -1;
 	destroyEditor();
 
 	auto doc = std::make_unique<Vst3AraDocument>();
@@ -1275,7 +1284,25 @@ bool Vst3Plugin::enableAra(const std::vector<AraSource>& sources)
 		}
 	}
 
-	if (restoreEditor) { showEditor(); }
+	if (restoreEmbeddedEditor)
+	{
+		// Binding an ARA document must happen before creating IPlugView. If the
+		// common VST3 dialog was already open, destroy its now-detached native
+		// host widget and recreate the editor at the same position. Calling
+		// showEditor() here would incorrectly create a separate workspace
+		// window and leave an empty widget behind in the GUI tab.
+		delete oldEmbeddedEditor;
+		QWidget* editor = createEmbeddedEditor(embeddedParent);
+		if (editor != nullptr && embeddedLayout != nullptr)
+		{
+			embeddedLayout->insertWidget(
+				embeddedLayoutIndex >= 0 ? embeddedLayoutIndex : 0, editor, 1);
+		}
+	}
+	else if (restoreEditor)
+	{
+		showEditor();
+	}
 	return ok;
 #else
 	Q_UNUSED(sources)
