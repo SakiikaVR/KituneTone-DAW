@@ -8,19 +8,19 @@ SetCompressor /SOLID lzma
   !error "APPDIR must point to the prepared KitsuneTone directory"
 !endif
 !ifndef OUTFILE
-  !define OUTFILE "KitsuneTone-2.2.0-win64-setup.exe"
+  !define OUTFILE "KitsuneTone-2.2.1-win64-setup.exe"
 !endif
 
-Name "狐Tone (KitsuneTone) 2.2.0"
+Name "狐Tone (KitsuneTone) 2.2.1"
 OutFile "${OUTFILE}"
 InstallDir "$PROGRAMFILES64\KitsuneTone"
 InstallDirRegKey HKLM "Software\KitsuneTone" "InstallDir"
 RequestExecutionLevel admin
 
-VIProductVersion "2.2.0.0"
+VIProductVersion "2.2.1.0"
 VIAddVersionKey /LANG=1041 "ProductName" "KitsuneTone"
-VIAddVersionKey /LANG=1041 "ProductVersion" "2.2.0"
-VIAddVersionKey /LANG=1041 "FileVersion" "2.2.0"
+VIAddVersionKey /LANG=1041 "ProductVersion" "2.2.1"
+VIAddVersionKey /LANG=1041 "FileVersion" "2.2.1"
 VIAddVersionKey /LANG=1041 "FileDescription" "狐Tone インストーラ"
 VIAddVersionKey /LANG=1041 "CompanyName" "KitsuneTone contributors"
 VIAddVersionKey /LANG=1041 "LegalCopyright" "LMMS contributors; KitsuneTone contributors"
@@ -54,7 +54,7 @@ Section "狐Tone" SecMain
   WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\KitsuneTone" "DisplayName" "狐Tone (KitsuneTone)"
   WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\KitsuneTone" "DisplayIcon" "$INSTDIR\KitsuneTone.exe"
   WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\KitsuneTone" "UninstallString" '"$INSTDIR\Uninstall.exe"'
-  WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\KitsuneTone" "DisplayVersion" "2.2.0"
+  WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\KitsuneTone" "DisplayVersion" "2.2.1"
   WriteRegDWORD HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\KitsuneTone" "NoModify" 1
   WriteRegDWORD HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\KitsuneTone" "NoRepair" 1
 

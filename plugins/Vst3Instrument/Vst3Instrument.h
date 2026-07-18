@@ -23,6 +23,7 @@
 #ifndef LMMS_VST3_INSTRUMENT_H
 #define LMMS_VST3_INSTRUMENT_H
 
+#include <atomic>
 #include <QMutex>
 #include <memory>
 
@@ -51,6 +52,7 @@ public:
 	~Vst3Instrument() override;
 
 	void play(SampleFrame* workingBuffer) override;
+	bool producesMidiOutput() const override { return m_producesMidiOutput.load(); }
 	bool handleMidiEvent(const MidiEvent& event, const TimePos& time = TimePos(),
 			f_cnt_t offset = 0) override;
 
@@ -71,6 +73,7 @@ private:
 	void closePlugin();
 
 	std::unique_ptr<Vst3Plugin> m_plugin;
+	std::atomic_bool m_producesMidiOutput{false};
 	QMutex m_pluginMutex;
 	QString m_pluginFile;
 

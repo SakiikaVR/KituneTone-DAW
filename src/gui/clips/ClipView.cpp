@@ -121,7 +121,11 @@ ClipView::ClipView( Clip * clip,
 
 	connect( m_clip, SIGNAL(lengthChanged()),
 			this, SLOT(updateLength()));
-	connect(getGUI()->songEditor()->m_editor, &SongEditor::pixelsPerBarChanged, this, &ClipView::updateLength);
+	auto* trackContainerView = m_trackView->trackContainerView();
+	connect(trackContainerView, &TrackContainerView::pixelsPerBarChanged,
+			this, &ClipView::updateLength);
+	connect(trackContainerView, &TrackContainerView::pixelsPerBarChanged,
+			this, &ClipView::updatePosition);
 	connect( m_clip, SIGNAL(positionChanged()),
 			this, SLOT(updatePosition()));
 	connect( m_clip, SIGNAL(destroyedClip()), this, SLOT(close()));

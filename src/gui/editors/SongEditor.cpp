@@ -876,7 +876,6 @@ void SongEditor::zoomingChanged()
 	updateRubberband();
 	m_timeLine->setSnapSize(getSnapSize());
 
-	emit pixelsPerBarChanged(ppb);
 }
 
 

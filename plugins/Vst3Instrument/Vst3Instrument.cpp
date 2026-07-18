@@ -115,6 +115,7 @@ Vst3Instrument::~Vst3Instrument()
 void Vst3Instrument::closePlugin()
 {
 	QMutexLocker lock(&m_pluginMutex);
+	m_producesMidiOutput.store(false);
 	m_plugin.reset();
 	m_pluginFile.clear();
 }
@@ -126,6 +127,7 @@ void Vst3Instrument::loadFile(const QString& file)
 {
 	{
 		QMutexLocker lock(&m_pluginMutex);
+		m_producesMidiOutput.store(false);
 		m_plugin.reset();
 
 		bool error = false;
@@ -141,6 +143,7 @@ void Vst3Instrument::loadFile(const QString& file)
 		else
 		{
 			m_plugin = std::move(plugin);
+			m_producesMidiOutput.store(m_plugin->hasMidiOutputBus());
 			m_pluginFile = PathUtil::toShortestRelative(absFile);
 
 			// expose the plug-in's parameters as LMMS automatable models

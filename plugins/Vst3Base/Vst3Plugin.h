@@ -121,6 +121,7 @@ public:
 	{
 		m_midiOutputHandler = std::move(handler);
 	}
+	bool hasMidiOutputBus() const { return m_hasEventOutputBus; }
 
 	void saveState(QDomDocument& doc, QDomElement& element);
 	void loadState(const QDomElement& element);
@@ -239,6 +240,7 @@ private:
 	Steinberg::int64 m_projectTimeSamples = 0;
 	bool m_hasInputBus = false;
 	bool m_hasOutputBus = false;
+	bool m_hasEventOutputBus = false;
 
 	// events/parameters queued from other threads, consumed by process()
 	struct QueuedEvent { Steinberg::Vst::Event event; };

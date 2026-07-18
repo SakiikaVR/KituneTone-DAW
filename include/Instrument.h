@@ -73,6 +73,11 @@ public:
 
 	virtual bool hasNoteInput() const { return true; }
 
+	// MIDI processors and generators expose their own transformed event
+	// stream.  In that case the track must not also route the unprocessed
+	// input events to its MIDI output port.
+	virtual bool producesMidiOutput() const { return false; }
+
 	// if the plugin doesn't play each note, it can create an instrument-
 	// play-handle and re-implement this method, so that it mixes its
 	// output buffer only once per audio engine period

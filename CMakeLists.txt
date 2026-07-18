@@ -56,7 +56,7 @@ SET(PROJECT_DESCRIPTION "KitsuneTone - original VST3-focused digital audio works
 SET(PROJECT_COPYRIGHT   "2004-${PROJECT_YEAR} LMMS contributors; 2026 KitsuneTone contributors")
 SET(VERSION_MAJOR       "2")
 SET(VERSION_MINOR       "2")
-SET(VERSION_RELEASE     "0")
+SET(VERSION_RELEASE     "1")
 SET(VERSION_STAGE       "")
 SET(VERSION_BUILD       "")
 SET(VERSION             "${VERSION_MAJOR}.${VERSION_MINOR}.${VERSION_RELEASE}")

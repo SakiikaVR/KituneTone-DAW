@@ -540,8 +540,13 @@ void InstrumentTrack::processOutEvent( const MidiEvent& event, const TimePos& ti
 			break;
 	}
 
-	// if appropriate, midi-port does further routing
-	m_midiPort.processOutEvent( event, time );
+	// A MIDI generator/processor supplies the transformed stream through its
+	// output handler. Forwarding the original event as well would make both
+	// the source note and the generated note sound on internally routed tracks.
+	if (!m_instrument->producesMidiOutput())
+	{
+		m_midiPort.processOutEvent(event, time);
+	}
 }
 
 

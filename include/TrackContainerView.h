@@ -213,6 +213,7 @@ private:
 
 signals:
 	void positionChanged( const lmms::TimePos & _pos );
+	void pixelsPerBarChanged(float pixelsPerBar);
 	void tracksRealigned();
 
 

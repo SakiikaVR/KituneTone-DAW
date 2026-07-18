@@ -371,6 +371,7 @@ void TrackContainerView::setPixelsPerBar( int ppb )
 	{
 		trackView->getTrackContentWidget()->updateBackground();
 	}
+	emit pixelsPerBarChanged(m_ppb);
 }
 
 

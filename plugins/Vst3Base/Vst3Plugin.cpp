@@ -351,7 +351,9 @@ bool Vst3Plugin::load(const QString& path, const QString& uid)
 	{
 		m_component->activateBus(Vst::kEvent, Vst::kInput, i, i == 0);
 	}
-	for (int32 i = 0; i < m_component->getBusCount(Vst::kEvent, Vst::kOutput); ++i)
+	const int32 eventOutputBusCount = m_component->getBusCount(Vst::kEvent, Vst::kOutput);
+	m_hasEventOutputBus = eventOutputBusCount > 0;
+	for (int32 i = 0; i < eventOutputBusCount; ++i)
 	{
 		m_component->activateBus(Vst::kEvent, Vst::kOutput, i, i == 0);
 	}

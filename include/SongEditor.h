@@ -176,7 +176,6 @@ private:
 	friend class SongEditorWindow;
 
 signals:
-	void pixelsPerBarChanged(float);
 	void proportionalSnapChanged();
 } ;
 

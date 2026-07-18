@@ -4,7 +4,7 @@
   <img src=".github/assets/kitsunetone-logo.png" alt="狐Toneロゴ" width="480">
 </p>
 
-狐Toneは、[LMMS](https://github.com/LMMS/lmms)を基盤として独自機能を追加した、Windows向けのオリジナルDAWです。正式版2.2.0ではVST3専用ホスト、共通プラグイン画面、ARA 2連携、MIDI・音声録音、タイムストレッチ、オートメーション、日本語UIに加え、ソングエディター型の新しいパターン編集を統合しています。
+狐Toneは、[LMMS](https://github.com/LMMS/lmms)を基盤として独自機能を追加した、Windows向けのオリジナルDAWです。正式版2.2.1ではVST3専用ホスト、共通プラグイン画面、ARA 2連携、MIDI・音声録音、タイムストレッチ、オートメーション、日本語UIに加え、ソングエディター型の新しいパターン編集を統合しています。
 
 > [!IMPORTANT]
 > 狐ToneはLMMS公式版ではなく、LMMS開発チームによる承認・サポートを受けた製品でもありません。狐Tone固有の問題はLMMS本家ではなく、このリポジトリのIssuesへ報告してください。
@@ -20,7 +20,7 @@
 
 ## 説明書
 
-導入から各画面、トラック編集、VST3、録音、ピッチベンド、オートメーション、アルペジオ、ミキサー、ARA、入出力、ショートカットまでの操作は、[狐Tone 2.2.0 全機能説明書](docs/USER_MANUAL.md)を参照してください。
+導入から各画面、トラック編集、VST3、録音、ピッチベンド、オートメーション、アルペジオ、ミキサー、ARA、入出力、ショートカットまでの操作は、[狐Tone 2.2.1 全機能説明書](docs/USER_MANUAL.md)を参照してください。
 
 ## 狐Tone専用プロジェクト形式
 
@@ -67,7 +67,7 @@ vcpkg install --triplet x64-windows
 
 cmake -S . -B build -G Ninja ^
   -DCMAKE_BUILD_TYPE=RelWithDebInfo ^
-  -DFORCE_VERSION=2.2.0 ^
+  -DFORCE_VERSION=2.2.1 ^
   -DWANT_QT6=ON -DWANT_SDL=ON -DWANT_JACK=OFF ^
   -DCMAKE_PREFIX_PATH=C:/Qt/6.8.3/msvc2022_64 ^
   -DCMAKE_TOOLCHAIN_FILE=C:/vcpkg/scripts/buildsystems/vcpkg.cmake ^
