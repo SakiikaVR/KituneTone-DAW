@@ -703,6 +703,15 @@ PatternEditorWindow::PatternEditorWindow(PatternStore* ps) :
 			m_editor, &PatternEditor::showCurrentPattern);
 	connect(&ps->m_patternComboBoxModel, &ComboBoxModel::dataChanged,
 			this, &PatternEditorWindow::syncPatternLength);
+	// The combo's value does not change when the first pattern track appears
+	// (or when tracks are renamed/removed), so dataChanged alone leaves the
+	// spin box at its default while the pattern is really 4 bars long. Track
+	// list changes arrive as propertiesChanged, length changes from other
+	// sources (project load, undo) as trackUpdated.
+	connect(&ps->m_patternComboBoxModel, &ComboBoxModel::propertiesChanged,
+			this, &PatternEditorWindow::syncPatternLength);
+	connect(ps, &PatternStore::trackUpdated,
+			this, &PatternEditorWindow::syncPatternLength);
 	syncPatternLength();
 
 	auto viewNext = new QAction(this);

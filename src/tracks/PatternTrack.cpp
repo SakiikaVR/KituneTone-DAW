@@ -55,6 +55,11 @@ PatternTrack::PatternTrack(TrackContainer* tc) :
 
 	connect( this, SIGNAL(nameChanged()),
 		Engine::patternStore(), SLOT(updateComboBox()));
+	// Re-announce length changes store-wide so the pattern editor's range
+	// highlight and bar-count spin box follow every source of change
+	// (project load, undo, other views), not just the editor's own spin box.
+	connect(this, &PatternTrack::patternLengthChanged,
+		Engine::patternStore(), &PatternStore::trackUpdated);
 }
 
 
