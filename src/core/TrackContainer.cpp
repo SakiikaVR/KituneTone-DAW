@@ -282,8 +282,14 @@ AutomatedValueMap TrackContainer::automatedValuesFromTracks(const TrackList &tra
 			if (clipNum < 0) {
 				track->getClipsInRange(clips, 0, time);
 			} else {
-				Q_ASSERT(track->numOfClips() > clipNum);
-				clips.push_back(track->getClip(clipNum));
+				for (Clip* clip : track->getClips())
+				{
+					if (clip->patternIndex() == clipNum
+							&& clip->startPosition() <= time)
+					{
+						clips.push_back(clip);
+					}
+				}
 			}
 		default:
 			break;
@@ -292,7 +298,7 @@ AutomatedValueMap TrackContainer::automatedValuesFromTracks(const TrackList &tra
 
 	AutomatedValueMap valueMap;
 
-	Q_ASSERT(std::is_sorted(clips.begin(), clips.end(), Clip::comparePosition));
+	std::sort(clips.begin(), clips.end(), Clip::comparePosition);
 
 	for(Clip* clip : clips)
 	{
@@ -306,9 +312,7 @@ AutomatedValueMap TrackContainer::automatedValuesFromTracks(const TrackList &tra
 				continue;
 			}
 			TimePos relTime = time - p->startPosition() - p->startTimeOffset();
-			if (!p->isInPattern()) {
-				relTime = std::min(static_cast<int>(relTime), p->length() - p->startTimeOffset());
-			}
+			relTime = std::min(static_cast<int>(relTime), p->length() - p->startTimeOffset());
 			float value = p->valueAt(relTime);
 
 			for (AutomatableModel* model : p->objects())

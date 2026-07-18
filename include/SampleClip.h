@@ -89,16 +89,6 @@ public:
 	//! clip is auto-stretched to the current song tempo.
 	int sourceBpm() const { return m_sourceBpm; }
 	void setSourceBpm(int bpm);
-	int patternIndex() const
-	{
-		return m_patternIndex >= 0 ? m_patternIndex : startPosition().getBar();
-	}
-	void setPatternIndex(int pattern) { m_patternIndex = pattern; }
-	TimePos patternOffset() const
-	{
-		return startPosition() - TimePos(patternIndex(), 0);
-	}
-
 	SampleClip* clone() override
 	{
 		return new SampleClip(*this);
@@ -125,7 +115,6 @@ private:
 	std::shared_ptr<const SampleBuffer> m_originalBuffer;
 	float m_stretchFactor = 1.0f;
 	int m_sourceBpm = 0;
-	int m_patternIndex = -1;
 	//! debounce guard for the tempo-follow re-stretch
 	bool m_tempoRestretchPending = false;
 	BoolModel m_recordModel;

@@ -48,6 +48,7 @@ public:
 	}
 
 	int patternIndex();
+	void updateLength() override;
 
 	gui::ClipView * createView( gui::TrackView * _tv ) override;
 

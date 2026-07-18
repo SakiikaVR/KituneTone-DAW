@@ -146,6 +146,9 @@ public:
 	void setXOffset(const int x);
 
 	void addToolButtons(QToolBar* _tool_bar );
+	void setLoopControlsEnabled(bool enabled);
+	void setRangeHighlight(TimePos begin, TimePos end);
+	void clearRangeHighlight();
 
 	inline int markerX( const TimePos & _t ) const
 	{
@@ -236,6 +239,10 @@ private:
 
 	bool m_isRecording = false;
 	bool m_isPlayheadVisible = true;
+	bool m_loopControlsEnabled = true;
+	bool m_rangeHighlightEnabled = false;
+	TimePos m_rangeHighlightBegin{0};
+	TimePos m_rangeHighlightEnd{DefaultTicksPerBar};
 
 	TextFloat* m_hint = nullptr;
 	int m_initalXSelect;

@@ -76,12 +76,13 @@ public:
 			removeClipView( m_clipViews[clipNum] );
 		}
 	}
+	void removeClipViewsForPattern(int pattern);
 
 	bool canPasteSelection( TimePos clipPos, const QDropEvent *de );
 	bool canPasteSelection( TimePos clipPos, const QMimeData *md, bool allowSameBar = false );
 	bool pasteSelection( TimePos clipPos, QDropEvent * de );
 	bool pasteSelection( TimePos clipPos, const QMimeData * md, bool skipSafetyCheck = false );
-	bool moveFixedPatternSample( QDropEvent * de );
+	bool moveSampleClip( QDropEvent * de );
 
 	TimePos endPosition( const TimePos & posStart );
 

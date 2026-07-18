@@ -495,11 +495,9 @@ void ClipView::dropEvent( QDropEvent * de )
 		return;
 	}
 
-	// Pattern samples can be repositioned in time or moved vertically between
-	// sample tracks while retaining the fixed per-pattern anchor slots.
-	if (fixedClips()
-			&& dynamic_cast<SampleClip*>(m_clip) != nullptr
-			&& getTrackView()->getTrackContentWidget()->moveFixedPatternSample(de))
+	// Sample clips can be moved between sample tracks in both timeline editors.
+	if (dynamic_cast<SampleClip*>(m_clip) != nullptr
+			&& getTrackView()->getTrackContentWidget()->moveSampleClip(de))
 	{
 		return;
 	}
@@ -710,7 +708,7 @@ void ClipView::mousePressEvent( QMouseEvent * me )
 			}
 			else
 			{
-				getGUI()->songEditor()->m_editor->selectAllClips( false );
+				m_trackView->trackContainerView()->selectAllClips(false);
 				m_clip->addJournalCheckPoint();
 
 				// Action::Move, Action::Resize and Action::ResizeLeft
@@ -870,7 +868,7 @@ void ClipView::mouseMoveEvent( QMouseEvent * me )
 			}
 			else
 			{
-				getGUI()->songEditor()->m_editor->selectAllClips( false );
+				m_trackView->trackContainerView()->selectAllClips(false);
 				clipViews.push_back( this );
 			}
 			// Clear the action here because mouseReleaseEvent will not get
@@ -898,6 +896,28 @@ void ClipView::mouseMoveEvent( QMouseEvent * me )
 	}
 
 	const auto pos = position(me);
+	if ((m_action == Action::Move
+			|| (m_action == Action::MoveSelection && getClickedClips().size() == 1))
+			&& dynamic_cast<SampleClip*>(m_clip) != nullptr
+			&& !(me->modifiers() & KBD_COPY_MODIFIER))
+	{
+		auto* trackContent = m_trackView->getTrackContentWidget();
+		const QPoint globalMouse = mapToGlobal(pos);
+		const int trackTop = trackContent->mapToGlobal(QPoint{}).y();
+		const int trackBottom = trackTop + trackContent->height();
+		if (globalMouse.y() < trackTop || globalMouse.y() >= trackBottom)
+		{
+			m_action = Action::None;
+			m_clip->setJournalling(true);
+			const DataFile dataFile = createClipDataFiles({this});
+			const QPixmap thumbnail = grab().scaled(
+				128, 128, Qt::KeepAspectRatio, Qt::SmoothTransformation);
+			new StringPairDrag(
+				QString("clip_%1").arg(static_cast<int>(Track::Type::Sample)),
+				dataFile.toString(), thumbnail, this);
+			return;
+		}
+	}
 	const float ppb = m_trackView->trackContainerView()->pixelsPerBar();
 	if( m_action == Action::Move )
 	{

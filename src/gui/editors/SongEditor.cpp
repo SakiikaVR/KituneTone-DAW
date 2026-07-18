@@ -949,10 +949,16 @@ void SongEditor::pasteSelectedClips()
 	std::set<Track*> targetTracks;
 	for (int i = 0; i < clipNodes.length(); ++i)
 	{
-		const int trackIndex = clipNodes.item(i).toElement().attributeNode("trackIndex").value().toInt();
+		const QDomElement outer = clipNodes.item(i).toElement();
+		const int trackIndex = outer.attribute("trackIndex").toInt();
 		if (trackIndex >= 0 && trackIndex < static_cast<int>(tracks.size()))
 		{
-			targetTracks.insert(tracks.at(trackIndex));
+			const auto sourceType = static_cast<Track::Type>(
+					outer.attribute("trackType", "-1").toInt());
+			if (tracks.at(trackIndex)->type() == sourceType)
+			{
+				targetTracks.insert(tracks.at(trackIndex));
+			}
 		}
 	}
 	auto* journal = Engine::projectJournal();
@@ -968,6 +974,9 @@ void SongEditor::pasteSelectedClips()
 		const int trackIndex = outer.attributeNode("trackIndex").value().toInt();
 		if (trackIndex < 0 || trackIndex >= static_cast<int>(tracks.size())) { continue; }
 		Track* t = tracks.at(trackIndex);
+		const auto sourceType = static_cast<Track::Type>(
+				outer.attribute("trackType", "-1").toInt());
+		if (t->type() != sourceType) { continue; }
 
 		TimePos pos = TimePos(clipElement.attributeNode("pos").value().toInt()) + offset;
 		if (pos < 0) { pos = 0; }
@@ -1356,5 +1365,3 @@ void SongEditorWindow::adjustUiAfterProjectLoad()
 
 
 } // namespace lmms::gui
-
-

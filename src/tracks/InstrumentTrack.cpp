@@ -730,14 +730,24 @@ bool InstrumentTrack::play( const TimePos & _start, const f_cnt_t _frames,
 
 	clipVector clips;
 	class PatternTrack * pattern_track = nullptr;
-	if( _clip_num >= 0 )
+	const bool playingPattern = _clip_num >= 0
+			&& trackContainer() == Engine::patternStore();
+	if (playingPattern)
 	{
-		Clip * clip = getClip( _clip_num );
-		clips.push_back( clip );
-		if (trackContainer() == Engine::patternStore())
+		for (Clip* clip : getClips())
 		{
-			pattern_track = PatternTrack::findPatternTrack(_clip_num);
+			if (clip->patternIndex() != _clip_num) { continue; }
+			const TimePos audibleStart = clip->startPosition() + clip->startTimeOffset();
+			if (_start >= audibleStart && _start < clip->endPosition())
+			{
+				clips.push_back(clip);
+			}
 		}
+		pattern_track = PatternTrack::findPatternTrack(_clip_num);
+	}
+	else if (_clip_num >= 0)
+	{
+		clips.push_back(getClip(_clip_num));
 	}
 	else
 	{
@@ -770,7 +780,7 @@ bool InstrumentTrack::play( const TimePos & _start, const f_cnt_t _frames,
 			continue;
 		}
 		TimePos cur_start = _start;
-		if( _clip_num < 0 )
+		if (_clip_num < 0 || playingPattern)
 		{
 			cur_start -= c->startPosition() + c->startTimeOffset();
 		}

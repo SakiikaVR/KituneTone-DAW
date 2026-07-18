@@ -24,6 +24,8 @@
 
 #include "TimeLineWidget.h"
 
+#include <algorithm>
+
 #include <QGuiApplication>
 #include <QMenu>
 #include <QMouseEvent>
@@ -76,6 +78,33 @@ TimeLineWidget::~TimeLineWidget()
 void TimeLineWidget::setXOffset(const int x)
 {
 	m_xOffset = x;
+	update();
+}
+
+void TimeLineWidget::setLoopControlsEnabled(bool enabled)
+{
+	m_loopControlsEnabled = enabled;
+	if (!enabled)
+	{
+		m_action = Action::NoAction;
+		setCursor(Qt::ArrowCursor);
+	}
+	update();
+}
+
+void TimeLineWidget::setRangeHighlight(TimePos begin, TimePos end)
+{
+	if (end < begin) { std::swap(begin, end); }
+	m_rangeHighlightBegin = begin;
+	m_rangeHighlightEnd = end;
+	m_rangeHighlightEnabled = true;
+	update();
+}
+
+void TimeLineWidget::clearRangeHighlight()
+{
+	m_rangeHighlightEnabled = false;
+	update();
 }
 
 void TimeLineWidget::addToolButtons( QToolBar * _tool_bar )
@@ -88,15 +117,6 @@ void TimeLineWidget::addToolButtons( QToolBar * _tool_bar )
 	autoScroll->changeState(static_cast<int>(m_autoScroll));
 	connect( autoScroll, SIGNAL(changedState(int)), this,
 					SLOT(toggleAutoScroll(int)));
-
-	auto loopPoints = new NStateButton(_tool_bar);
-	loopPoints->setGeneralToolTip( tr( "Loop points" ) );
-	loopPoints->addState( embed::getIconPixmap( "loop_points_off" ) );
-	loopPoints->addState( embed::getIconPixmap( "loop_points_on" ) );
-	connect(loopPoints, &NStateButton::changedState, m_timeline, &Timeline::setLoopEnabled);
-	connect(m_timeline, &Timeline::loopEnabledChanged, loopPoints, &NStateButton::changeState);
-	connect(m_timeline, &Timeline::loopEnabledChanged, this, static_cast<void (QWidget::*)()>(&QWidget::update));
-	loopPoints->changeState(static_cast<int>(m_timeline->loopEnabled()));
 
 	auto behaviourAtStop = new NStateButton(_tool_bar);
 	behaviourAtStop->addState( embed::getIconPixmap( "back_to_zero" ),
@@ -121,7 +141,18 @@ void TimeLineWidget::addToolButtons( QToolBar * _tool_bar )
 	behaviourAtStop->changeState(static_cast<int>(m_timeline->stopBehaviour()));
 
 	_tool_bar->addWidget( autoScroll );
-	_tool_bar->addWidget( loopPoints );
+	if (m_loopControlsEnabled)
+	{
+		auto loopPoints = new NStateButton(_tool_bar);
+		loopPoints->setGeneralToolTip(tr("Loop points"));
+		loopPoints->addState(embed::getIconPixmap("loop_points_off"));
+		loopPoints->addState(embed::getIconPixmap("loop_points_on"));
+		connect(loopPoints, &NStateButton::changedState, m_timeline, &Timeline::setLoopEnabled);
+		connect(m_timeline, &Timeline::loopEnabledChanged, loopPoints, &NStateButton::changeState);
+		connect(m_timeline, &Timeline::loopEnabledChanged, this, static_cast<void (QWidget::*)()>(&QWidget::update));
+		loopPoints->changeState(static_cast<int>(m_timeline->loopEnabled()));
+		_tool_bar->addWidget(loopPoints);
+	}
 	_tool_bar->addWidget( behaviourAtStop );
 }
 
@@ -143,11 +174,13 @@ void TimeLineWidget::paintEvent( QPaintEvent * )
 	// Variables for the loop rectangle
 	int const loopRectMargin = getLoopRectangleVerticalPadding();
 	int const loopRectHeight = this->height() - 2 * loopRectMargin;
-	int const loopStart = markerX(m_timeline->loopBegin());
-	int const loopEndR = markerX(m_timeline->loopEnd());
+	const TimePos rangeBegin = m_rangeHighlightEnabled ? m_rangeHighlightBegin : m_timeline->loopBegin();
+	const TimePos rangeEnd = m_rangeHighlightEnabled ? m_rangeHighlightEnd : m_timeline->loopEnd();
+	int const loopStart = markerX(rangeBegin);
+	int const loopEndR = markerX(rangeEnd);
 	int const loopRectWidth = loopEndR - loopStart;
 
-	bool const loopPointsActive = m_timeline->loopEnabled();
+	bool const loopPointsActive = m_rangeHighlightEnabled || m_timeline->loopEnabled();
 
 	// Draw the main loop rectangle (inner fill only)
 	QRect outerRectangle( loopStart, loopRectMargin, loopRectWidth - 1, loopRectHeight - 1 );
@@ -199,7 +232,8 @@ void TimeLineWidget::paintEvent( QPaintEvent * )
 	
 	// Draw loop handles if necessary
 	const auto handleMode = ConfigManager::inst()->value("app", "loopmarkermode") == "handles";
-	if (handleMode && underMouse() && QGuiApplication::keyboardModifiers().testFlag(Qt::ShiftModifier))
+	if (m_loopControlsEnabled && !m_rangeHighlightEnabled && handleMode && underMouse()
+		&& QGuiApplication::keyboardModifiers().testFlag(Qt::ShiftModifier))
 	{
 		const auto handleWidth = std::min(m_loopHandleWidth, loopRectWidth / 2 - 1);
 		const auto leftHandle = QRectF(loopStart - .5, loopRectMargin - .5, handleWidth, loopRectHeight);
@@ -232,6 +266,8 @@ auto TimeLineWidget::getClickedTime(const int xPosition) const -> TimePos
 
 auto TimeLineWidget::getLoopAction(QMouseEvent* event) const -> TimeLineWidget::Action
 {
+	if (!m_loopControlsEnabled) { return Action::NoAction; }
+
 	const auto pos = position(event);
 
 	const auto mode = ConfigManager::inst()->value("app", "loopmarkermode");
@@ -282,7 +318,7 @@ void TimeLineWidget::mousePressEvent(QMouseEvent* event)
 
 	if (pos.x() < m_xOffset) { return; }
 
-	const auto shift = event->modifiers() & Qt::ShiftModifier;
+	const auto shift = m_loopControlsEnabled && event->modifiers() & Qt::ShiftModifier;
 	const auto ctrl = event->modifiers() & Qt::ControlModifier;
 
 	if (shift) // loop marker manipulation
@@ -392,7 +428,7 @@ void TimeLineWidget::mouseMoveEvent( QMouseEvent* event )
 
 	if (event->buttons() == Qt::NoButton)
 	{
-		setCursor(QGuiApplication::keyboardModifiers().testFlag(Qt::ShiftModifier)
+		setCursor(m_loopControlsEnabled && QGuiApplication::keyboardModifiers().testFlag(Qt::ShiftModifier)
 			? actionCursor(getLoopAction(event))
 			: Qt::ArrowCursor
 		);
@@ -409,6 +445,12 @@ void TimeLineWidget::mouseReleaseEvent( QMouseEvent* event )
 
 void TimeLineWidget::contextMenuEvent(QContextMenuEvent* event)
 {
+	if (!m_loopControlsEnabled)
+	{
+		event->accept();
+		return;
+	}
+
 	if (event->x() < m_xOffset) { return; }
 
 	auto menu = QMenu{};

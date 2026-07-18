@@ -45,10 +45,6 @@ MidiClip::MidiClip( InstrumentTrack * _instrument_track ) :
 	m_clipType( Type::BeatClip ),
 	m_steps( TimePos::stepsPerBar() )
 {
-	if (_instrument_track->trackContainer()	== Engine::patternStore())
-	{
-		resizeToFirstTrack();
-	}
 	init();
 }
 
@@ -113,12 +109,9 @@ void MidiClip::resizeToFirstTrack()
 void MidiClip::init()
 {
 	connect(Engine::getSong(), &Song::timeSignatureChanged, this, &MidiClip::changeTimeSignature);
-	if (getTrack()->trackContainer() != Engine::patternStore())
-	{
-		saveJournallingState(false);
-		updateLength();
-		restoreJournallingState();
-	}
+	saveJournallingState(false);
+	updateLength();
+	restoreJournallingState();
 }
 
 
@@ -454,6 +447,7 @@ void MidiClip::exportToXML(QDomDocument& doc, QDomElement& midiClipElement, bool
 	midiClipElement.setAttribute("muted", isMuted());
 	midiClipElement.setAttribute("steps", m_steps);
 	midiClipElement.setAttribute("len", length());
+	if (patternIndex() >= 0) { midiClipElement.setAttribute("patternindex", patternIndex()); }
 
 	// now save settings of all notes
 	for (auto& note : m_notes)
@@ -479,6 +473,7 @@ void MidiClip::loadSettings( const QDomElement & _this )
 	m_clipType = static_cast<Type>( _this.attribute( "type"
 								).toInt() );
 	setName( _this.attribute( "name" ) );
+	setPatternIndex(_this.attribute("patternindex", "-1").toInt());
 
 	if (_this.hasAttribute("color"))
 	{

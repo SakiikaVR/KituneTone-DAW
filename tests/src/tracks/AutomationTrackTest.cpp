@@ -232,11 +232,9 @@ private slots:
 		auto patternStore = Engine::patternStore();
 		PatternTrack patternTrack(song);
 		AutomationTrack automationTrack(patternStore);
-		automationTrack.createClipsForPattern(patternStore->numOfPatterns() - 1);
-
-		QVERIFY(automationTrack.numOfClips());
-		auto c1 = dynamic_cast<AutomationClip*>(automationTrack.getClip(0));
+		auto c1 = dynamic_cast<AutomationClip*>(automationTrack.createClip(TimePos(0)));
 		QVERIFY(c1);
+		c1->setPatternIndex(patternTrack.patternIndex());
 
 		FloatModel model;
 
@@ -251,17 +249,22 @@ private slots:
 		QCOMPARE(patternStore->automatedValuesAt(50, patternTrack.patternIndex())[&model], 1.0f);
 
 		PatternTrack patternTrack2(song);
+		patternTrack.setPatternLengthBars(2);
 
 		QCOMPARE(patternStore->automatedValuesAt(5, patternTrack.patternIndex())[&model], 0.5f);
 		QVERIFY(! patternStore->automatedValuesAt(5, patternTrack2.patternIndex()).size());
 
 		PatternClip clip(&patternTrack);
+		QCOMPARE(clip.length(), TimePos(2, 0));
+		patternTrack.setPatternLengthBars(3);
+		QCOMPARE(clip.length(), TimePos(3, 0));
+		patternTrack.setPatternLengthBars(2);
 		clip.changeLength(TimePos::ticksPerBar() * 2);
 		clip.movePosition(0);
 
 		QCOMPARE(song->automatedValuesAt(0)[&model], 0.0f);
 		QCOMPARE(song->automatedValuesAt(5)[&model], 0.5f);
-		QCOMPARE(song->automatedValuesAt(TimePos::ticksPerBar() + 5)[&model], 0.5f);
+		QCOMPARE(song->automatedValuesAt(TimePos::ticksPerBar() + 5)[&model], 1.0f);
 	}
 
 	void testGlobalAutomation()

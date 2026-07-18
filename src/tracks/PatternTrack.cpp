@@ -25,6 +25,8 @@
 
 #include <QDomElement>
 
+#include <algorithm>
+
 #include "AudioEngine.h"
 #include "Engine.h"
 #include "PatternClip.h"
@@ -152,10 +154,25 @@ Clip* PatternTrack::createClip(const TimePos & pos)
 }
 
 
+void PatternTrack::setPatternLengthBars(int bars)
+{
+	bars = std::clamp(bars, 1, 999);
+	if (m_patternLengthBars == bars) { return; }
+	m_patternLengthBars = bars;
+	for (Clip* clip : getClips())
+	{
+		clip->updateLength();
+	}
+	dataChanged();
+	emit patternLengthChanged(bars);
+}
+
+
 
 
 void PatternTrack::saveTrackSpecificSettings(QDomDocument& doc, QDomElement& _this, bool presetMode)
 {
+	_this.setAttribute("bars", m_patternLengthBars);
 //	_this.setAttribute( "icon", m_trackLabel->pixmapFile() );
 /*	_this.setAttribute( "current", s_infoMap[this] ==
 					engine::getPatternEditor()->currentPattern() );*/
@@ -188,17 +205,28 @@ void PatternTrack::loadTrackSpecificSettings(const QDomElement& _this)
 	{
 		const int src = _this.attribute("sourcepattern").toInt();
 		const int dst = s_infoMap[this];
-		// copy clips of all tracks from source pattern (at bar "src") to destination
-		// clips (which are created if they do not exist yet)
+		if (auto* sourceTrack = findPatternTrack(src))
+		{
+			setPatternLengthBars(sourceTrack->patternLengthBars());
+		}
+		// Copy every timeline clip belonging to the source pattern.
 		for (const auto& track : Engine::patternStore()->tracks())
 		{
-			Clip::copyStateTo(track->getClip(src), track->getClip(dst));
+			const auto sourceClips = track->getClips();
+			for (Clip* source : sourceClips)
+			{
+				if (source->patternIndex() != src) { continue; }
+				Clip* destination = track->createClip(source->startPosition());
+				Clip::copyStateTo(source, destination);
+				destination->setPatternIndex(dst);
+			}
 		}
 		setName( tr( "Clone of %1" ).arg(
 					_this.parentNode().toElement().attribute( "name" ) ) );
 	}
 	else
 	{
+		setPatternLengthBars(_this.attribute("bars", "4").toInt());
 		QDomNode node = _this.namedItem(
 					TrackContainer::classNodeName() );
 		if( node.isElement() )

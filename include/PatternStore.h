@@ -51,15 +51,16 @@ namespace gui
  * | +------------------------------+ |
  * +----------------------------------+
  *
- * There is only one PatternStore which holds all patterns, and it's very similar to the Song Editor.
- * Think of it as a table - tracks are rows, bars are columns and clips are cells.
- * With this logic a "pattern" is a column, i.e. all clips on the same bar.
- * In the Pattern Editor you can select which pattern (column) you want to see, using the combo box at the top.
- * In the illustration above, Clip A and Clip C start on bar 1, thus they are "Pattern 1".
+ * There is only one PatternStore, but each pattern is an independent local
+ * timeline. Every clip stores its owning pattern index separately from its
+ * start position, so MIDI, sample and automation tracks can all contain
+ * multiple clips at arbitrary positions inside a pattern. The Pattern Editor
+ * filters the shared track list by the selected pattern.
  *
  * Do not confuse tracks and clips in the PatternStore with PatternTracks and PatternClips.
  * - PatternTracks are used in the Song Editor. Each one reference a "pattern" in the PatternStore.
- * - PatternClips are stored inside PatternTracks. They are just empty placeholders.
+ * - PatternClips are stored inside PatternTracks and place/repeat one complete
+ *   pattern timeline in the Song Editor.
  */
 class LMMS_EXPORT PatternStore : public TrackContainer
 {

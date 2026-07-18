@@ -84,30 +84,11 @@ void PatternStore::updateAfterTrackAdd()
 
 bar_t PatternStore::lengthOfPattern(int pattern) const
 {
-	TimePos maxLength = TimePos::ticksPerBar();
-
-	const TrackList & tl = tracks();
-	for (Track * t : tl)
+	if (auto* track = PatternTrack::findPatternTrack(pattern))
 	{
-		// Do not create clips here if they do not exist. Instrument and sample
-		// clips both define the audible pattern length; automation follows it.
-		if (pattern < t->numOfClips() && t->type() == Track::Type::Instrument)
-		{
-			maxLength = std::max(maxLength, t->getClip(pattern)->length());
-		}
-		else if (t->type() == Track::Type::Sample)
-		{
-			for (Clip* clip : t->getClips())
-			{
-				auto sample = static_cast<SampleClip*>(clip);
-				if (sample->patternIndex() != pattern) { continue; }
-				const TimePos relativeEnd(sample->patternOffset() + sample->length());
-				maxLength = std::max(maxLength, relativeEnd);
-			}
-		}
+		return track->patternLengthBars();
 	}
-
-	return maxLength.nextFullBar();
+	return 1;
 }
 
 
@@ -126,35 +107,14 @@ void PatternStore::removePattern(int pattern)
 	const TrackList& tl = tracks();
 	for (Track * t : tl)
 	{
-		if (t->type() == Track::Type::Sample)
+		const auto clips = t->getClips();
+		for (Clip* clip : clips)
 		{
-			const auto clips = t->getClips();
-			for (Clip* clip : clips)
+			if (clip->patternIndex() == pattern) { delete clip; }
+			else if (clip->patternIndex() > pattern)
 			{
-				auto sample = static_cast<SampleClip*>(clip);
-				if (clip != t->getClip(pattern) && sample->patternIndex() == pattern)
-				{
-					delete clip;
-				}
+				clip->setPatternIndex(clip->patternIndex() - 1);
 			}
-		}
-		if (t->type() == Track::Type::Sample)
-		{
-			delete t->getClip(pattern);
-			for (Clip* clip : t->getClips())
-			{
-				auto sample = static_cast<SampleClip*>(clip);
-				if (sample->patternIndex() > pattern)
-				{
-					sample->setPatternIndex(sample->patternIndex() - 1);
-					sample->movePosition(sample->startPosition() - TimePos::ticksPerBar());
-				}
-			}
-		}
-		else
-		{
-			delete t->getClip(pattern);
-			t->removeBar(pattern * DefaultTicksPerBar);
 		}
 	}
 	if (pattern <= currentPattern())
@@ -171,34 +131,10 @@ void PatternStore::swapPattern(int pattern1, int pattern2)
 	const TrackList& tl = tracks();
 	for (Track * t : tl)
 	{
-		if (t->type() == Track::Type::Sample)
+		for (Clip* clip : t->getClips())
 		{
-			Clip* anchor1 = t->getClip(pattern1);
-			Clip* anchor2 = t->getClip(pattern2);
-			for (Clip* clip : t->getClips())
-			{
-				if (clip == anchor1 || clip == anchor2) { continue; }
-				auto sample = static_cast<SampleClip*>(clip);
-				const int clipPattern = sample->patternIndex();
-				if (clipPattern == pattern1)
-				{
-					clip->movePosition(clip->startPosition()
-							+ (pattern2 - pattern1) * TimePos::ticksPerBar());
-					sample->setPatternIndex(pattern2);
-				}
-				else if (clipPattern == pattern2)
-				{
-					clip->movePosition(clip->startPosition()
-							+ (pattern1 - pattern2) * TimePos::ticksPerBar());
-					sample->setPatternIndex(pattern1);
-				}
-			}
-		}
-		t->swapPositionOfClips(pattern1, pattern2);
-		if (t->type() == Track::Type::Sample)
-		{
-			static_cast<SampleClip*>(t->getClip(pattern1))->setPatternIndex(pattern1);
-			static_cast<SampleClip*>(t->getClip(pattern2))->setPatternIndex(pattern2);
+			if (clip->patternIndex() == pattern1) { clip->setPatternIndex(pattern2); }
+			else if (clip->patternIndex() == pattern2) { clip->setPatternIndex(pattern1); }
 		}
 	}
 	updateComboBox();
@@ -209,9 +145,7 @@ void PatternStore::swapPattern(int pattern1, int pattern2)
 
 void PatternStore::updatePatternTrack(Clip* clip)
 {
-	const int pattern = clip->getTrack()->type() == Track::Type::Sample
-			? static_cast<SampleClip*>(clip)->patternIndex()
-			: clip->startPosition() / DefaultTicksPerBar;
+	const int pattern = clip->patternIndex();
 	PatternTrack * t = PatternTrack::findPatternTrack(pattern);
 	if (t != nullptr)
 	{
@@ -225,18 +159,8 @@ void PatternStore::updatePatternTrack(Clip* clip)
 
 void PatternStore::fixIncorrectPositions()
 {
-	const TrackList& tl = tracks();
-	for (Track * t : tl)
-	{
-		for (int i = 0; i < numOfPatterns(); ++i)
-		{
-			t->getClip(i)->movePosition(TimePos(i, 0));
-			if (t->type() == Track::Type::Sample)
-			{
-				static_cast<SampleClip*>(t->getClip(i))->setPatternIndex(i);
-			}
-		}
-	}
+	// The redesigned pattern format stores clip positions relative to the
+	// pattern, so no positional repair or fixed anchor clips are required.
 }
 
 
@@ -284,11 +208,7 @@ void PatternStore::updateComboBox()
 
 void PatternStore::createClipsForPattern(int pattern)
 {
-	const TrackList& tl = tracks();
-	for (Track * t : tl)
-	{
-		t->createClipsForPattern(pattern);
-	}
+	Q_UNUSED(pattern)
 }
 
 AutomatedValueMap PatternStore::automatedValuesAt(TimePos time, int clipNum) const
@@ -303,7 +223,7 @@ AutomatedValueMap PatternStore::automatedValuesAt(TimePos time, int clipNum) con
 		time = lengthTicks;
 	}
 
-	return TrackContainer::automatedValuesAt(time + (TimePos::ticksPerBar() * clipNum), clipNum);
+	return TrackContainer::automatedValuesAt(time, clipNum);
 }
 
 

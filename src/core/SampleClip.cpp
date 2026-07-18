@@ -94,7 +94,6 @@ SampleClip::SampleClip(const SampleClip& orig) :
 	m_originalBuffer = orig.m_originalBuffer;
 	m_stretchFactor = orig.m_stretchFactor;
 	m_sourceBpm = orig.m_sourceBpm;
-	m_patternIndex = orig.m_patternIndex;
 	m_sample = orig.m_sample;
 
 	// we need to receive bpm-change-events, because then we have to
@@ -402,7 +401,7 @@ void SampleClip::saveSettings( QDomDocument & _doc, QDomElement & _this )
 	_this.setAttribute( "sample_rate", m_sample.sampleRate());
 	if (m_stretchFactor != 1.0f) { _this.setAttribute("stretch", QString::number(m_stretchFactor)); }
 	if (m_sourceBpm > 0) { _this.setAttribute("srcbpm", QString::number(m_sourceBpm)); }
-	if (m_patternIndex >= 0) { _this.setAttribute("patternindex", m_patternIndex); }
+	if (patternIndex() >= 0) { _this.setAttribute("patternindex", patternIndex()); }
 	if (const auto& c = color())
 	{
 		_this.setAttribute("color", c->name());
@@ -445,9 +444,7 @@ void SampleClip::loadSettings( const QDomElement & _this )
 	// restore time-stretch settings and apply them to the loaded sample
 	m_stretchFactor = _this.hasAttribute("stretch") ? _this.attribute("stretch").toFloat() : 1.0f;
 	m_sourceBpm = _this.attribute("srcbpm").toInt();
-	m_patternIndex = _this.hasAttribute("patternindex")
-			? _this.attribute("patternindex").toInt()
-			: -1;
+	setPatternIndex(_this.attribute("patternindex", "-1").toInt());
 	if (m_stretchFactor != 1.0f) { applyStretch(); }
 
 	changeLength( _this.attribute( "len" ).toInt() );

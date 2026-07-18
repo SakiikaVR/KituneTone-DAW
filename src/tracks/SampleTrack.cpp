@@ -191,10 +191,6 @@ Clip * SampleTrack::createClip(const TimePos & pos)
 {
 	auto sClip = new SampleClip(this);
 	sClip->movePosition(pos);
-	if (trackContainer() == Engine::patternStore())
-	{
-		sClip->setPatternIndex(pos.getBar());
-	}
 	return sClip;
 }
 

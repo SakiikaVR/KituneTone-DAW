@@ -265,7 +265,10 @@ void Song::processNextBuffer()
 		return false;
 	};
 
-	const auto loopEnabled = !m_exporting && timeline.loopEnabled();
+	// Pattern playback always follows its explicit bar count. Song-style loop
+	// markers are intentionally ignored in the Pattern Editor.
+	const auto loopEnabled = !m_exporting && m_playMode != PlayMode::Pattern
+		&& timeline.loopEnabled();
 
 	// Ensure playback begins within the loop if it is enabled
 	if (loopEnabled) { enforceLoop(timeline.loopBegin(), timeline.loopEnd()); }
@@ -390,7 +393,15 @@ void Song::processAutomations(const TrackList &tracklist, TimePos timeStart, f_c
 	for (Track* track : tracks)
 	{
 		if (track->type() == Track::Type::Automation) {
-			track->getClipsInRange(clips, 0, timeStart);
+			Track::clipVector candidates;
+			track->getClipsInRange(candidates, 0, timeStart);
+			for (Clip* clip : candidates)
+			{
+				if (clipNum < 0 || clip->patternIndex() == clipNum)
+				{
+					clips.push_back(clip);
+				}
+			}
 		}
 	}
 
@@ -647,6 +658,7 @@ void Song::playPattern()
 	}
 
 	m_playMode = PlayMode::Pattern;
+	getTimeline(PlayMode::Pattern).setLoopEnabled(false);
 	m_playing = true;
 	m_paused = false;
 

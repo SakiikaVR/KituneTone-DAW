@@ -109,6 +109,15 @@ int PatternClip::patternIndex()
 }
 
 
+void PatternClip::updateLength()
+{
+	if (getAutoResize())
+	{
+		changeLength(TimePos(Engine::patternStore()->lengthOfPattern(patternIndex()), 0));
+	}
+}
+
+
 
 gui::ClipView* PatternClip::createView(gui::TrackView* tv)
 {

@@ -66,6 +66,8 @@ public:
 	{
 		return s_infoMap[this];
 	}
+	int patternLengthBars() const { return m_patternLengthBars; }
+	void setPatternLengthBars(int bars);
 
 	bool automationDisabled( Track * _track )
 	{
@@ -89,11 +91,15 @@ protected:
 
 private:
 	QList<Track *> m_disabledTracks;
+	int m_patternLengthBars = 4;
 
 	using infoMap = QMap<PatternTrack*, int>;
 	static infoMap s_infoMap;
 
 	friend class gui::PatternTrackView;
+
+signals:
+	void patternLengthChanged(int bars);
 } ;
 
 

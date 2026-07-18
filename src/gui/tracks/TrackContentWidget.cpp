@@ -49,6 +49,7 @@
 #include "Song.h"
 #include "SongEditor.h"
 #include "StringPairDrag.h"
+#include "TrackContainer.h"
 #include "TrackContainerView.h"
 #include "ClipView.h"
 #include "TrackView.h"
@@ -251,6 +252,19 @@ void TrackContentWidget::update()
 }
 
 
+void TrackContentWidget::removeClipViewsForPattern(int pattern)
+{
+	const auto views = m_clipViews;
+	for (ClipView* view : views)
+	{
+		if (view->getClip()->patternIndex() == pattern)
+		{
+			removeClipView(view);
+		}
+	}
+}
+
+
 
 
 // responsible for moving track-content-widgets to appropriate position after
@@ -271,14 +285,12 @@ void TrackContentWidget::changePosition( const TimePos & newPos )
 		{
 			Clip* clip = clipView->getClip();
 			auto sample = dynamic_cast<SampleClip*>(clip);
-			const bool belongsToPattern = sample != nullptr
-					? sample->patternIndex() == curPattern
-					: clip->startPosition().getBar() == curPattern;
+			const bool belongsToPattern = clip->patternIndex() == curPattern;
 			if (belongsToPattern)
 			{
-				const TimePos relativePosition = sample != nullptr
-						? sample->patternOffset() : TimePos(0);
-				const int x = relativePosition.getTicks()
+				const TimePos relativePosition = clip->patternOffset();
+				const int x = TimePos(relativePosition
+						- m_trackView->trackContainerView()->currentPosition()).getTicks()
 						* m_trackView->trackContainerView()->pixelsPerBar()
 						/ TimePos::ticksPerBar();
 				clipView->move(x, clipView->y());
@@ -291,10 +303,7 @@ void TrackContentWidget::changePosition( const TimePos & newPos )
 		for (const auto& clipView : m_clipViews)
 		{
 			Clip* clip = clipView->getClip();
-			auto sample = dynamic_cast<SampleClip*>(clip);
-			const bool belongsToPattern = sample != nullptr
-					? sample->patternIndex() == curPattern
-					: clip->startPosition().getBar() == curPattern;
+			const bool belongsToPattern = clip->patternIndex() == curPattern;
 			if (!belongsToPattern) { clipView->hide(); }
 		}
 		setUpdatesEnabled( true );
@@ -514,10 +523,9 @@ bool TrackContentWidget::pasteSelection( TimePos clipPos, QDropEvent * de )
 
 
 
-bool TrackContentWidget::moveFixedPatternSample( QDropEvent * de )
+bool TrackContentWidget::moveSampleClip(QDropEvent* de)
 {
-	if (!m_trackView->trackContainerView()->fixedClips()
-			|| getTrack()->type() != Track::Type::Sample)
+	if (getTrack()->type() != Track::Type::Sample)
 	{
 		return false;
 	}
@@ -532,73 +540,49 @@ bool TrackContentWidget::moveFixedPatternSample( QDropEvent * de )
 		return false;
 	}
 
-	const int pattern = Engine::patternStore()->currentPattern();
+	const bool inPatternEditor = getTrack()->trackContainer()->type()
+			== TrackContainer::Type::Pattern;
+	const int pattern = inPatternEditor ? Engine::patternStore()->currentPattern() : -1;
 	const float snapSize = getGUI()->songEditor()->m_editor->getSnapSize();
 	const int localX = std::max(0, mapFromGlobal(QCursor::pos()).x());
-	TimePos relativePosition(localX * TimePos::ticksPerBar()
-			/ static_cast<int>(m_trackView->trackContainerView()->pixelsPerBar()));
-	relativePosition = relativePosition.quantize(snapSize, true);
-	const TimePos destinationPosition = TimePos(pattern, 0) + relativePosition;
+	const TimePos destinationPosition = getPosition(localX).quantize(snapSize, true);
 
 	auto sourceTrack = source->getTrack();
-	const bool sourceIsAnchor = sourceTrack->getClip(source->patternIndex()) == source;
-	if (sourceTrack == getTrack() && !sourceIsAnchor)
+	if (sourceTrack == getTrack())
 	{
 		sourceTrack->addJournalCheckPoint();
-		source->setPatternIndex(pattern);
+		if (inPatternEditor) { source->setPatternIndex(pattern); }
 		source->movePosition(destinationPosition);
-		Engine::patternStore()->updatePatternTrack(source);
+		if (inPatternEditor) { Engine::patternStore()->updatePatternTrack(source); }
 		m_trackView->getTrackContentWidget()->changePosition();
 		Engine::getSong()->setModified();
-		de->acceptProposedAction();
-		return true;
-	}
-	if (sourceTrack == getTrack() && sourceIsAnchor && relativePosition == TimePos(0))
-	{
 		de->acceptProposedAction();
 		return true;
 	}
 
 	sourceTrack->addJournalCheckPoint();
 	getTrack()->addJournalCheckPoint();
-	auto anchor = dynamic_cast<SampleClip*>(getTrack()->getClip(pattern));
-	SampleClip* destination = relativePosition == TimePos(0)
-			&& anchor != nullptr && anchor->sampleFile().isEmpty()
-			? anchor
-			: dynamic_cast<SampleClip*>(getTrack()->createClip(destinationPosition));
+	auto* destination = dynamic_cast<SampleClip*>(getTrack()->createClip(destinationPosition));
 	if (destination == nullptr) { return false; }
 
 	Clip::copyStateTo(source, destination);
-	destination->setPatternIndex(pattern);
+	if (inPatternEditor) { destination->setPatternIndex(pattern); }
 	destination->movePosition(destinationPosition);
-
-	if (sourceIsAnchor)
-	{
-		source->setSampleFile(QString());
-		source->setName(QString());
-		source->setStartTimeOffset(0);
-		source->setSourceBpm(0);
-	}
-	else
-	{
-		QTimer::singleShot(0, this, [source, sourceTrack, pattern]() {
-			delete source;
-			Engine::patternStore()->updatePatternTrack(sourceTrack->getClip(pattern));
-		});
-	}
-
-	Engine::patternStore()->updatePatternTrack(destination);
+	if (inPatternEditor) { Engine::patternStore()->updatePatternTrack(destination); }
 	Engine::getSong()->setModified();
 
 	sourceView->setSelected(false);
-	for (ClipView* view : m_clipViews)
-	{
-		if (view->getClip() == destination)
+	QTimer::singleShot(0, this, [this, source, destination]() {
+		delete source;
+		for (ClipView* view : m_clipViews)
 		{
-			view->setSelected(true);
-			break;
+			if (view->getClip() == destination)
+			{
+				view->setSelected(true);
+				break;
+			}
 		}
-	}
+	});
 
 	de->acceptProposedAction();
 	return true;
@@ -796,7 +780,7 @@ void TrackContentWidget::dropEvent( QDropEvent * de )
 		return;
 	}
 
-	if (moveFixedPatternSample(de)) { return; }
+	if (moveSampleClip(de)) { return; }
 
 	TimePos clipPos = TimePos(getPosition(pos.x()));
 	if( pasteSelection( clipPos, de ) == true )
@@ -819,7 +803,7 @@ void TrackContentWidget::mousePressEvent( QMouseEvent * me )
 	// Enable box select if control is held when clicking an empty space
 	// (If we had clicked a Clip it would have intercepted the mouse event)
 	if( me->modifiers() & Qt::ControlModifier ){
-		getGUI()->songEditor()->m_editor->setEditMode(SongEditor::EditMode::Select);
+		m_trackView->trackContainerView()->activateSelectMode();
 	}
 	// Forward event to allow box select if the editor supports it and is in that mode
 	if( m_trackView->trackContainerView()->allowRubberband() == true )
@@ -856,7 +840,10 @@ void TrackContentWidget::mousePressEvent( QMouseEvent * me )
 
 void TrackContentWidget::mouseReleaseEvent( QMouseEvent * me )
 {
-	getGUI()->songEditor()->syncEditMode();
+	if (m_trackView->trackContainerView() == getGUI()->songEditor()->m_editor)
+	{
+		getGUI()->songEditor()->syncEditMode();
+	}
 	QWidget::mouseReleaseEvent(me);
 }
 
@@ -873,12 +860,8 @@ void TrackContentWidget::paintEvent( QPaintEvent * pe )
 	const TrackContainerView * tcv = m_trackView->trackContainerView();
 	int ppb = static_cast<int>( tcv->pixelsPerBar() );
 	QPainter p( this );
-	// Don't draw background on Pattern Editor
-	if (m_trackView->trackContainerView() != getGUI()->patternEditor()->m_editor)
-	{
-		p.drawTiledPixmap(rect(), m_background, QPoint(
-				tcv->currentPosition().getTicks() * ppb / TimePos::ticksPerBar(), 0));
-	}
+	p.drawTiledPixmap(rect(), m_background, QPoint(
+			tcv->currentPosition().getTicks() * ppb / TimePos::ticksPerBar(), 0));
 }
 
 

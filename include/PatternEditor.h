@@ -28,6 +28,9 @@
 #include "Editor.h"
 #include "TrackContainerView.h"
 
+class QSpinBox;
+class QScrollBar;
+
 namespace lmms
 {
 
@@ -44,12 +47,9 @@ class PatternEditor : public TrackContainerView
 {
 	Q_OBJECT
 public:
+	enum class EditMode { Draw, Knife, Select };
 	PatternEditor(PatternStore* ps);
-
-	bool fixedClips() const override
-	{
-		return true;
-	}
+	TimeLineWidget* timeLine() const { return m_timeLine; }
 
 	void removeViewsForPattern(int pattern);
 
@@ -64,18 +64,44 @@ public slots:
 	void addAutomationTrack();
 	void cloneClip();
 	void updateMaxSteps();
+	void showCurrentPattern();
+	void setEditModeDraw() { m_mode = EditMode::Draw; }
+	void setEditModeKnife() { m_mode = EditMode::Knife; }
+	void setEditModeSelect() { m_mode = EditMode::Select; }
+	void setZoom(int percent);
+	void copySelectedClips();
+	void pasteSelectedClips();
+	void duplicateSelectedClips();
+	void deleteSelectedClips();
+	void selectAllClips(bool select) override;
+
+signals:
+	void zoomChanged(int percent);
 
 protected slots:
 	void dropEvent(QDropEvent * de ) override;
 	void resizeEvent(QResizeEvent* de) override;
 	void updatePosition();
 	void updatePixelsPerBar();
+	void mousePressEvent(QMouseEvent* event) override;
+	void mouseMoveEvent(QMouseEvent* event) override;
+	void mouseReleaseEvent(QMouseEvent* event) override;
+	void keyPressEvent(QKeyEvent* event) override;
+	void wheelEvent(QWheelEvent* event) override;
+	bool allowRubberband() const override { return m_mode == EditMode::Select; }
+	bool knifeMode() const override { return m_mode == EditMode::Knife; }
+	void activateSelectMode() override { setEditModeSelect(); }
 
 private:
 	PatternStore* m_ps;
 	TimeLineWidget* m_timeLine;
+	QScrollBar* m_leftRightScroll = nullptr;
 	int m_trackHeadWidth;
 	tick_t m_maxClipLength;
+	EditMode m_mode = EditMode::Draw;
+	int m_zoomPercent = 100;
+	QPoint m_selectionOrigin;
+	QPoint m_selectionMouse;
 	void makeSteps( bool clone );
 };
 
@@ -94,9 +120,12 @@ public:
 public slots:
 	void play() override;
 	void stop() override;
+	void syncPatternLength();
+	void setPatternLength(int bars);
 
 private:
 	ComboBox* m_patternComboBox;
+	QSpinBox* m_patternLengthSpinBox;
 };
 
 

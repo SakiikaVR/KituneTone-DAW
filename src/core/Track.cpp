@@ -118,11 +118,6 @@ Track * Track::create( Type tt, TrackContainer * tc )
 		default: break;
 	}
 
-	if (tc == Engine::patternStore() && t)
-	{
-		t->createClipsForPattern(Engine::patternStore()->numOfPatterns() - 1);
-	}
-
 	tc->updateAfterTrackAdd();
 
 	Engine::audioEngine()->doneChangeInModel();
@@ -344,6 +339,15 @@ void Track::loadSettings(const QDomElement& element)
 Clip * Track::addClip( Clip * clip )
 {
 	m_clips.push_back( clip );
+	if (trackContainer() == Engine::patternStore())
+	{
+		connect(clip, &Clip::positionChanged, Engine::patternStore(), [clip]() {
+			Engine::patternStore()->updatePatternTrack(clip);
+		});
+		connect(clip, &Clip::lengthChanged, Engine::patternStore(), [clip]() {
+			Engine::patternStore()->updatePatternTrack(clip);
+		});
+	}
 
 	emit clipAdded( clip );
 
@@ -363,6 +367,10 @@ void Track::removeClip( Clip * clip )
 	if( it != m_clips.end() )
 	{
 		m_clips.erase( it );
+		if (Engine::patternStore() && trackContainer() == Engine::patternStore())
+		{
+			Engine::patternStore()->updatePatternTrack(clip);
+		}
 		if( Engine::getSong() )
 		{
 			Engine::getSong()->updateLength();
@@ -499,31 +507,7 @@ void Track::swapPositionOfClips( int clipNum1, int clipNum2 )
 
 void Track::createClipsForPattern(int pattern)
 {
-	if (type() == Type::Sample)
-	{
-		// Sample tracks may contain additional clips after the fixed per-pattern
-		// anchor clips. Keep the anchors at indices 0..pattern so getClip(pattern)
-		// remains compatible with the rest of the pattern engine.
-		for (int i = 0; i <= pattern; ++i)
-		{
-			if (i < static_cast<int>(m_clips.size())
-					&& m_clips[i]->startPosition() == TimePos(i, 0))
-			{
-				continue;
-			}
-			Clip* anchor = createClip(TimePos(i, 0));
-			anchor->changeLength(TimePos(1, 0));
-			std::rotate(m_clips.begin() + i, m_clips.end() - 1, m_clips.end());
-		}
-		return;
-	}
-
-	while( numOfClips() < pattern + 1 )
-	{
-		TimePos position = TimePos( numOfClips(), 0 );
-		Clip * clip = createClip( position );
-		clip->changeLength( TimePos( 1, 0 ) );
-	}
+	Q_UNUSED(pattern)
 }
 
 

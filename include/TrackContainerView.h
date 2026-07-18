@@ -103,6 +103,8 @@ public:
 
 	virtual bool allowRubberband() const;
 	virtual bool knifeMode() const;
+	virtual void activateSelectMode() {}
+	virtual void selectAllClips(bool select);
 
 	inline bool rubberBandActive() const
 	{

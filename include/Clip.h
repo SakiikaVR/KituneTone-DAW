@@ -97,6 +97,9 @@ public:
 	bool hasTrackContainer() const;
 
 	bool isInPattern() const;
+	int patternIndex() const { return m_patternIndex; }
+	void setPatternIndex(int pattern);
+	TimePos patternOffset() const { return startPosition(); }
 
 	bool manuallyResizable() const;
 
@@ -174,6 +177,7 @@ private:
 	BoolModel m_mutedModel;
 	BoolModel m_soloModel;
 	bool m_autoResize = true;
+	int m_patternIndex = -1;
 
 	bool m_selectViewOnCreate;
 

@@ -30,6 +30,7 @@
 #include "AutomationClip.h"
 #include "Engine.h"
 #include "GuiApplication.h"
+#include "PatternStore.h"
 #include "Song.h"
 #include "Track.h"
 #include "TrackContainer.h"
@@ -52,6 +53,12 @@ Clip::Clip( Track * track ) :
 	m_mutedModel( false, this, tr( "Mute" ) ),
 	m_selectViewOnCreate{false}
 {
+	if (track && track->trackContainer()
+			&& track->trackContainer()->type() == TrackContainer::Type::Pattern
+			&& Engine::patternStore())
+	{
+		m_patternIndex = Engine::patternStore()->currentPattern();
+	}
 	if( getTrack() )
 	{
 		getTrack()->addClip( this );
@@ -78,6 +85,7 @@ Clip::Clip(const Clip& other):
 	m_startTimeOffset(other.m_startTimeOffset),
 	m_mutedModel(other.m_mutedModel.value(), this, tr( "Mute" )),
 	m_autoResize(other.m_autoResize),
+	m_patternIndex(other.m_patternIndex),
 	m_selectViewOnCreate{other.m_selectViewOnCreate},
 	m_color(other.m_color)
 {
@@ -185,9 +193,21 @@ bool Clip::isInPattern() const
 		&& getTrack()->trackContainer()->type() == TrackContainer::Type::Pattern;
 }
 
+
+void Clip::setPatternIndex(int pattern)
+{
+	if (m_patternIndex == pattern) { return; }
+	m_patternIndex = pattern;
+	if (isInPattern() && Engine::patternStore())
+	{
+		Engine::patternStore()->updatePatternTrack(this);
+	}
+	emit dataChanged();
+}
+
 bool Clip::manuallyResizable() const
 {
-	return !isInPattern();
+	return true;
 }
 
 

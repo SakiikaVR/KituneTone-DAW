@@ -91,7 +91,8 @@ public slots:
 
 	void updatePosition();
 	void updatePositionLine();
-	void selectAllClips( bool select );
+	void selectAllClips( bool select ) override;
+	void activateSelectMode() override { setEditModeSelect(); }
 	//! copy the currently selected clips (across tracks) to the clipboard
 	void copySelectedClips();
 	//! paste clipboard clips at the play head, keeping their track/time layout

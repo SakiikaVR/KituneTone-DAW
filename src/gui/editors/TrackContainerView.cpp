@@ -349,6 +349,17 @@ bool TrackContainerView::knifeMode() const
 }
 
 
+void TrackContainerView::selectAllClips(bool select)
+{
+	const auto objects = select ? m_rubberBand->selectableObjects()
+			: m_rubberBand->selectedObjects();
+	for (selectableObject* object : objects)
+	{
+		object->setSelected(select);
+	}
+}
+
+
 
 
 void TrackContainerView::setPixelsPerBar( int ppb )
@@ -638,6 +649,9 @@ void TrackContainerView::importMidiFiles( const QStringList& files,
 	if (minStart < 0) { minStart = 0; }
 
 	Engine::audioEngine()->requestChangeInModel();
+	const bool importingIntoPattern = m_tc->type() == TrackContainer::Type::Pattern;
+	const int targetPattern = importingIntoPattern
+			? Engine::patternStore()->currentPattern() : -1;
 	if (target != nullptr)
 	{
 		// play the imported notes with the existing instrument: copy each clip
@@ -654,6 +668,7 @@ void TrackContainerView::importMidiFiles( const QStringList& files,
 				const TimePos pos = dropStart + (mc->startPosition() - minStart);
 				auto dst = dynamic_cast<MidiClip*>(target->createClip(pos));
 				if (dst == nullptr) { continue; }
+				if (importingIntoPattern) { dst->setPatternIndex(targetPattern); }
 				for (const Note* n : mc->notes()) { dst->addNote(*n, false); }
 				dst->updateLength();
 			}
@@ -668,7 +683,15 @@ void TrackContainerView::importMidiFiles( const QStringList& files,
 			for (Clip* c : t->getClips())
 			{
 				c->movePosition(dropStart + (c->startPosition() - minStart));
+				if (importingIntoPattern) { c->setPatternIndex(targetPattern); }
 			}
+		}
+	}
+	if (importingIntoPattern)
+	{
+		for (Track* t : addedAutomation)
+		{
+			for (Clip* c : t->getClips()) { c->setPatternIndex(targetPattern); }
 		}
 	}
 	Engine::audioEngine()->doneChangeInModel();
