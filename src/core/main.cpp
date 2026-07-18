@@ -55,6 +55,8 @@
 #endif
 
 #include <csignal>  // To register the signal handler
+#include <exception>
+#include <memory>
 
 #include "MainApplication.h"
 #include "ConfigManager.h"
@@ -374,12 +376,22 @@ int main( int argc, char * * argv )
 	// 1 ms system timer resolution for steadier GUI/MIDI timers, and a
 	// slightly elevated priority class for the realtime audio workload
 	timeBeginPeriod(1);
+	struct TimerPeriodGuard final
+	{
+		~TimerPeriodGuard() { timeEndPeriod(1); }
+	} timerPeriodGuard;
 	SetPriorityClass(GetCurrentProcess(), ABOVE_NORMAL_PRIORITY_CLASS);
 #endif
 
-	QCoreApplication * app = coreOnly ?
-			new QCoreApplication( argc, argv ) :
-					new gui::MainApplication(argc, argv);
+	std::unique_ptr<QCoreApplication> app;
+	if (coreOnly)
+	{
+		app = std::make_unique<QCoreApplication>(argc, argv);
+	}
+	else
+	{
+		app = std::make_unique<gui::MainApplication>(argc, argv);
+	}
 	QCoreApplication::setApplicationName(QStringLiteral("KitsuneTone"));
 	if (!coreOnly)
 	{
@@ -723,20 +735,33 @@ int main( int argc, char * * argv )
 #endif
 
 	bool destroyEngine = false;
+	struct NotePlayHandleCleanupGuard final
+	{
+		~NotePlayHandleCleanupGuard() { NotePlayHandleManager::free(); }
+	} notePlayHandleCleanupGuard;
+	struct EngineCleanupGuard final
+	{
+		bool& active;
+		~EngineCleanupGuard()
+		{
+			if (active) { Engine::destroy(); }
+		}
+	} engineCleanupGuard{destroyEngine};
+	std::unique_ptr<lmms::gui::GuiApplication> guiApplication;
 
 	// if we have an output file for rendering, just render the song
 	// without starting the GUI
 	if( !renderOut.isEmpty() )
 	{
-		Engine::init( true );
 		destroyEngine = true;
+		Engine::init( true );
 
 		printf( "Loading project...\n" );
 		Engine::getSong()->loadProject( fileToLoad );
 		if( Engine::getSong()->isEmpty() )
 		{
 			printf("The project %s is empty, aborting!\n", fileToLoad.toUtf8().constData() );
-			exit( EXIT_FAILURE );
+			return EXIT_FAILURE;
 		}
 		printf( "Done\n" );
 
@@ -780,7 +805,21 @@ int main( int argc, char * * argv )
 	{
 		using namespace lmms::gui;
 
-		new GuiApplication();
+		destroyEngine = true;
+		try
+		{
+			guiApplication = std::make_unique<GuiApplication>();
+		}
+		catch (const std::exception& exception)
+		{
+			qCritical("KitsuneTone GUI initialization failed: %s", exception.what());
+			return EXIT_FAILURE;
+		}
+		catch (...)
+		{
+			qCritical("KitsuneTone GUI initialization failed with an unknown exception");
+			return EXIT_FAILURE;
+		}
 
 		// re-intialize RNG - shared libraries might have srand() or
 		// srandom() calls in their init procedure
@@ -871,7 +910,7 @@ int main( int argc, char * * argv )
 		}
 
 		// Handle macOS-style FileOpen QEvents
-		QString queuedFile = static_cast<MainApplication *>( app )->queuedFile();
+		QString queuedFile = static_cast<MainApplication*>(app.get())->queuedFile();
 		if ( !queuedFile.isEmpty() ) {
 			fileToLoad = queuedFile;
 		}
@@ -932,12 +971,9 @@ int main( int argc, char * * argv )
 	}
 
 	const int ret = app->exec();
-	delete app;
 
-	if( destroyEngine )
-	{
-		Engine::destroy();
-	}
+	// Local guards preserve the required shutdown order on every return path:
+	// GUI views, Engine/audio/MIDI, note-handle cache, QApplication, timer.
 
 	// ProjectRenderer::updateConsoleProgress() doesn't return line after render
 	if( coreOnly )
@@ -947,7 +983,6 @@ int main( int argc, char * * argv )
 
 #ifdef LMMS_BUILD_WIN32
 	// Cleanup console
-	timeEndPeriod(1);
 	HWND hConsole = GetConsoleWindow();
 	if (hConsole)
 	{
@@ -955,9 +990,6 @@ int main( int argc, char * * argv )
 		FreeConsole();
 	}
 #endif
-
-
-	NotePlayHandleManager::free();
 
 	return ret;
 }

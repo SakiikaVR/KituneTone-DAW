@@ -78,7 +78,7 @@ class Vst3Effect : public Effect, public MidiEventProcessor
 {
 public:
 	Vst3Effect(Model* parent, const Descriptor::SubPluginFeatures::Key* key);
-	~Vst3Effect() override = default;
+	~Vst3Effect() override;
 
 	ProcessStatus processImpl(SampleFrame* buf, const f_cnt_t frames) override;
 
@@ -116,6 +116,10 @@ private:
 
 	std::unique_ptr<Vst3Plugin> m_plugin;
 	QMutex m_pluginMutex;
+	//! pins m_plugin for MIDI delivery without contending the audio thread's
+	//! tryLock on m_pluginMutex; lock order where both are held:
+	//! m_pluginMutex, then m_midiMutex
+	QMutex m_midiMutex;
 	EffectKey m_key;
 	Vst3EffectControls m_controls;
 	MidiPort m_midiPort;

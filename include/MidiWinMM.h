@@ -30,6 +30,7 @@
 #ifdef LMMS_BUILD_WIN32
 #include <windows.h>
 #include <mmsystem.h>
+#include <QMutex>
 
 #include "MidiClient.h"
 #include "MidiPort.h"
@@ -76,15 +77,8 @@ public:
 
 
 	// list devices as ports
-	virtual QStringList readablePorts() const
-	{
-		return m_inputDevices.values();
-	}
-
-	virtual QStringList writablePorts() const
-	{
-		return m_outputDevices.values();
-	}
+	QStringList readablePorts() const override;
+	QStringList writablePorts() const override;
 
 	// return name of port which specified MIDI event came from
 	virtual QString sourcePortName( const MidiEvent & ) const;
@@ -137,6 +131,8 @@ private:
 	using SubMap = QMap<QString, MidiPortList>;
 	SubMap m_inputSubs;
 	SubMap m_outputSubs;
+	mutable QMutex m_mutex;
+	bool m_closing = false;
 
 
 signals:

@@ -255,7 +255,7 @@ void InstrumentFunctionNoteStacking::processNote( NotePlayHandle * _n )
 				const int sub_note_key = sub_note_key_base + (int) chord_table.chords()[selected_chord][i];
 				// maybe we're out of range -> let's get outta
 				// here!
-				if( sub_note_key > NumKeys )
+				if( sub_note_key < 0 || sub_note_key >= NumKeys )
 				{
 					break;
 				}

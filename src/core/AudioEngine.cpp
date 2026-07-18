@@ -35,6 +35,7 @@
 #include "Song.h"
 #include "EnvelopeAndLfoParameters.h"
 #include "NotePlayHandle.h"
+#include "PresetPreviewPlayHandle.h"
 #include "ConfigManager.h"
 
 // platform-specific audio-interface-classes
@@ -81,7 +82,7 @@ AudioEngine::AudioEngine(bool renderOnly)
 	, m_outputBufferWrite(nullptr)
 	, m_outputBufferReadIndex(0)
 	, m_workers()
-	, m_numWorkers(QThread::idealThreadCount() - 1)
+	, m_numWorkers(std::max(0, QThread::idealThreadCount() - 1))
 	, m_newPlayHandles(PlayHandle::MaxNumber)
 	, m_masterGain(1.0f)
 	, m_audioDev(nullptr)
@@ -106,8 +107,9 @@ AudioEngine::AudioEngine(bool renderOnly)
 
 	for( int i = 0; i < m_numWorkers+1; ++i )
 	{
-		auto wt = new AudioEngineWorkerThread(this);
-		if( i < m_numWorkers )
+		const bool startedWorker = i < m_numWorkers;
+		auto wt = new AudioEngineWorkerThread(this, startedWorker);
+		if(startedWorker)
 		{
 			wt->start( QThread::TimeCriticalPriority );
 		}
@@ -125,11 +127,25 @@ AudioEngine::~AudioEngine()
 		m_workers[w]->quit();
 	}
 
-	AudioEngineWorkerThread::startAndWaitForJobs();
-
 	for( int w = 0; w < m_numWorkers; ++w )
 	{
-		m_workers[w]->wait( 500 );
+		// stopProcessing() has already stopped new audio work, so a cooperative
+		// worker leaves promptly. A worker wedged inside a faulty plug-in never
+		// will, though, and an unbounded wait would hang shutdown forever —
+		// escalate instead, and as a last resort detach the thread from QObject
+		// ownership so destroying it can't take down a running thread.
+		if (!m_workers[w]->wait(5000))
+		{
+			qWarning("AudioEngine: worker %d did not exit, terminating", w);
+			m_workers[w]->terminate();
+			if (!m_workers[w]->wait(1000))
+			{
+				// Deliberately leak the wedged thread object: destroying a
+				// running QThread aborts the process.
+				m_workers[w]->setParent(nullptr);
+				m_workers[w] = nullptr;
+			}
+		}
 	}
 
 	delete m_midiClient;
@@ -357,12 +373,64 @@ void AudioEngine::clear()
 void AudioEngine::clearNewPlayHandles()
 {
 	requestChangeInModel();
-	for( LocklessListElement * e = m_newPlayHandles.popList(); e; )
+	std::vector<PlayHandle*> handles;
 	{
-		LocklessListElement * next = e->next;
-		m_newPlayHandles.free( e );
-		e = next;
+		// Scope the publication lock to the queue manipulation only: play-handle
+		// destructors can re-enter AudioEngine, and running them while holding
+		// this non-recursive mutex would self-deadlock (see addPlayHandle).
+		const auto publicationLock = std::lock_guard{m_playHandlePublicationMutex};
+		for( LocklessListElement * e = m_newPlayHandles.popList(); e; )
+		{
+			LocklessListElement * next = e->next;
+			handles.push_back(e->value);
+			m_newPlayHandles.free( e );
+			e = next;
+		}
 	}
+
+	for (PlayHandle* handle : handles)
+	{
+		handle->audioBusHandle()->removePlayHandle(handle);
+	}
+
+	// Child notes refer to their parent and shared detuning data.  Release the
+	// deepest notes first before returning their storage to the cache.
+	std::vector<PresetPreviewPlayHandle*> previews;
+	std::vector<NotePlayHandle*> notes;
+	std::vector<PlayHandle*> otherHandles;
+	for (PlayHandle* handle : handles)
+	{
+		if (handle->type() == PlayHandle::Type::PresetPreviewHandle)
+		{
+			previews.push_back(static_cast<PresetPreviewPlayHandle*>(handle));
+		}
+		else if (handle->type() == PlayHandle::Type::NotePlayHandle)
+		{
+			notes.push_back(static_cast<NotePlayHandle*>(handle));
+		}
+		else
+		{
+			otherHandles.push_back(handle);
+		}
+	}
+	auto depth = [](const NotePlayHandle* note) {
+		std::size_t result = 0;
+		for (const NotePlayHandle* parent = note->parentNote();
+			parent != nullptr && result < PlayHandle::MaxNumber;
+			parent = parent->parentNote())
+		{
+			++result;
+		}
+		return result;
+	};
+	std::stable_sort(notes.begin(), notes.end(), [&depth](const auto* left, const auto* right) {
+		return depth(left) > depth(right);
+	});
+	// A preview destructor sends noteOff() to its preview note. It must run
+	// before that note is returned to the NotePlayHandle cache.
+	for (PresetPreviewPlayHandle* preview : previews) { delete preview; }
+	for (NotePlayHandle* note : notes) { NotePlayHandleManager::release(note); }
+	for (PlayHandle* handle : otherHandles) { delete handle; }
 	doneChangeInModel();
 }
 
@@ -461,16 +529,27 @@ void AudioEngine::removeAudioBusHandle(AudioBusHandle* busHandle)
 
 bool AudioEngine::addPlayHandle( PlayHandle* handle )
 {
+	bool published = false;
 	// Only add play handles if we have the CPU capacity to process them.
 	// Instrument play handles are not added during playback, but when the
 	// associated instrument is created, so add those unconditionally.
 	if (handle->type() == PlayHandle::Type::InstrumentPlayHandle || !criticalXRuns())
 	{
-		m_newPlayHandles.push( handle );
+		const auto publicationLock = std::lock_guard{m_playHandlePublicationMutex};
+		// Register with the bus before publishing to the pending queue. Once a
+		// consumer can see the handle it must be able to detach it safely.
 		handle->audioBusHandle()->addPlayHandle(handle);
-		return true;
+		published = m_newPlayHandles.push(handle);
+		if (!published)
+		{
+			handle->audioBusHandle()->removePlayHandle(handle);
+		}
 	}
+	if (published) { return true; }
 
+	// Destructors may re-enter AudioEngine (e.g. an owned sample bus). Never
+	// invoke them while the publication mutex is held, or change->publication
+	// removal paths can deadlock with publication->change failure cleanup.
 	if( handle->type() == PlayHandle::Type::NotePlayHandle )
 	{
 		NotePlayHandleManager::release( (NotePlayHandle*)handle );
@@ -490,25 +569,33 @@ void AudioEngine::removePlayHandle(PlayHandle * ph)
 	{
 		ph->audioBusHandle()->removePlayHandle(ph);
 		bool removedFromList = false;
-		// Check m_newPlayHandles first because doing it the other way around
-		// creates a race condition
-		for( LocklessListElement * e = m_newPlayHandles.first(),
-				* ePrev = nullptr; e; ePrev = e, e = e->next )
 		{
-			if (e->value == ph)
+			// Hold the publication lock only for the queue manipulation:
+			// play-handle destructors can re-enter AudioEngine and must never
+			// run under this non-recursive mutex (see addPlayHandle).
+			const auto publicationLock = std::lock_guard{m_playHandlePublicationMutex};
+			// Detach the current pending list atomically, filter it without freeing
+			// retained nodes, then splice it back in front of concurrent producers.
+			LocklessListElement* keepFirst = nullptr;
+			LocklessListElement* keepLast = nullptr;
+			for (LocklessListElement* e = m_newPlayHandles.popList(); e; )
 			{
-				if( ePrev )
+				LocklessListElement* next = e->next;
+				if (!removedFromList && e->value == ph)
 				{
-					ePrev->next = e->next;
+					m_newPlayHandles.free(e);
+					removedFromList = true;
 				}
 				else
 				{
-					m_newPlayHandles.setFirst( e->next );
+					e->next = nullptr;
+					if (keepLast) { keepLast->next = e; }
+					else { keepFirst = e; }
+					keepLast = e;
 				}
-				m_newPlayHandles.free( e );
-				removedFromList = true;
-				break;
+				e = next;
 			}
+			m_newPlayHandles.pushList(keepFirst, keepLast);
 		}
 		// Now check m_playHandles
 		PlayHandleList::Iterator it = std::find(m_playHandles.begin(), m_playHandles.end(), ph);
@@ -542,17 +629,45 @@ void AudioEngine::removePlayHandle(PlayHandle * ph)
 void AudioEngine::removePlayHandlesOfTypes(Track * track, PlayHandle::Types types)
 {
 	requestChangeInModel();
+	std::vector<PlayHandle*> removed;
+
+	// Detach matching handles that have been queued but have not reached the
+	// active list yet.  Leaving them behind lets the next audio block execute a
+	// note whose track was just deleted.
+	{
+		// Hold the publication lock only for the queue manipulation:
+		// play-handle destructors can re-enter AudioEngine and must never run
+		// under this non-recursive mutex (see addPlayHandle).
+		const auto publicationLock = std::lock_guard{m_playHandlePublicationMutex};
+		LocklessListElement* keepFirst = nullptr;
+		LocklessListElement* keepLast = nullptr;
+		for (LocklessListElement* element = m_newPlayHandles.popList(); element; )
+		{
+			LocklessListElement* next = element->next;
+			PlayHandle* handle = element->value;
+			if (handle->isFromTrack(track) && (handle->type() & types))
+			{
+				removed.push_back(handle);
+				m_newPlayHandles.free(element);
+			}
+			else
+			{
+				element->next = nullptr;
+				if (keepLast) { keepLast->next = element; }
+				else { keepFirst = element; }
+				keepLast = element;
+			}
+			element = next;
+		}
+		m_newPlayHandles.pushList(keepFirst, keepLast);
+	}
+
 	PlayHandleList::Iterator it = m_playHandles.begin();
 	while( it != m_playHandles.end() )
 	{
 		if ((*it)->isFromTrack(track) && ((*it)->type() & types))
 		{
-			(*it)->audioBusHandle()->removePlayHandle(*it);
-			if((*it)->type() == PlayHandle::Type::NotePlayHandle)
-			{
-				NotePlayHandleManager::release((NotePlayHandle*)*it);
-			}
-			else delete *it;
+			removed.push_back(*it);
 			it = m_playHandles.erase(it);
 		}
 		else
@@ -560,6 +675,50 @@ void AudioEngine::removePlayHandlesOfTypes(Track * track, PlayHandle::Types type
 			++it;
 		}
 	}
+
+	for (PlayHandle* handle : removed)
+	{
+		handle->audioBusHandle()->removePlayHandle(handle);
+		m_playHandlesToRemove.removeAll(handle);
+	}
+
+	// Child notes keep pointers to their parent and shared detuning state.
+	// Release deepest children first so no child destructor can touch a parent
+	// that was already returned to the NotePlayHandle cache.
+	std::vector<PresetPreviewPlayHandle*> previews;
+	std::vector<NotePlayHandle*> notes;
+	std::vector<PlayHandle*> otherHandles;
+	for (PlayHandle* handle : removed)
+	{
+		if (handle->type() == PlayHandle::Type::PresetPreviewHandle)
+		{
+			previews.push_back(static_cast<PresetPreviewPlayHandle*>(handle));
+		}
+		else if (handle->type() == PlayHandle::Type::NotePlayHandle)
+		{
+			notes.push_back(static_cast<NotePlayHandle*>(handle));
+		}
+		else
+		{
+			otherHandles.push_back(handle);
+		}
+	}
+	auto depth = [](const NotePlayHandle* note) {
+		std::size_t result = 0;
+		for (const NotePlayHandle* parent = note->parentNote();
+				parent != nullptr && result < PlayHandle::MaxNumber;
+				parent = parent->parentNote())
+		{
+			++result;
+		}
+		return result;
+	};
+	std::stable_sort(notes.begin(), notes.end(), [&depth](const auto* left, const auto* right) {
+		return depth(left) > depth(right);
+	});
+	for (PresetPreviewPlayHandle* preview : previews) { delete preview; }
+	for (NotePlayHandle* note : notes) { NotePlayHandleManager::release(note); }
+	for (PlayHandle* handle : otherHandles) { delete handle; }
 	doneChangeInModel();
 }
 

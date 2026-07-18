@@ -28,6 +28,7 @@
 #include <QDir>
 #include <QDomElement>
 #include <QMessageBox>
+#include <QSaveFile>
 #include <QStandardPaths>
 #include <QTextStream>
 
@@ -98,6 +99,17 @@ ConfigManager::ConfigManager() :
 ConfigManager::~ConfigManager()
 {
 	saveConfigFile();
+}
+
+
+void ConfigManager::destroy()
+{
+	ConfigManager* instance = s_instanceOfMe;
+	delete instance;
+	// saveConfigFile() uses PathUtil, which consults ConfigManager::inst().
+	// Keep the current singleton visible throughout its destructor so saving
+	// recent and favourite paths cannot accidentally construct a second one.
+	s_instanceOfMe = nullptr;
 }
 
 
@@ -672,8 +684,8 @@ void ConfigManager::saveConfigFile()
 	// Also cover custom --config paths here so every save has a valid parent.
 	QDir().mkpath(QFileInfo(m_lmmsRcFile).absolutePath());
 
-	QFile outfile(m_lmmsRcFile);
-	if(!outfile.open(QIODevice::WriteOnly | QIODevice::Truncate))
+	QSaveFile outfile(m_lmmsRcFile);
+	if(!outfile.open(QIODevice::WriteOnly))
 	{
 		using gui::MainWindow;
 
@@ -695,8 +707,11 @@ void ConfigManager::saveConfigFile()
 		return;
 	}
 
-	outfile.write(xml.toUtf8());
-	outfile.close();
+	const QByteArray bytes = xml.toUtf8();
+	if (outfile.write(bytes) != bytes.size() || !outfile.commit())
+	{
+		qWarning("ConfigManager: could not atomically save configuration file");
+	}
 }
 
 void ConfigManager::initPortableWorkingDir()

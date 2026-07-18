@@ -340,6 +340,9 @@ private:
 	AudioBusHandle m_audioBusHandle;
 
 	FloatModel m_pitchModel;
+	MidiEvent::Source m_pitchEventSource = MidiEvent::Source::External;
+	uint8_t m_pitchEventInternalBusHops = 0;
+	bool m_forwardingPitchEvent = false;
 	IntModel m_pitchRangeModel;
 	IntModel m_mixerChannelModel;
 	BoolModel m_useMasterPitchModel;

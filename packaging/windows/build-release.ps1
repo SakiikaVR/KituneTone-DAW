@@ -2,7 +2,7 @@
 param(
     [string]$BuildDir,
     [string]$OutputDir,
-    [string]$Version = "2.2.1",
+    [string]$Version = "2.2.2",
     [string]$MakeNsis
 )
 
@@ -16,7 +16,9 @@ if (-not $OutputDir) {
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot "..\..")).Path
 $build = (Resolve-Path -LiteralPath $BuildDir).Path
 $output = [System.IO.Path]::GetFullPath($OutputDir)
-if (-not $output.StartsWith($repoRoot, [System.StringComparison]::OrdinalIgnoreCase)) {
+$repoPrefix = $repoRoot.TrimEnd([System.IO.Path]::DirectorySeparatorChar, [System.IO.Path]::AltDirectorySeparatorChar) + [System.IO.Path]::DirectorySeparatorChar
+if ($output.Equals($repoRoot, [System.StringComparison]::OrdinalIgnoreCase) -or
+    -not $output.StartsWith($repoPrefix, [System.StringComparison]::OrdinalIgnoreCase)) {
     throw "OutputDir must stay inside the repository: $output"
 }
 
@@ -110,13 +112,22 @@ Get-ChildItem -LiteralPath (Join-Path $repoRoot "data\projects\templates") -Filt
 
 Copy-Item -LiteralPath (Join-Path $repoRoot "cmake\nsis\lmms.exe.manifest") `
     -Destination (Join-Path $appDir "KitsuneTone.exe.manifest")
-foreach ($file in @(
-    "README.md", "README.upstream.md", "LICENSE.txt", "AUTHORS", "CONTRIBUTORS"
-)) {
-    if (Test-Path -LiteralPath (Join-Path $repoRoot $file)) {
-        Copy-Item -LiteralPath (Join-Path $repoRoot $file) -Destination $appDir
-    }
+$documentationFiles = @{
+    "README.md" = "README.md"
+    "README.upstream.md" = "README.upstream.md"
+    "LICENSE.txt" = "LICENSE.txt"
+    "AUTHORS" = "doc\AUTHORS"
+    "CONTRIBUTORS" = "doc\CONTRIBUTORS"
 }
+foreach ($entry in $documentationFiles.GetEnumerator()) {
+    Copy-Item -LiteralPath (Join-Path $repoRoot $entry.Value) `
+        -Destination (Join-Path $appDir $entry.Key)
+}
+
+$readmeAssetsDir = Join-Path $appDir ".github\assets"
+New-Item -ItemType Directory -Path $readmeAssetsDir -Force | Out-Null
+Copy-Item -LiteralPath (Join-Path $repoRoot ".github\assets\kitsunetone-logo.png") `
+    -Destination $readmeAssetsDir
 
 $manualDir = Join-Path $appDir "docs"
 New-Item -ItemType Directory -Path $manualDir | Out-Null

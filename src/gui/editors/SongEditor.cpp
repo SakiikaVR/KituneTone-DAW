@@ -25,6 +25,7 @@
 #include "SongEditor.h"
 
 #include <cmath>
+#include <limits>
 
 #include <QAction>
 #include <QKeyEvent>
@@ -373,7 +374,10 @@ void SongEditor::selectRegionFromPixels(int xStart, int xEnd)
 											+ m_currentPosition;
 		m_rubberBandStartTrackview = 0;
 	}
-	//the current mouse position within the borders of song editor
+	//the current mouse position within the borders of song editor;
+	//y must stay past the last track so timeline region selection spans
+	//every track, including ones scrolled out of the viewport
+	//(trackViewAt() guards against overflow with a qint64 cast)
 	m_mousePos = QPoint(qMax(m_trackHeadWidth, qMin(xEnd, width()))
 						, std::numeric_limits<int>::max());
 	updateRubberband();
@@ -426,7 +430,7 @@ void SongEditor::updateRubberband()
 		for (auto &it : findChildren<selectableObject *>())
 		{
 			auto clip = dynamic_cast<ClipView*>(it);
-			if (clip)
+			if (clip && clip->getClip() != nullptr)
 			{
 				auto indexOfTrackView = trackViews().indexOf(clip->getTrackView());
 				bool isBeetweenRubberbandViews = indexOfTrackView >= qMin(m_rubberBandStartTrackview, rubberBandTrackview)

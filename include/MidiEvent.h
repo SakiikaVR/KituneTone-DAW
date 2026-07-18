@@ -33,6 +33,12 @@
 namespace lmms
 {
 
+//! Maximum number of track-to-track internal-bus hops an event lineage may
+//! take. A hop *count* (instead of a delivered flag) lets multi-track chains
+//! (e.g. clip -> arpeggiator track -> sound track) keep working while feedback
+//! loops still decay after a few round trips.
+inline constexpr uint8_t MaxInternalBusHops = 4;
+
 class MidiEvent
 {
 public:
@@ -49,7 +55,8 @@ public:
 		m_channel( channel ),
 		m_sysExData( nullptr ),
 		m_sourcePort(sourcePort),
-		m_source(source)
+		m_source(source),
+		m_internalBusHops(0)
 	{
 		m_data.m_param[0] = param1;
 		m_data.m_param[1] = param2;
@@ -61,7 +68,8 @@ public:
 		m_channel( 0 ),
 		m_sysExData( sysExData ),
 		m_sourcePort(nullptr),
-		m_source(source)
+		m_source(source),
+		m_internalBusHops(0)
 	{
 		m_data.m_sysExDataLen = dataLen;
 	}
@@ -150,6 +158,11 @@ public:
 		return m_sourcePort;
 	}
 
+	void setSourcePort(const void* sourcePort)
+	{
+		m_sourcePort = sourcePort;
+	}
+
 	uint8_t controllerNumber() const
 	{
 		return param( 0 ) & 0x7F;
@@ -202,6 +215,16 @@ public:
 		m_source = value;
 	}
 
+	uint8_t internalBusHops() const
+	{
+		return m_internalBusHops;
+	}
+
+	void setInternalBusHops(uint8_t hops)
+	{
+		m_internalBusHops = hops;
+	}
+
 
 private:
 	MidiEventTypes m_type;		// MIDI event type
@@ -219,6 +242,12 @@ private:
 
 	// Stores the source of the MidiEvent: Internal or External (hardware controllers).
 	Source m_source;
+	// Number of track-to-track internal-bus hops this event's lineage has
+	// taken (0 = never bus-delivered). The provenance survives delayed
+	// NotePlayHandle/VST3 processing; MidiPort stops re-broadcasting once
+	// MaxInternalBusHops is reached, so duplex tracks cannot feed the same
+	// event around indefinitely while multi-hop chains keep working.
+	uint8_t m_internalBusHops;
 } ;
 
 } // namespace lmms

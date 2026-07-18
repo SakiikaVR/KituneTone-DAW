@@ -146,6 +146,7 @@ protected slots:
 
 
 private:
+	static constexpr int MaxSafeSteps = DefaultStepsPerBar * 1024;
 	TimePos beatClipLength() const;
 
 	void setType( Type _new_clip_type );

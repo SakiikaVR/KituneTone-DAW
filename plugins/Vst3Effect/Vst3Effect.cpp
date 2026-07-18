@@ -106,11 +106,25 @@ Vst3Effect::Vst3Effect(Model* parent, const Descriptor::SubPluginFeatures::Key* 
 }
 
 
+Vst3Effect::~Vst3Effect()
+{
+	// Stop new routing first, then wait for any in-flight process/MIDI call
+	// before unloading the third-party object.
+	m_midiPort.setReadable(false);
+	m_midiPort.setWritable(false);
+	QMutexLocker lock(&m_pluginMutex);
+	QMutexLocker midiLock(&m_midiMutex);
+	if (m_plugin) { m_plugin->setMidiOutputHandler({}); }
+	m_plugin.reset();
+}
+
+
 
 
 bool Vst3Effect::openPlugin(const QString& file, const QString& uid)
 {
 	QMutexLocker lock(&m_pluginMutex);
+	QMutexLocker midiLock(&m_midiMutex);
 
 	auto plugin = std::make_unique<Vst3Plugin>(file, Vst3Plugin::Kind::Effect, uid);
 	if (plugin->failed())
@@ -262,9 +276,18 @@ int Vst3Effect::syncAraFromTrack()
 	}
 	if (sources.empty()) { return 0; }
 
-	Engine::audioEngine()->requestChangeInModel();
-	const bool ok = m_plugin->enableAra(sources);
-	Engine::audioEngine()->doneChangeInModel();
+	auto changeGuard = Engine::audioEngine()->requestChangesGuard();
+	QMutexLocker pluginLock(&m_pluginMutex);
+	if (m_plugin == nullptr || !m_plugin->hasAra()) { return 0; }
+	bool ok = false;
+	try
+	{
+		ok = m_plugin->enableAra(sources);
+	}
+	catch (...)
+	{
+		qWarning("Vst3Effect: ARA synchronization failed with an exception");
+	}
 	return ok ? static_cast<int>(sources.size()) : 0;
 }
 
@@ -276,9 +299,15 @@ Effect::ProcessStatus Vst3Effect::processImpl(SampleFrame* buf, const f_cnt_t fr
 	static thread_local auto tempBuf = std::array<SampleFrame, MAXIMUM_BUFFER_SIZE>();
 
 	std::memcpy(tempBuf.data(), buf, sizeof(SampleFrame) * frames);
-	if (m_pluginMutex.tryLock(Engine::getSong()->isExporting() ? -1 : 0))
+	bool araActive = false;
+	const auto* song = Engine::getSong();
+	if (m_pluginMutex.tryLock(song != nullptr && song->isExporting() ? -1 : 0))
 	{
-		if (m_plugin != nullptr) { m_plugin->process(tempBuf.data(), tempBuf.data(), frames); }
+		if (m_plugin != nullptr)
+		{
+			m_plugin->process(tempBuf.data(), tempBuf.data(), frames);
+			araActive = m_plugin->araActive();
+		}
 		m_pluginMutex.unlock();
 	}
 
@@ -293,7 +322,7 @@ Effect::ProcessStatus Vst3Effect::processImpl(SampleFrame* buf, const f_cnt_t fr
 	// While ARA is active, keep processing every period (even during silence /
 	// when the transport is stopped) so the plug-in keeps receiving the current
 	// transport state and its playhead follows the DAW's stop as well as play.
-	if (m_plugin != nullptr && m_plugin->araActive())
+	if (araActive)
 	{
 		return ProcessStatus::Continue;
 	}
@@ -306,8 +335,12 @@ Effect::ProcessStatus Vst3Effect::processImpl(SampleFrame* buf, const f_cnt_t fr
 
 void Vst3Effect::processInEvent(const MidiEvent& event, const TimePos&, f_cnt_t offset)
 {
-	// queueMidiEvent is internally thread-safe; the plug-in pointer is stable
-	// after loading, so no extra locking is needed here (mirrors the instrument)
+	// Use a dedicated mutex here instead of m_pluginMutex: queueMidiEvent is
+	// internally synchronized against process(), and taking m_pluginMutex from
+	// the MIDI/GUI thread would make processImpl()'s tryLock(0) fail and
+	// silently bypass the effect for a whole period. This lock only pins
+	// m_plugin against destruction/reload (both take m_midiMutex too).
+	QMutexLocker lock(&m_midiMutex);
 	if (m_plugin != nullptr) { m_plugin->queueMidiEvent(event, offset); }
 }
 

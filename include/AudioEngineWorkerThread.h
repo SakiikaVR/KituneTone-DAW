@@ -30,6 +30,7 @@
 #include <atomic>
 
 class QWaitCondition;
+class QMutex;
 
 namespace lmms
 {
@@ -73,20 +74,16 @@ public:
 		std::atomic<ThreadableJob*> m_items[JOB_QUEUE_SIZE];
 		std::atomic_size_t m_writeIndex;
 		std::atomic_size_t m_itemsDone;
-		OperationMode m_opMode;
+		std::atomic<OperationMode> m_opMode;
 	} ;
 
 
-	AudioEngineWorkerThread( AudioEngine* audioEngine );
+	AudioEngineWorkerThread(AudioEngine* audioEngine, bool startedWorker);
 	~AudioEngineWorkerThread() override;
 
 	virtual void quit();
 
-	static void resetJobQueue( JobQueue::OperationMode _opMode =
-													JobQueue::OperationMode::Static )
-	{
-		globalJobQueue.reset( _opMode );
-	}
+	static void resetJobQueue(JobQueue::OperationMode opMode = JobQueue::OperationMode::Static);
 
 	static void addJob( ThreadableJob * _job )
 	{
@@ -114,9 +111,16 @@ private:
 
 	static JobQueue globalJobQueue;
 	static QWaitCondition * queueReadyWaitCond;
+	static QMutex queueReadyMutex;
 	static QList<AudioEngineWorkerThread *> workerThreads;
+	static std::atomic_size_t queueGeneration;
+	static std::atomic_size_t cycleAcknowledgements;
 
-	volatile bool m_quit;
+	std::atomic_bool m_quit;
+	std::atomic_bool m_cycleActive;
+	std::atomic_bool m_threadReady;
+	std::size_t m_seenGeneration;
+	bool m_startedWorker;
 } ;
 
 } // namespace lmms

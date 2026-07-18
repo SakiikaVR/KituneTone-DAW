@@ -235,9 +235,12 @@ void Oscillator::createFFTPlans()
 
 void Oscillator::destroyFFTPlans()
 {
-	fftwf_destroy_plan(s_fftPlan);
-	fftwf_destroy_plan(s_ifftPlan);
-	fftwf_free(s_specBuf);
+	if (s_fftPlan) { fftwf_destroy_plan(s_fftPlan); }
+	if (s_ifftPlan) { fftwf_destroy_plan(s_ifftPlan); }
+	if (s_specBuf) { fftwf_free(s_specBuf); }
+	s_fftPlan = nullptr;
+	s_ifftPlan = nullptr;
+	s_specBuf = nullptr;
 }
 
 void Oscillator::generateWaveTables()

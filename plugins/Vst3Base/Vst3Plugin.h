@@ -28,6 +28,7 @@
 #include <QMutex>
 
 #include <atomic>
+#include <array>
 #include <functional>
 #include <map>
 #include <memory>
@@ -132,6 +133,7 @@ public:
 	void hideEditor();
 	void toggleEditor();
 	bool editorVisible() const;
+	void editorWidgetAboutToBeDestroyed(QWidget* widget) noexcept;
 
 	//! Create the plug-in's native editor embedded inside \a parent (instead of
 	//! a separate workspace window), e.g. to place it in a tab. Returns the
@@ -183,14 +185,22 @@ signals:
 
 private:
 	bool load(const QString& path, const QString& uid);
-	void unload();
+	void unload() noexcept;
 	bool setupProcessing(double sampleRate, Steinberg::int32 maxBlockSize);
+	void enqueueEvent(const Steinberg::Vst::Event& event, bool priority,
+			const MidiEvent& sourceEvent);
+	void updateMidiProvenanceLocked(const MidiEvent& event);
+	//! set one slot of m_internalActiveNotes, keeping the nonzero-slot count
+	//! in sync; must be called with m_queueMutex held
+	void setInternalActiveNoteLocked(int channel, int key, uint8_t hops);
 	void applyPendingParameters();
 	void syncOutputParameters();
+	void detachEditorView() noexcept;
 	void destroyEditor();
 
 	Kind m_kind;
 	bool m_failed = true;
+	bool m_componentActive = false;
 	QString m_error;
 	QString m_path;
 	QString m_name;
@@ -232,9 +242,17 @@ private:
 	Steinberg::Vst::ParameterChanges m_inputParamChanges;
 	Steinberg::Vst::ParameterChanges m_outputParamChanges;
 	std::function<void(const MidiEvent&)> m_midiOutputHandler;
+	//! max internal-bus hop count contributing to the current process() block
+	//! (0 = everything this block came from external/user input)
+	uint8_t m_currentBlockInternalBusHops = 0;
 	bool m_lastAraPlaying = false;
 
 	bool m_processingActive = false;
+	std::atomic_bool m_processingFaulted{false};
+	//! consecutive process() failures before the fault latch trips; audio
+	//! thread only
+	static constexpr int FaultStreakLimit = 3;
+	int m_processFailStreak = 0;
 	double m_sampleRate = 0.;
 	Steinberg::int32 m_maxBlockSize = 0;
 	Steinberg::int64 m_projectTimeSamples = 0;
@@ -243,10 +261,22 @@ private:
 	bool m_hasEventOutputBus = false;
 
 	// events/parameters queued from other threads, consumed by process()
-	struct QueuedEvent { Steinberg::Vst::Event event; };
+	struct QueuedEvent
+	{
+		Steinberg::Vst::Event event;
+		uint8_t internalBusHops = 0;
+	};
 	QMutex m_queueMutex;
-	std::vector<Steinberg::Vst::Event> m_pendingEvents;
+	std::vector<QueuedEvent> m_pendingEvents;
+	static constexpr std::size_t MaxPendingEvents = 4096;
 	std::map<Steinberg::Vst::ParamID, double> m_pendingParams;
+	//! per-note internal-bus hop count of the delivering event (0 = note not
+	//! internally delivered / not held); guarded by m_queueMutex
+	std::array<std::array<uint8_t, 128>, 16> m_internalActiveNotes{};
+	//! number of nonzero slots in m_internalActiveNotes, so process() can skip
+	//! the matrix scan in the common no-internal-notes case
+	int m_internalActiveNoteCount = 0;
+	uint8_t m_pendingInternalBusHops = 0;
 
 	// parameter updates produced by process(), forwarded to the controller
 	QMutex m_outputParamMutex;
@@ -258,6 +288,7 @@ private:
 	QWidget* m_editorWidget = nullptr;
 	bool m_editorCreationTried = false;
 	bool m_editorEmbedded = false;   //!< editor lives in a caller's container
+	bool m_editorAttached = false;   //!< IPlugView::attached completed or may have thrown mid-attach
 };
 
 

@@ -26,9 +26,9 @@
 #define LMMS_GUI_TRACK_CONTAINER_VIEW_H
 
 #include <QVector>
+#include <QPointer>
 #include <QScrollArea>
 #include <QWidget>
-#include <QThread>
 
 #include "JournallingObject.h"
 #include "ModelView.h"
@@ -45,19 +45,20 @@ class InstrumentTrack;
 class Track;
 class TrackContainer;
 
-class InstrumentLoaderThread : public QThread
+// Kept under its historical name to avoid churn at call sites.  Loading now
+// runs as a deferred GUI-thread job: InstrumentTrack and plug-in QObjects must
+// not be created or mutated from an unowned worker thread.
+class InstrumentLoaderThread : public QObject
 {
-Q_OBJECT
 public:
 	InstrumentLoaderThread( QObject *parent = 0, InstrumentTrack *it = 0,
 		QString name = "" );
 
-	void run() override;
+	void start();
 
 private:
-	InstrumentTrack *m_it;
+	QPointer<InstrumentTrack> m_it;
 	QString m_name;
-	QThread *m_containerThread;
 };
 
 namespace gui

@@ -620,12 +620,13 @@ void MidiClipView::paintEvent( QPaintEvent * )
 	// Compute pixels per bar
 	const int baseWidth = fixedClips() ? parentWidget()->width() - 2 * BORDER_WIDTH
 						: width() - BORDER_WIDTH;
-	const float pixelsPerBar = 1.0f * baseWidth / m_clip->length() * TimePos::ticksPerBar();
+	const int clipLength = std::max<int>(1, m_clip->length());
+	const float pixelsPerBar = 1.0f * baseWidth / clipLength * TimePos::ticksPerBar();
 
 	const int offset = m_clip->startTimeOffset();
 
 	// Length of one bar/beat in the [0,1] x [0,1] coordinate system
-	const float tickLength = 1.0f / m_clip->length();
+	const float tickLength = 1.0f / clipLength;
 
 	const int x_base = BORDER_WIDTH;
 

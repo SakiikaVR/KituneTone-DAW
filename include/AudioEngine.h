@@ -350,8 +350,8 @@ private:
 	AudioEngine( bool renderOnly );
 	~AudioEngine() override;
 
-	void startProcessing() { m_audioDev->startProcessing(); }
-	void stopProcessing() { m_audioDev->stopProcessing(); }
+	void startProcessing() { if (m_audioDev) { m_audioDev->startProcessing(); } }
+	void stopProcessing() { if (m_audioDev) { m_audioDev->stopProcessing(); } }
 
 
 	AudioDevice * tryAudioDevices();
@@ -393,6 +393,10 @@ private:
 	PlayHandleList m_playHandles;
 	// place where new playhandles are added temporarily
 	LocklessList<PlayHandle *> m_newPlayHandles;
+	// Serializes full publication (bus registration + pending queue) with
+	// control-thread removal. The queue itself remains lock-free for the audio
+	// thread's normal producer/consumer path.
+	std::mutex m_playHandlePublicationMutex;
 	ConstPlayHandleList m_playHandlesToRemove;
 
 	float m_masterGain;

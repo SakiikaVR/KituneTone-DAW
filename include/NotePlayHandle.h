@@ -29,6 +29,7 @@
 #include <memory>
 
 #include "BasicFilters.h"
+#include "MidiEvent.h"
 #include "Note.h"
 #include "PlayHandle.h"
 #include "Track.h"
@@ -68,7 +69,9 @@ public:
 					const Note& noteToPlay,
 					NotePlayHandle* parent = nullptr,
 					int midiEventChannel = -1,
-					Origin origin = Origin::MidiClip );
+					Origin origin = Origin::MidiClip,
+					MidiEvent::Source midiSource = MidiEvent::Source::External,
+					uint8_t internalBusHops = 0 );
 	~NotePlayHandle() override;
 
 	void * operator new ( size_t size, void * p )
@@ -192,6 +195,8 @@ public:
 	{
 		return m_hasParent;
 	}
+
+	const NotePlayHandle* parentNote() const { return m_parent; }
 
 	/*! Returns origin of note */
 	Origin origin() const
@@ -329,6 +334,8 @@ private:
 
 	int m_midiChannel;
 	Origin m_origin;
+	MidiEvent::Source m_midiSource;
+	uint8_t m_internalBusHops;
 
 	bool m_frequencyNeedsUpdate;				// used to update pitch
 } ;
@@ -347,7 +354,9 @@ public:
 					const Note& noteToPlay,
 					NotePlayHandle* parent = nullptr,
 					int midiEventChannel = -1,
-					NotePlayHandle::Origin origin = NotePlayHandle::Origin::MidiClip );
+					NotePlayHandle::Origin origin = NotePlayHandle::Origin::MidiClip,
+					MidiEvent::Source midiSource = MidiEvent::Source::External,
+					uint8_t internalBusHops = 0 );
 	static void release( NotePlayHandle * nph );
 	static void extend( int i );
 	static void free();

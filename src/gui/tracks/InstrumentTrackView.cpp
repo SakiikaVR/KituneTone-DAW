@@ -172,7 +172,7 @@ InstrumentTrackView::InstrumentTrackView( InstrumentTrack * _it, TrackContainerV
 
 InstrumentTrackView::~InstrumentTrackView()
 {
-	delete m_window;
+	delete m_window.data();
 	m_window = nullptr;
 
 	delete model()->m_midiPort.m_readablePortsMenu;

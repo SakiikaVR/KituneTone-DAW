@@ -173,7 +173,8 @@ void Vst3Instrument::play(SampleFrame* workingBuffer)
 {
 	const f_cnt_t frames = Engine::audioEngine()->framesPerPeriod();
 
-	if (m_pluginMutex.tryLock(Engine::getSong()->isExporting() ? -1 : 0))
+	const auto* song = Engine::getSong();
+	if (m_pluginMutex.tryLock(song != nullptr && song->isExporting() ? -1 : 0))
 	{
 		if (m_plugin != nullptr)
 		{

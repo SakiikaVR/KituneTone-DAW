@@ -85,17 +85,17 @@ private slots:
 private:
 	static GuiApplication* s_instance;
 
-	MainWindow* m_mainWindow;
-	MixerView* m_mixerView;
-	SongEditorWindow* m_songEditor;
-	AutomationEditorWindow* m_automationEditor;
-	PatternEditorWindow* m_patternEditor;
-	PianoRollWindow* m_pianoRoll;
-	ProjectNotes* m_projectNotes;
-	MicrotunerConfig* m_microtunerConfig;
-	ControllerRackView* m_controllerRackView;
-	QLabel* m_loadingProgressLabel;
-	QSocketNotifier* m_sigintNotifier;
+	MainWindow* m_mainWindow = nullptr;
+	MixerView* m_mixerView = nullptr;
+	SongEditorWindow* m_songEditor = nullptr;
+	AutomationEditorWindow* m_automationEditor = nullptr;
+	PatternEditorWindow* m_patternEditor = nullptr;
+	PianoRollWindow* m_pianoRoll = nullptr;
+	ProjectNotes* m_projectNotes = nullptr;
+	MicrotunerConfig* m_microtunerConfig = nullptr;
+	ControllerRackView* m_controllerRackView = nullptr;
+	QLabel* m_loadingProgressLabel = nullptr;
+	QSocketNotifier* m_sigintNotifier = nullptr;
 };
 
 // Short-hand function

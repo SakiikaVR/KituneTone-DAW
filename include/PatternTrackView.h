@@ -58,7 +58,9 @@ public slots:
 
 
 private:
+	void cleanupPatternViews();
 	PatternTrack* m_patternTrack;
+	bool m_patternViewsCleaned = false;
 	TrackLabelButton * m_trackLabel;
 } ;
 

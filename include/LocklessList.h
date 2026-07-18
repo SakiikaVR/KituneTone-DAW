@@ -53,9 +53,10 @@ public:
 		delete m_allocator;
 	}
 
-	void push( T value )
+	bool push( T value )
 	{
 		Element * e = m_allocator->alloc();
+		if (!e) { return false; }
 		e->value = value;
 		e->next = m_first.load(std::memory_order_relaxed);
 
@@ -64,6 +65,21 @@ public:
 				std::memory_order_relaxed))
 		{
 			// Empty loop (compare_exchange_weak updates e->next)
+		}
+		return true;
+	}
+
+	// Return an already-allocated chain to the front without temporarily
+	// consuming allocator capacity. Producers may keep pushing concurrently.
+	void pushList(Element* first, Element* last)
+	{
+		if (!first || !last) { return; }
+		last->next = m_first.load(std::memory_order_relaxed);
+		while (!m_first.compare_exchange_weak(last->next, first,
+				std::memory_order_release,
+				std::memory_order_relaxed))
+		{
+			// Empty loop (compare_exchange_weak updates last->next)
 		}
 	}
 

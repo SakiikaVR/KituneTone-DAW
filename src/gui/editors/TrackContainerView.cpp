@@ -65,24 +65,27 @@ using namespace std;
 
 
 InstrumentLoaderThread::InstrumentLoaderThread( QObject *parent, InstrumentTrack *it, QString name ) :
-	QThread( parent ),
+	QObject( parent ),
 	m_it( it ),
 	m_name( name )
 {
-	m_containerThread = thread();
 }
 
 
 
 
-void InstrumentLoaderThread::run()
+void InstrumentLoaderThread::start()
 {
-	Instrument *i = m_it->loadInstrument(m_name, nullptr,
-										 true /*always DnD*/);
-	QObject *parent = i->parent();
-	i->setParent( 0 );
-	i->moveToThread( m_containerThread );
-	i->setParent( parent );
+	// Defer until Qt has unwound the drag/context-menu event.  The QObject
+	// context cancels this callback if its owner closes, and QPointer cancels
+	// it if the destination track/project disappears in the meantime.
+	QTimer::singleShot(0, this, [this] {
+		if (m_it)
+		{
+			m_it->loadInstrument(m_name, nullptr, true /*always DnD*/);
+		}
+		deleteLater();
+	});
 }
 
 namespace gui
@@ -129,9 +132,14 @@ TrackContainerView::TrackContainerView( TrackContainer * _tc ) :
 
 	connect( Engine::getSong(), SIGNAL(timeSignatureChanged(int,int)),
 						this, SLOT(realignTracks()));
-	connect( m_tc, SIGNAL(trackAdded(lmms::Track*)),
-			this, SLOT(createTrackView(lmms::Track*)),
-			Qt::QueuedConnection );
+	connect(m_tc, &TrackContainer::trackAdded, this, [this](Track* track) {
+		// Preserve deferred view creation without queuing a naked model pointer
+		// that undo/import cleanup could delete first.
+		QPointer<Track> guard(track);
+		QMetaObject::invokeMethod(this, [this, guard] {
+			if (guard && guard->trackContainer() == m_tc) { createTrackView(guard.data()); }
+		}, Qt::QueuedConnection);
+	}, Qt::DirectConnection);
 }
 
 
@@ -285,6 +293,7 @@ void TrackContainerView::realignTracks()
 
 TrackView * TrackContainerView::createTrackView( Track * _t )
 {
+	if (_t == nullptr || _t->trackContainer() != m_tc) { return nullptr; }
 	//m_tc->addJournalCheckPoint();
 
 	// Avoid duplicating track views
@@ -317,15 +326,16 @@ void TrackContainerView::deleteTrackView( TrackView * _tv )
 
 const TrackView * TrackContainerView::trackViewAt( const int _y ) const
 {
-	const int abs_y = _y + m_scrollArea->verticalScrollBar()->value();
-	int y_cnt = 0;
+	const qint64 abs_y = static_cast<qint64>(_y)
+			+ m_scrollArea->verticalScrollBar()->value();
+	qint64 y_cnt = 0;
 
 //	debug code
 //	qDebug( "abs_y %d", abs_y );
 
 	for (const auto& trackView : m_trackViews)
 	{
-		const int y_cnt1 = y_cnt;
+		const qint64 y_cnt1 = y_cnt;
 		y_cnt += trackView->height();
 		if (abs_y >= y_cnt1 && abs_y < y_cnt) { return trackView; }
 	}
@@ -490,8 +500,9 @@ void TrackContainerView::dropEvent( QDropEvent * _de )
 		// defer the actual import: doing heavy model changes synchronously
 		// inside the drop event (while Qt's drag loop is still unwinding)
 		// crashes in Qt's event handling
-		QTimer::singleShot(0, this, [this, midiFiles, target, dropStart]() {
-			importMidiFiles(midiFiles, target, dropStart);
+		QPointer<InstrumentTrack> targetGuard(target);
+		QTimer::singleShot(0, this, [this, midiFiles, targetGuard, dropStart]() {
+			importMidiFiles(midiFiles, targetGuard.data(), dropStart);
 		});
 		return;
 	}
@@ -501,8 +512,11 @@ void TrackContainerView::dropEvent( QDropEvent * _de )
 	if( type == "instrument" )
 	{
 		auto it = dynamic_cast<InstrumentTrack*>(Track::create(Track::Type::Instrument, m_tc));
-		auto ilt = new InstrumentLoaderThread(this, it, value);
-		ilt->start();
+		if (it != nullptr)
+		{
+			auto ilt = new InstrumentLoaderThread(this, it, value);
+			ilt->start();
+		}
 		//it->toggledInstrumentTrackButton( true );
 		_de->accept();
 	}
@@ -538,9 +552,16 @@ void TrackContainerView::dropEvent( QDropEvent * _de )
 		|| type == "patchfile" )
 	{
 		auto it = dynamic_cast<InstrumentTrack*>(Track::create(Track::Type::Instrument, m_tc));
+		if (it == nullptr) { _de->ignore(); return; }
 		PluginFactory::PluginInfoAndKey piakn =
 			getPluginFactory()->pluginSupportingExtension(FileItem::extension(value));
 		Instrument * i = it->loadInstrument(piakn.info.name(), &piakn.key);
+		if (i == nullptr)
+		{
+			removeTrackSafely(it);
+			_de->ignore();
+			return;
+		}
 		i->loadFile( value );
 		// name the track after the plug-in file (e.g. "Vital") instead of the
 		// generic host name ("VST3" / "VeSTige")
@@ -555,6 +576,7 @@ void TrackContainerView::dropEvent( QDropEvent * _de )
 	{
 		DataFile dataFile( value );
 		auto it = dynamic_cast<InstrumentTrack*>(Track::create(Track::Type::Instrument, m_tc));
+		if (it == nullptr) { _de->ignore(); return; }
 		it->loadPreset(dataFile.content().toElement());
 
 		//it->toggledInstrumentTrackButton( true );
@@ -590,6 +612,8 @@ void TrackContainerView::importMidiFiles( const QStringList& files,
 		InstrumentTrack* target, TimePos dropStart )
 {
 	if (files.isEmpty()) { return; }
+	QPointer<TrackContainerView> self(this);
+	QPointer<InstrumentTrack> targetGuard(target);
 
 	// Serialise imports: the automation dialog below spins a nested event loop,
 	// during which another queued drop's importMidiFiles could re-enter and
@@ -597,8 +621,8 @@ void TrackContainerView::importMidiFiles( const QStringList& files,
 	static bool s_importing = false;
 	if (s_importing)
 	{
-		QTimer::singleShot(50, this, [this, files, target, dropStart]() {
-			importMidiFiles(files, target, dropStart);
+		QTimer::singleShot(50, this, [this, files, targetGuard, dropStart]() {
+			importMidiFiles(files, targetGuard.data(), dropStart);
 		});
 		return;
 	}
@@ -611,7 +635,10 @@ void TrackContainerView::importMidiFiles( const QStringList& files,
 	auto answer = QMessageBox::question(this, tr("MIDIインポート"),
 			tr("テンポ（BPM）やオートメーション（CC・ピッチベンドなど）も取り込みますか？"),
 			QMessageBox::Yes | QMessageBox::No | QMessageBox::Cancel, QMessageBox::Yes);
+	if (!self) { return; }
 	if (answer == QMessageBox::Cancel) { return; }
+	target = targetGuard.data();
+	if (target != nullptr && target->trackContainer() != m_tc) { target = nullptr; }
 	const bool keepAutomation = (answer == QMessageBox::Yes);
 
 	// remember the existing tracks so we can identify what the import adds
@@ -701,14 +728,14 @@ void TrackContainerView::importMidiFiles( const QStringList& files,
 	// instrument track its notes now live on the target, so the imported
 	// instrument tracks are always removed; automation is removed unless the
 	// user chose to keep it.
-	std::vector<Track*> toRemove;
+	std::vector<QPointer<Track>> toRemove;
 	if (!keepAutomation)
 	{
-		toRemove.insert(toRemove.end(), addedAutomation.begin(), addedAutomation.end());
+		for (Track* track : addedAutomation) { toRemove.emplace_back(track); }
 	}
 	if (target != nullptr)
 	{
-		toRemove.insert(toRemove.end(), addedInstruments.begin(), addedInstruments.end());
+		for (Track* track : addedInstruments) { toRemove.emplace_back(track); }
 	}
 	if (toRemove.empty()) { return; }
 
@@ -716,7 +743,10 @@ void TrackContainerView::importMidiFiles( const QStringList& files,
 	// tracks' views, whose queued initialisation events would dangle (and
 	// crash) if the widgets were deleted synchronously from this deferred call.
 	QTimer::singleShot(0, this, [this, toRemove]() {
-		for (Track* t : toRemove) { removeTrackSafely(t); }
+		for (const QPointer<Track>& track : toRemove)
+		{
+			if (track && track->trackContainer() == m_tc) { removeTrackSafely(track.data()); }
+		}
 	});
 }
 

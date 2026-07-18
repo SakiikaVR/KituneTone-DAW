@@ -56,7 +56,7 @@ SET(PROJECT_DESCRIPTION "KitsuneTone - original VST3-focused digital audio works
 SET(PROJECT_COPYRIGHT   "2004-${PROJECT_YEAR} LMMS contributors; 2026 KitsuneTone contributors")
 SET(VERSION_MAJOR       "2")
 SET(VERSION_MINOR       "2")
-SET(VERSION_RELEASE     "1")
+SET(VERSION_RELEASE     "2")
 SET(VERSION_STAGE       "")
 SET(VERSION_BUILD       "")
 SET(VERSION             "${VERSION_MAJOR}.${VERSION_MINOR}.${VERSION_RELEASE}")
@@ -716,8 +716,11 @@ if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang" AND NOT WIN32)
 	set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fPIC -DPIC")
 	set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fPIC -DPIC")
 elseif(MSVC)
-	# Use UTF-8 as the source and execution character set
-	add_compile_options("/utf-8")
+	# Use UTF-8 as the source and execution character set.  Enable standard
+	# C++ stack unwinding as well: plug-in boundaries rely on destructors and
+	# catch handlers to turn a faulty third-party plug-in into a disabled one
+	# instead of taking down the host process.
+	add_compile_options("/utf-8" "$<$<COMPILE_LANGUAGE:CXX>:/EHsc>")
 ENDIF()
 
 # gcc builds support gprof for profiling

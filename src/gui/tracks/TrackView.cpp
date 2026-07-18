@@ -29,6 +29,7 @@
 #include <QHBoxLayout>
 #include <QMouseEvent>
 #include <QPainter>
+#include <QPointer>
 #include <QStyleOption>
 
 
@@ -90,10 +91,16 @@ TrackView::TrackView( Track * track, TrackContainerView * tcv ) :
 
 
 	connect( m_track, SIGNAL(destroyedTrack()), this, SLOT(close()));
-	connect( m_track,
-		SIGNAL(clipAdded(lmms::Clip*)),
-			this, SLOT(createClipView(lmms::Clip*)),
-			Qt::QueuedConnection );
+	QPointer<Track> trackGuard(m_track);
+	connect(m_track, &Track::clipAdded, this, [this, trackGuard](Clip* clip) {
+		QPointer<Clip> clipGuard(clip);
+		QMetaObject::invokeMethod(this, [this, trackGuard, clipGuard] {
+			if (trackGuard && clipGuard && clipGuard->getTrack() == trackGuard.data())
+			{
+				createClipView(clipGuard.data());
+			}
+		}, Qt::QueuedConnection);
+	}, Qt::DirectConnection);
 
 	connect( &m_track->m_mutedModel, SIGNAL(dataChanged()),
 			&m_trackContentWidget, SLOT(update()));
@@ -427,7 +434,9 @@ void TrackView::paintEvent( QPaintEvent * pe )
  */
 void TrackView::createClipView( Clip * clip )
 {
+	if (clip == nullptr || clip->getTrack() != m_track) { return; }
 	ClipView * tv = clip->createView( this );
+	if (tv == nullptr) { return; }
 	if( clip->getSelectViewOnCreate() == true )
 	{
 		tv->setSelected( true );

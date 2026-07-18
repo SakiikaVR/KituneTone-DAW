@@ -37,6 +37,8 @@
 #include "BandLimitedWave.h"
 #include "Oscillator.h"
 
+#include <atomic>
+
 namespace lmms
 {
 
@@ -52,12 +54,18 @@ Lv2Manager * Engine::s_lv2Manager = nullptr;
 Ladspa2LMMS * Engine::s_ladspaManager = nullptr;
 void* Engine::s_dndPluginKey = nullptr;
 
+// Guards Engine::destroy() against re-entrant shutdown requests. Reset by
+// init() so a full init/destroy cycle can run more than once per process.
+static std::atomic_bool s_destroyStarted{false};
+
 
 
 
 void Engine::init( bool renderOnly )
 {
 	Engine *engine = inst();
+
+	s_destroyStarted.store(false);
 
 	emit engine->initProgress(tr("Generating wavetables"));
 	// generate (load from file) bandlimited wavetables
@@ -94,12 +102,23 @@ void Engine::init( bool renderOnly )
 
 void Engine::destroy()
 {
-	s_projectJournal->stopAllJournalling();
-	s_audioEngine->stopProcessing();
+	if (s_destroyStarted.exchange(true)) { return; }
+
+	// Be tolerant of a repeated shutdown request or a partially initialized
+	// engine.  Clear each singleton pointer before deleting its object so any
+	// destructor callback observes a stopped component instead of stale memory.
+	if (s_projectJournal) { s_projectJournal->stopAllJournalling(); }
+	if (s_audioEngine) { s_audioEngine->stopProcessing(); }
 
 	PresetPreviewPlayHandle::cleanup();
 
-	s_song->clearProject();
+	// clearProject() requires all of these collaborators. During a failed
+	// partial initialization, deleting Song directly is safer than calling into
+	// missing Mixer/PatternStore state.
+	if (s_song && s_audioEngine && s_projectJournal && s_patternStore && s_mixer)
+	{
+		s_song->clearProject();
+	}
 
 	deleteHelper( &s_patternStore );
 
@@ -116,7 +135,7 @@ void Engine::destroy()
 
 	deleteHelper( &s_song );
 
-	delete ConfigManager::inst();
+	ConfigManager::destroy();
 
 	// The oscillator FFT plans remain throughout the application lifecycle
 	// due to being expensive to create, and being used whenever a userwave form is changed

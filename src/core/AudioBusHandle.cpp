@@ -119,22 +119,34 @@ void AudioBusHandle::doProcessing()
 	// clear the buffer
 	m_buffer.silenceAllChannels();
 
-	//qDebug( "Playhandles: %d", m_playHandles.size() );
-	for (PlayHandle* ph : m_playHandles) // now we mix all playhandle buffers into our internal buffer
+	// Snapshot the membership under the lock, then mix outside it: iterating
+	// the live QList without the lock permits reallocation/UAF, but holding it
+	// across the whole mix loop would block MIDI-thread note starts for the
+	// bus's full render cost. Lifetime is safe on the copy — every deletion
+	// path runs under requestChangeInModel(), and the render period holds
+	// m_changeMutex for its entire duration, so handles present at snapshot
+	// time outlive this period.
+	const auto playHandles = [this] {
+		QMutexLocker playHandleLock(&m_playHandleLock);
+		return m_playHandles;
+	}();
 	{
-		if (ph->buffer())
+		for (PlayHandle* ph : playHandles) // now we mix all playhandle buffers into our internal buffer
 		{
-			if (ph->usesBuffer()
-				&& (ph->type() == PlayHandle::Type::NotePlayHandle
-					|| !MixHelpers::isSilent(ph->buffer(), fpp)))
+			if (ph->buffer())
 			{
-				m_bufferUsage = true;
+				if (ph->usesBuffer()
+					&& (ph->type() == PlayHandle::Type::NotePlayHandle
+						|| !MixHelpers::isSilent(ph->buffer(), fpp)))
+				{
+					m_bufferUsage = true;
 
-				// Writing to temporary interleaved buffer until PlayHandle and MixHelpers switch to planar
-				MixHelpers::add(m_buffer.interleavedBuffer().asSampleFrames().data(), ph->buffer(), fpp);
-			}
-			ph->releaseBuffer(); 	// gets rid of playhandle's buffer and sets
+					// Writing to temporary interleaved buffer until PlayHandle and MixHelpers switch to planar
+					MixHelpers::add(m_buffer.interleavedBuffer().asSampleFrames().data(), ph->buffer(), fpp);
+				}
+				ph->releaseBuffer(); 	// gets rid of playhandle's buffer and sets
 									// pointer to null, so if it doesn't get re-acquired we know to skip it next time
+			}
 		}
 	}
 

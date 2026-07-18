@@ -23,6 +23,8 @@
  *
  */
 
+#include <algorithm>
+
 #include <QDomElement>
 #include <QMutex>
 #include <QVector>
@@ -165,7 +167,7 @@ void MidiPort::processInEvent( const MidiEvent& event, const TimePos& time )
 			}
 		}
 
-		m_midiEventProcessor->processInEvent( inEvent, time );
+		if (m_midiEventProcessor) { m_midiEventProcessor->processInEvent(inEvent, time); }
 	}
 }
 
@@ -199,18 +201,113 @@ void MidiPort::processOutEvent( const MidiEvent& event, const TimePos& time )
 		// driver needed. Events are delivered through the receiving port's
 		// event loop: processInEvent() (note-off model changes etc.) is not
 		// safe to call synchronously from another track's render thread.
-		QVector<MidiPort*> ports;
+		// Keep the registry locked until each queued call has been attached to
+		// its QObject context.  Copying the raw pointers and unlocking here left
+		// a race where a track could destroy its MidiPort between the snapshot
+		// and invokeMethod(), causing a use-after-free during playback/shutdown.
+		// An event delivered by this bus may be replayed much later by a note
+		// handle or a VST3 MIDI generator, after a thread-local recursion guard
+		// has disappeared. Preserve provenance as a hop count on the event
+		// itself: multi-track chains keep working up to MaxInternalBusHops
+		// while feedback loops still decay after a few round trips.
+		if (outEvent.internalBusHops() < MaxInternalBusHops)
 		{
+			MidiEvent deliveryEvent = outEvent;
+			deliveryEvent.setSource(MidiEvent::Source::Internal);
+			deliveryEvent.setSourcePort(nullptr);
+			deliveryEvent.setInternalBusHops(outEvent.internalBusHops() + 1);
 			QMutexLocker lock(&s_portsMutex);
-			ports = s_ports;
+			for (MidiPort* port : s_ports)
+			{
+				// Skip ports that would discard the event at drain time anyway;
+				// this runs per event on the rendering path, so don't lock and
+				// allocate for the (typical) input-disabled ports.
+				if (port == this || !port->isInputEnabled()) { continue; }
+				port->queueInternalEvent(deliveryEvent, time);
+			}
 		}
-		for (MidiPort* port : ports)
+	}
+}
+
+
+
+
+bool MidiPort::isReleaseEvent(const MidiEvent& event)
+{
+	return event.type() == MidiNoteOff
+		|| (event.type() == MidiNoteOn && event.velocity() == 0)
+		|| (event.type() == MidiControlChange
+			&& (event.controllerNumber() == MidiControllerAllSoundOff
+				|| event.controllerNumber() == MidiControllerAllNotesOff
+				|| (event.controllerNumber() == MidiControllerSustain
+					&& event.controllerValue() <= MidiMaxControllerValue / 2)));
+}
+
+
+
+
+void MidiPort::queueInternalEvent(const MidiEvent& event, const TimePos& time)
+{
+	bool scheduleDrain = false;
+	{
+		QMutexLocker lock(&m_internalQueueMutex);
+		if (m_internalQueue.size() >= MaxInternalQueuedEvents)
 		{
-			if (port == this) { continue; }
-			QMetaObject::invokeMethod(port,
-					[port, outEvent, time]() { port->processInEvent(outEvent, time); },
-					Qt::QueuedConnection);
+			if (!isReleaseEvent(event)) { return; }
+			auto replace = std::find_if(m_internalQueue.begin(), m_internalQueue.end(),
+				[](const QueuedInputEvent& queued) { return !isReleaseEvent(queued.event); });
+			if (replace == m_internalQueue.end()) { return; }
+			*replace = QueuedInputEvent{event, time};
 		}
+		else
+		{
+			m_internalQueue.push_back(QueuedInputEvent{event, time});
+		}
+
+		if (!m_internalDrainScheduled)
+		{
+			m_internalDrainScheduled = true;
+			scheduleDrain = true;
+		}
+	}
+
+	if (scheduleDrain && !QMetaObject::invokeMethod(this,
+			[this] { drainInternalEvents(); }, Qt::QueuedConnection))
+	{
+		QMutexLocker lock(&m_internalQueueMutex);
+		m_internalDrainScheduled = false;
+		m_internalQueue.clear();
+	}
+}
+
+
+
+
+void MidiPort::drainInternalEvents()
+{
+	std::vector<QueuedInputEvent> batch;
+	bool hasMore = false;
+	{
+		QMutexLocker lock(&m_internalQueueMutex);
+		const std::size_t count = std::min(InternalDrainBatchSize, m_internalQueue.size());
+		batch.reserve(count);
+		for (std::size_t i = 0; i < count; ++i)
+		{
+			batch.push_back(std::move(m_internalQueue.front()));
+			m_internalQueue.pop_front();
+		}
+		hasMore = !m_internalQueue.empty();
+		if (!hasMore) { m_internalDrainScheduled = false; }
+	}
+
+	for (const auto& queued : batch) { processInEvent(queued.event, queued.time); }
+
+	if (hasMore && !QMetaObject::invokeMethod(this,
+			[this] { drainInternalEvents(); }, Qt::QueuedConnection))
+	{
+		QMutexLocker lock(&m_internalQueueMutex);
+		m_internalDrainScheduled = false;
+		m_internalQueue.clear();
 	}
 }
 

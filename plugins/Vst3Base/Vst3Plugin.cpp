@@ -40,6 +40,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstring>
+#include <exception>
 
 #include "public.sdk/source/vst/hosting/hostclasses.h"
 #include "public.sdk/source/common/memorystream.h"
@@ -65,6 +66,7 @@ DEF_CLASS_IID(IPlugInEntryPoint2)
 #include "Knob.h"
 #include "MainWindow.h"
 #include "MidiEvent.h"
+#include "Note.h"
 #include "SampleFrame.h"
 #include "Song.h"
 #include "SubWindow.h"
@@ -119,6 +121,12 @@ public:
 		m_container = new QWidget(this);
 		m_container->setAttribute(Qt::WA_NativeWindow);
 		layout->addWidget(m_container, 1);
+	}
+
+	~Vst3EditorWidget() override
+	{
+		if (m_plugin) { m_plugin->editorWidgetAboutToBeDestroyed(this); }
+		detachHost();
 	}
 
 	//! native window the plug-in view gets attached to
@@ -180,12 +188,16 @@ public:
 
 		// let an embedding container (e.g. a tab in the effect dialog) resize
 		// itself to the new plug-in size; harmless for the standalone window
-		emit m_plugin->editorResized();
+		if (m_plugin) { emit m_plugin->editorResized(); }
 	}
 
 	//! forget the plug-in view (it has been detached/destroyed elsewhere) so
 	//! later resize events don't dereference a dangling pointer
-	void clearView() { m_view = nullptr; }
+	void detachHost()
+	{
+		m_view = nullptr;
+		m_plugin = nullptr;
+	}
 
 	//! report the plug-in's preferred size so layouts / embedding containers
 	//! size to the actual editor even when the container is not fixed-size
@@ -197,6 +209,11 @@ public:
 protected:
 	void closeEvent(QCloseEvent* event) override
 	{
+		if (m_plugin == nullptr)
+		{
+			QWidget::closeEvent(event);
+			return;
+		}
 		// keep the editor alive, just hide its window
 		event->ignore();
 		windowWidget()->hide();
@@ -206,15 +223,19 @@ protected:
 	void resizeEvent(QResizeEvent* event) override
 	{
 		QWidget::resizeEvent(event);
-		if (m_view && m_view->canResize() == Steinberg::kResultTrue)
+		try
 		{
-			// the plug-in works in physical pixels; convert Qt's logical
-			// widget size back up by the device-pixel ratio (see setPluginSize)
-			const qreal dpr = devicePixelRatioF();
-			Steinberg::ViewRect rect(0, 0,
-					qRound(m_container->width() * dpr), qRound(m_container->height() * dpr));
-			m_view->onSize(&rect);
+			if (m_view && m_view->canResize() == Steinberg::kResultTrue)
+			{
+				// the plug-in works in physical pixels; convert Qt's logical
+				// widget size back up by the device-pixel ratio (see setPluginSize)
+				const qreal dpr = devicePixelRatioF();
+				Steinberg::ViewRect rect(0, 0,
+						qRound(m_container->width() * dpr), qRound(m_container->height() * dpr));
+				m_view->onSize(&rect);
+			}
 		}
+		catch (...) { detachHost(); }
 	}
 
 private:
@@ -230,7 +251,21 @@ private:
 Vst3Plugin::Vst3Plugin(const QString& path, Kind kind, const QString& uid) :
 	m_kind(kind)
 {
-	m_failed = !load(path, uid);
+	try
+	{
+		m_failed = !load(path, uid);
+	}
+	catch (const std::exception& exception)
+	{
+		m_failed = true;
+		m_error = tr("VST3 plug-in threw an exception while loading: %1")
+				.arg(QString::fromUtf8(exception.what()));
+	}
+	catch (...)
+	{
+		m_failed = true;
+		m_error = tr("VST3 plug-in threw an unknown exception while loading");
+	}
 
 	m_outputSyncTimer = new QTimer(this);
 	m_outputSyncTimer->setInterval(50);
@@ -243,7 +278,8 @@ Vst3Plugin::Vst3Plugin(const QString& path, Kind kind, const QString& uid) :
 
 Vst3Plugin::~Vst3Plugin()
 {
-	unload();
+	try { unload(); }
+	catch (...) { /* never let a third-party exception escape a destructor */ }
 }
 
 
@@ -407,71 +443,124 @@ bool Vst3Plugin::setupProcessing(double sampleRate, Steinberg::int32 maxBlockSiz
 {
 	using namespace Steinberg;
 
+	// Return codes from setProcessing/setActive(false) and setupProcessing are
+	// deliberately tolerated: the SDK's own AudioEffect base class returns
+	// kNotImplemented from setProcessing, and Steinberg's guidance is not to
+	// treat these results as errors ("some plugins are picky but still work
+	// with defaults"). Only thrown exceptions abort the reconfiguration.
+	bool stoppedCleanly = true;
 	if (m_processingActive)
 	{
-		m_processor->setProcessing(false);
-		m_component->setActive(false);
 		m_processingActive = false;
+		try
+		{
+			if (!m_processor) { stoppedCleanly = false; }
+			else { m_processor->setProcessing(false); }
+		}
+		catch (...) { stoppedCleanly = false; }
 	}
-
-	Vst::ProcessSetup setup;
-	setup.processMode = Vst::kRealtime;
-	setup.symbolicSampleSize = Vst::kSample32;
-	setup.maxSamplesPerBlock = maxBlockSize;
-	setup.sampleRate = sampleRate;
-	if (m_processor->setupProcessing(setup) != kResultOk)
+	if (m_componentActive)
 	{
-		// some plugins are picky but still work with defaults; treat as fatal only
-		// if activation fails below
+		m_componentActive = false;
+		try
+		{
+			if (!m_component) { stoppedCleanly = false; }
+			else { m_component->setActive(false); }
+		}
+		catch (...) { stoppedCleanly = false; }
 	}
+	if (!stoppedCleanly) { return false; }
 
-	m_processData.unprepare();
-	m_processData.prepare(*m_component, maxBlockSize, Vst::kSample32);
-	m_processData.inputEvents = &m_inputEvents;
-	m_processData.outputEvents = &m_outputEvents;
-	m_processData.inputParameterChanges = &m_inputParamChanges;
-	m_processData.outputParameterChanges = &m_outputParamChanges;
-	m_processData.processContext = &m_processContext;
+	try
+	{
+		Vst::ProcessSetup setup;
+		setup.processMode = Vst::kRealtime;
+		setup.symbolicSampleSize = Vst::kSample32;
+		setup.maxSamplesPerBlock = maxBlockSize;
+		setup.sampleRate = sampleRate;
+		if (!m_processor || !m_component) { return false; }
+		if (m_processor->setupProcessing(setup) != kResultOk)
+		{
+			qWarning("Vst3Plugin: setupProcessing was not accepted, "
+					"continuing with plug-in defaults");
+		}
 
-	if (m_component->setActive(true) != kResultOk) { return false; }
-	m_processor->setProcessing(true);
+		m_processData.unprepare();
+		m_processData.prepare(*m_component, maxBlockSize, Vst::kSample32);
+		m_processData.inputEvents = &m_inputEvents;
+		m_processData.outputEvents = &m_outputEvents;
+		m_processData.inputParameterChanges = &m_inputParamChanges;
+		m_processData.outputParameterChanges = &m_outputParamChanges;
+		m_processData.processContext = &m_processContext;
+
+		if (m_component->setActive(true) != kResultOk)
+		{
+			try { m_component->setActive(false); } catch (...) {}
+			return false;
+		}
+		m_componentActive = true;
+		// kNotImplemented (the SDK base-class default) and other non-fatal
+		// results are fine here; only an exception is treated as failure.
+		m_processor->setProcessing(true);
+		m_processingActive = true;
+	}
+	catch (...)
+	{
+		m_processingActive = false;
+		try { if (m_processor) { m_processor->setProcessing(false); } } catch (...) {}
+		m_componentActive = false;
+		try { if (m_component) { m_component->setActive(false); } } catch (...) {}
+		return false;
+	}
 
 	m_sampleRate = sampleRate;
 	m_maxBlockSize = maxBlockSize;
-	m_processingActive = true;
+	// A successful reconfiguration (reload, sample-rate change) is the natural
+	// recovery point for a previously faulted instance.
+	m_processFailStreak = 0;
+	m_processingFaulted.store(false, std::memory_order_release);
 	return true;
 }
 
 
 
 
-void Vst3Plugin::unload()
+void Vst3Plugin::unload() noexcept
 {
 	if (m_outputSyncTimer) { m_outputSyncTimer->stop(); }
-	destroyEditor();
+	try { destroyEditor(); } catch (...) {}
 
-	if (m_processingActive)
-	{
-		m_processor->setProcessing(false);
-		m_component->setActive(false);
-		m_processingActive = false;
-	}
-	m_processData.unprepare();
+	// Treat every third-party cleanup call as an independent boundary. One
+	// faulty method must not skip release of the remaining plug-in objects or
+	// leave its DLL and worker resources resident after the host closes.
+	m_processingActive = false;
+	try { if (m_processor) { m_processor->setProcessing(false); } } catch (...) {}
+	m_componentActive = false;
+	try { if (m_component) { m_component->setActive(false); } } catch (...) {}
+	try { m_processData.unprepare(); } catch (...) {}
 
 	// ARA objects can retain plug-in roles and worker resources. They must be
 	// released before the controller/provider and DLL module disappear.
-	m_araDocument.reset();
+	try { m_araDocument.reset(); } catch (...) {}
 	m_pendingAraArchive.clear();
 
-	m_midiMapping = nullptr;
-	m_processor = nullptr;
-	if (m_controller) { m_controller->setComponentHandler(nullptr); }
-	m_controller = nullptr;
-	m_component = nullptr;
-	if (m_provider)
+	auto releaseInterface = [](auto& pointer) noexcept {
+		auto* raw = pointer.take();
+		if (raw)
+		{
+			try { raw->release(); } catch (...) {}
+		}
+	};
+	releaseInterface(m_midiMapping);
+	releaseInterface(m_processor);
+	try { if (m_controller) { m_controller->setComponentHandler(nullptr); } } catch (...) {}
+	releaseInterface(m_controller);
+	releaseInterface(m_component);
+	auto* provider = m_provider.take();
+	if (provider)
 	{
-		m_provider->releasePlugIn(nullptr, nullptr);
-		m_provider = nullptr;
+		try { provider->releasePlugIn(nullptr, nullptr); } catch (...) {}
+		try { provider->release(); } catch (...) {}
 	}
 	m_module = nullptr;
 }
@@ -483,7 +572,8 @@ void Vst3Plugin::process(const SampleFrame* in, SampleFrame* out, f_cnt_t frames
 {
 	using namespace Steinberg;
 
-	if (m_failed || !m_processingActive || frames == 0)
+	if (m_failed || m_processingFaulted.load(std::memory_order_acquire)
+			|| !m_processingActive || frames == 0)
 	{
 		if (in != out && out != nullptr)
 		{
@@ -496,7 +586,19 @@ void Vst3Plugin::process(const SampleFrame* in, SampleFrame* out, f_cnt_t frames
 	const auto engineRate = static_cast<double>(Engine::audioEngine()->outputSampleRate());
 	if (engineRate != m_sampleRate)
 	{
-		setupProcessing(engineRate, m_maxBlockSize);
+		bool configured = false;
+		try { configured = setupProcessing(engineRate, m_maxBlockSize); }
+		catch (...) { configured = false; }
+		if (!configured)
+		{
+			m_processingFaulted.store(true, std::memory_order_release);
+			if (out != nullptr)
+			{
+				if (in != nullptr && in != out) { std::memcpy(out, in, sizeof(SampleFrame) * frames); }
+				else if (in == nullptr) { zeroSampleFrames(out, frames); }
+			}
+			return;
+		}
 	}
 
 	const auto numSamples = static_cast<int32>(std::min<f_cnt_t>(frames,
@@ -527,12 +629,41 @@ void Vst3Plugin::process(const SampleFrame* in, SampleFrame* out, f_cnt_t frames
 	// transfer queued events and parameter changes
 	{
 		QMutexLocker lock(&m_queueMutex);
-		for (auto& event : m_pendingEvents)
+		for (auto& queued : m_pendingEvents)
 		{
+			auto& event = queued.event;
+			m_pendingInternalBusHops = std::max(m_pendingInternalBusHops,
+					queued.internalBusHops);
+			if (event.type == Vst::Event::kNoteOnEvent)
+			{
+				setInternalActiveNoteLocked(event.noteOn.channel, event.noteOn.pitch,
+						event.noteOn.velocity > 0.f ? queued.internalBusHops : 0);
+			}
+			else if (event.type == Vst::Event::kNoteOffEvent)
+			{
+				setInternalActiveNoteLocked(event.noteOff.channel, event.noteOff.pitch, 0);
+			}
 			if (event.sampleOffset >= numSamples) { event.sampleOffset = numSamples - 1; }
 			m_inputEvents.addEvent(event);
 		}
 		m_pendingEvents.clear();
+		// The block's provenance is the max hop count over the pending events
+		// and every internally-delivered note still held. Using the max keeps
+		// output derived from live user input flowing (hops stay low) while a
+		// feedback loop's hop count grows each round trip until the bus stops
+		// re-broadcasting it.
+		m_currentBlockInternalBusHops = m_pendingInternalBusHops;
+		if (m_internalActiveNoteCount > 0)
+		{
+			for (const auto& channelNotes : m_internalActiveNotes)
+			{
+				for (const uint8_t hops : channelNotes)
+				{
+					m_currentBlockInternalBusHops = std::max(m_currentBlockInternalBusHops, hops);
+				}
+			}
+		}
+		m_pendingInternalBusHops = 0;
 
 		for (const auto& [id, value] : m_pendingParams)
 		{
@@ -617,7 +748,44 @@ void Vst3Plugin::process(const SampleFrame* in, SampleFrame* out, f_cnt_t frames
 	}
 #endif
 
-	m_processor->process(m_processData);
+	Steinberg::tresult processResult = Steinberg::kResultFalse;
+	bool processThrew = false;
+	try
+	{
+		processResult = m_processor->process(m_processData);
+	}
+	catch (...)
+	{
+		processThrew = true;
+	}
+	if (processThrew || processResult != Steinberg::kResultOk)
+	{
+		// A thrown exception disables the instance immediately. A plain
+		// non-kResultOk return is not defined as fatal by the SDK and can be
+		// transient (state restore, flush blocks), so only disable after
+		// several consecutive failures; a successful block resets the streak,
+		// and a successful setupProcessing() clears the fault latch.
+		++m_processFailStreak;
+		if (processThrew || m_processFailStreak >= FaultStreakLimit)
+		{
+			qWarning("Vst3Plugin: disabling '%s' after %s",
+					qUtf8Printable(m_name),
+					processThrew ? "an exception in process()"
+							: "repeated process() failures");
+			m_processingFaulted.store(true, std::memory_order_release);
+		}
+		m_inputEvents.clear();
+		m_outputEvents.clear();
+		m_inputParamChanges.clearQueue();
+		m_outputParamChanges.clearQueue();
+		if (out != nullptr)
+		{
+			if (in != nullptr && in != out) { std::memcpy(out, in, sizeof(SampleFrame) * frames); }
+			else if (in == nullptr) { zeroSampleFrames(out, frames); }
+		}
+		return;
+	}
+	m_processFailStreak = 0;
 
 	// fetch output
 	if (m_processData.numOutputs > 0)
@@ -667,7 +835,14 @@ void Vst3Plugin::process(const SampleFrame* in, SampleFrame* out, f_cnt_t frames
 	// drum maps ...) to the host, e.g. for the track's MIDI output port
 	if (m_midiOutputHandler)
 	{
-		const int32 eventCount = m_outputEvents.getEventCount();
+		auto emitMidi = [this](MidiEvent event) {
+			event.setSource(MidiEvent::Source::Internal);
+			event.setSourcePort(nullptr);
+			event.setInternalBusHops(m_currentBlockInternalBusHops);
+			m_midiOutputHandler(event);
+		};
+		const int32 eventCount = std::min<int32>(m_outputEvents.getEventCount(),
+				static_cast<int32>(MaxPendingEvents));
 		for (int32 i = 0; i < eventCount; ++i)
 		{
 			Vst::Event e = {};
@@ -675,27 +850,31 @@ void Vst3Plugin::process(const SampleFrame* in, SampleFrame* out, f_cnt_t frames
 			switch (e.type)
 			{
 				case Vst::Event::kNoteOnEvent:
-					m_midiOutputHandler(MidiEvent(MidiNoteOn, e.noteOn.channel, e.noteOn.pitch,
+					if (e.noteOn.channel < 0 || e.noteOn.channel >= 16
+							|| e.noteOn.pitch < 0 || e.noteOn.pitch >= NumKeys) { break; }
+					emitMidi(MidiEvent(MidiNoteOn, e.noteOn.channel, e.noteOn.pitch,
 							static_cast<uint16_t>(std::clamp(e.noteOn.velocity, 0.f, 1.f) * 127.f)));
 					break;
 				case Vst::Event::kNoteOffEvent:
-					m_midiOutputHandler(MidiEvent(MidiNoteOff, e.noteOff.channel, e.noteOff.pitch, 0));
+					if (e.noteOff.channel < 0 || e.noteOff.channel >= 16
+							|| e.noteOff.pitch < 0 || e.noteOff.pitch >= NumKeys) { break; }
+					emitMidi(MidiEvent(MidiNoteOff, e.noteOff.channel, e.noteOff.pitch, 0));
 					break;
 				case Vst::Event::kLegacyMIDICCOutEvent:
 					switch (e.midiCCOut.controlNumber)
 					{
 						case Vst::kAfterTouch:
-							m_midiOutputHandler(MidiEvent(MidiChannelPressure,
+							emitMidi(MidiEvent(MidiChannelPressure,
 									e.midiCCOut.channel, e.midiCCOut.value, 0));
 							break;
 						case Vst::kPitchBend:
-							m_midiOutputHandler(MidiEvent(MidiPitchBend, e.midiCCOut.channel,
+							emitMidi(MidiEvent(MidiPitchBend, e.midiCCOut.channel,
 									e.midiCCOut.value | (e.midiCCOut.value2 << 7)));
 							break;
 						default:
 							if (e.midiCCOut.controlNumber >= 0 && e.midiCCOut.controlNumber < 128)
 							{
-								m_midiOutputHandler(MidiEvent(MidiControlChange, e.midiCCOut.channel,
+								emitMidi(MidiEvent(MidiControlChange, e.midiCCOut.channel,
 										e.midiCCOut.controlNumber, e.midiCCOut.value));
 							}
 							break;
@@ -718,12 +897,82 @@ void Vst3Plugin::process(const SampleFrame* in, SampleFrame* out, f_cnt_t frames
 
 
 
+void Vst3Plugin::enqueueEvent(const Steinberg::Vst::Event& event, bool priority,
+		const MidiEvent& sourceEvent)
+{
+	QMutexLocker lock(&m_queueMutex);
+	if (m_pendingEvents.size() < MaxPendingEvents)
+	{
+		m_pendingEvents.push_back(QueuedEvent{event, sourceEvent.internalBusHops()});
+		return;
+	}
+
+	// Preserve note-offs under overload to avoid stuck voices.  Replacing an
+	// older non-note-off event keeps memory bounded even for a broken plug-in or
+	// an accidental MIDI feedback loop.
+	if (priority)
+	{
+		auto it = std::find_if(m_pendingEvents.begin(), m_pendingEvents.end(), [](const auto& queued) {
+			return queued.event.type != Steinberg::Vst::Event::kNoteOffEvent;
+		});
+		if (it != m_pendingEvents.end())
+		{
+			*it = QueuedEvent{event, sourceEvent.internalBusHops()};
+		}
+	}
+}
+
+
+
+
+void Vst3Plugin::updateMidiProvenanceLocked(const MidiEvent& event)
+{
+	m_pendingInternalBusHops = std::max(m_pendingInternalBusHops,
+			event.internalBusHops());
+	const int channel = event.channel();
+	if (event.type() == MidiControlChange && channel >= 0 && channel < 16
+			&& (event.controllerNumber() == MidiControllerAllSoundOff
+				|| event.controllerNumber() == MidiControllerAllNotesOff))
+	{
+		for (int key = 0; key < 128; ++key)
+		{
+			setInternalActiveNoteLocked(channel, key, 0);
+		}
+		return;
+	}
+	const int key = event.key();
+
+	if (event.type() == MidiNoteOn && event.velocity() > 0)
+	{
+		setInternalActiveNoteLocked(channel, key, event.internalBusHops());
+	}
+	else if (event.type() == MidiNoteOff
+			|| (event.type() == MidiNoteOn && event.velocity() == 0))
+	{
+		setInternalActiveNoteLocked(channel, key, 0);
+	}
+}
+
+
+
+
+void Vst3Plugin::setInternalActiveNoteLocked(int channel, int key, uint8_t hops)
+{
+	if (channel < 0 || channel >= 16 || key < 0 || key >= 128) { return; }
+	uint8_t& slot = m_internalActiveNotes[channel][key];
+	if (slot == 0 && hops > 0) { ++m_internalActiveNoteCount; }
+	else if (slot > 0 && hops == 0) { --m_internalActiveNoteCount; }
+	slot = hops;
+}
+
+
+
+
 void Vst3Plugin::queueMidiEvent(const MidiEvent& event, f_cnt_t offset)
 {
 	using namespace Steinberg;
 
 	if (m_failed) { return; }
-
 	const auto sampleOffset = static_cast<int32>(offset);
 	const auto channel = static_cast<int16>(event.channel());
 
@@ -739,8 +988,7 @@ void Vst3Plugin::queueMidiEvent(const MidiEvent& event, f_cnt_t offset)
 			e.noteOn.pitch = static_cast<int16>(event.key());
 			e.noteOn.velocity = event.velocity() / 127.f;
 			e.noteOn.noteId = -1;
-			QMutexLocker lock(&m_queueMutex);
-			m_pendingEvents.push_back(e);
+			enqueueEvent(e, false, event);
 			break;
 		}
 		case MidiNoteOff:
@@ -753,8 +1001,7 @@ void Vst3Plugin::queueMidiEvent(const MidiEvent& event, f_cnt_t offset)
 			e.noteOff.pitch = static_cast<int16>(event.key());
 			e.noteOff.velocity = event.velocity() / 127.f;
 			e.noteOff.noteId = -1;
-			QMutexLocker lock(&m_queueMutex);
-			m_pendingEvents.push_back(e);
+			enqueueEvent(e, true, event);
 			break;
 		}
 		case MidiKeyPressure:
@@ -767,8 +1014,7 @@ void Vst3Plugin::queueMidiEvent(const MidiEvent& event, f_cnt_t offset)
 			e.polyPressure.pitch = static_cast<int16>(event.key());
 			e.polyPressure.pressure = event.velocity() / 127.f;
 			e.polyPressure.noteId = -1;
-			QMutexLocker lock(&m_queueMutex);
-			m_pendingEvents.push_back(e);
+			enqueueEvent(e, false, event);
 			break;
 		}
 		case MidiControlChange:
@@ -794,11 +1040,18 @@ void Vst3Plugin::queueMidiEvent(const MidiEvent& event, f_cnt_t offset)
 				value = event.channelPressure() / 127.;
 			}
 			Vst::ParamID paramId = Vst::kNoParamId;
-			if (m_midiMapping->getMidiControllerAssignment(0, channel, ctrl, paramId) == kResultTrue
-					&& paramId != Vst::kNoParamId)
+			bool mapped = false;
+			try
+			{
+				mapped = m_midiMapping->getMidiControllerAssignment(
+						0, channel, ctrl, paramId) == kResultTrue;
+			}
+			catch (...) { mapped = false; }
+			if (mapped && paramId != Vst::kNoParamId)
 			{
 				QMutexLocker lock(&m_queueMutex);
 				m_pendingParams[paramId] = value;
+				updateMidiProvenanceLocked(event);
 			}
 			break;
 		}
@@ -817,25 +1070,29 @@ void Vst3Plugin::saveState(QDomDocument& doc, QDomElement& element)
 
 	if (m_failed || !m_component) { return; }
 
-	element.setAttribute("uid", m_uid);
+	try
+	{
+		element.setAttribute("uid", m_uid);
 
-	MemoryStream componentState;
-	if (m_component->getState(&componentState) == kResultTrue)
-	{
-		const auto data = QByteArray(componentState.getData(),
-				static_cast<int>(componentState.getSize()));
-		element.setAttribute("chunk", QString(data.toBase64()));
-	}
-	if (m_controller)
-	{
-		MemoryStream controllerState;
-		if (m_controller->getState(&controllerState) == kResultTrue)
+		MemoryStream componentState;
+		if (m_component->getState(&componentState) == kResultTrue)
 		{
-			const auto data = QByteArray(controllerState.getData(),
-					static_cast<int>(controllerState.getSize()));
-			element.setAttribute("controllerchunk", QString(data.toBase64()));
+			const auto data = QByteArray(componentState.getData(),
+					static_cast<int>(componentState.getSize()));
+			element.setAttribute("chunk", QString(data.toBase64()));
+		}
+		if (m_controller)
+		{
+			MemoryStream controllerState;
+			if (m_controller->getState(&controllerState) == kResultTrue)
+			{
+				const auto data = QByteArray(controllerState.getData(),
+						static_cast<int>(controllerState.getSize()));
+				element.setAttribute("controllerchunk", QString(data.toBase64()));
+			}
 		}
 	}
+	catch (...) { qWarning("Vst3Plugin: plug-in state save failed"); }
 }
 
 
@@ -847,31 +1104,35 @@ void Vst3Plugin::loadState(const QDomElement& element)
 
 	if (m_failed || !m_component) { return; }
 
-	const auto chunk = QByteArray::fromBase64(element.attribute("chunk").toUtf8());
-	if (!chunk.isEmpty())
+	try
 	{
-		MemoryStream stream;
-		int32 written = 0;
-		stream.write(const_cast<char*>(chunk.constData()), chunk.size(), &written);
-		stream.seek(0, IBStream::kIBSeekSet, nullptr);
-		m_component->setState(&stream);
-
-		if (m_controller)
+		const auto chunk = QByteArray::fromBase64(element.attribute("chunk").toUtf8());
+		if (!chunk.isEmpty())
 		{
+			MemoryStream stream;
+			int32 written = 0;
+			stream.write(const_cast<char*>(chunk.constData()), chunk.size(), &written);
 			stream.seek(0, IBStream::kIBSeekSet, nullptr);
-			m_controller->setComponentState(&stream);
+			m_component->setState(&stream);
+
+			if (m_controller)
+			{
+				stream.seek(0, IBStream::kIBSeekSet, nullptr);
+				m_controller->setComponentState(&stream);
+			}
+		}
+
+		const auto ctrlChunk = QByteArray::fromBase64(element.attribute("controllerchunk").toUtf8());
+		if (!ctrlChunk.isEmpty() && m_controller)
+		{
+			MemoryStream stream;
+			int32 written = 0;
+			stream.write(const_cast<char*>(ctrlChunk.constData()), ctrlChunk.size(), &written);
+			stream.seek(0, IBStream::kIBSeekSet, nullptr);
+			m_controller->setState(&stream);
 		}
 	}
-
-	const auto ctrlChunk = QByteArray::fromBase64(element.attribute("controllerchunk").toUtf8());
-	if (!ctrlChunk.isEmpty() && m_controller)
-	{
-		MemoryStream stream;
-		int32 written = 0;
-		stream.write(const_cast<char*>(ctrlChunk.constData()), ctrlChunk.size(), &written);
-		stream.seek(0, IBStream::kIBSeekSet, nullptr);
-		m_controller->setState(&stream);
-	}
+	catch (...) { qWarning("Vst3Plugin: plug-in state restore failed"); }
 }
 
 
@@ -882,15 +1143,23 @@ bool Vst3Plugin::hasEditor()
 	if (m_failed || !m_controller) { return false; }
 	if (m_view) { return true; }
 	if (m_editorCreationTried) { return false; }
-	// probe without keeping the view
-	auto* view = m_controller->createView(Steinberg::Vst::ViewType::kEditor);
-	if (view == nullptr)
+	try
+	{
+		// probe without keeping the view
+		auto* view = m_controller->createView(Steinberg::Vst::ViewType::kEditor);
+		if (view == nullptr)
+		{
+			m_editorCreationTried = true;
+			return false;
+		}
+		try { view->release(); } catch (...) {}
+		return true;
+	}
+	catch (...)
 	{
 		m_editorCreationTried = true;
 		return false;
 	}
-	view->release();
-	return true;
 }
 
 
@@ -911,48 +1180,56 @@ void Vst3Plugin::showEditor()
 		return;
 	}
 
-	m_view = owned(m_controller->createView(Vst::ViewType::kEditor));
-	m_editorCreationTried = true;
-	if (!m_view) { return; }
-
-	auto widget = new Vst3EditorWidget(this, m_view.get());
-	auto subWindow = gui::getGUI()->mainWindow()->addWindowedWidget(widget);
-
-	ViewRect size = {};
-	int w = 640, h = 480;
-	if (m_view->getSize(&size) == kResultTrue)
+	try
 	{
-		w = size.getWidth();
-		h = size.getHeight();
-	}
-	widget->setPluginSize(w, h, m_view->canResize() != kResultTrue);
+		m_view = owned(m_controller->createView(Vst::ViewType::kEditor));
+		m_editorCreationTried = true;
+		if (!m_view) { return; }
 
-	m_view->setFrame(this);
-	// set before attached(): plug-ins like Vital report their real size via
-	// resizeView() while attaching, which must not be rejected
-	m_editorWidget = widget;
-	if (m_view->attached(reinterpret_cast<void*>(widget->container()->winId()),
-			kPlatformTypeHWND) != kResultTrue)
+		auto* widget = new Vst3EditorWidget(this, m_view.get());
+		// Publish ownership immediately so every later exception can use the
+		// same idempotent teardown path.
+		m_editorWidget = widget;
+		m_editorEmbedded = false;
+		m_editorAttached = false;
+		gui::getGUI()->mainWindow()->addWindowedWidget(widget);
+
+		ViewRect size = {};
+		int w = 640, h = 480;
+		if (m_view->getSize(&size) == kResultTrue)
+		{
+			w = size.getWidth();
+			h = size.getHeight();
+		}
+		widget->setPluginSize(w, h, m_view->canResize() != kResultTrue);
+
+		m_view->setFrame(this);
+		// Treat a throw from attached() as possibly attached so cleanup calls
+		// removed() before the native host window disappears.
+		m_editorAttached = true;
+		if (m_view->attached(reinterpret_cast<void*>(widget->container()->winId()),
+				kPlatformTypeHWND) != kResultTrue)
+		{
+			destroyEditor();
+			return;
+		}
+
+		QWidget* window = widget->windowWidget();
+		window->show();
+		widget->show();
+
+		// Showing detaches the window; ask again because attached() may resize.
+		if (m_view->getSize(&size) == kResultTrue)
+		{
+			w = size.getWidth();
+			h = size.getHeight();
+		}
+		widget->setPluginSize(w, h, m_view->canResize() != kResultTrue);
+	}
+	catch (...)
 	{
-		m_view->setFrame(nullptr);
-		m_view = nullptr;
-		m_editorWidget = nullptr;
-		delete subWindow;	// deletes the widget as well
-		return;
+		destroyEditor();
 	}
-
-	subWindow->show();
-	widget->show();
-
-	// showing detaches the window (reparenting it); re-apply the plug-in
-	// size afterwards, asking the view again since it may have changed
-	// during attached()
-	if (m_view->getSize(&size) == kResultTrue)
-	{
-		w = size.getWidth();
-		h = size.getHeight();
-	}
-	widget->setPluginSize(w, h, m_view->canResize() != kResultTrue);
 }
 
 
@@ -966,65 +1243,62 @@ QWidget* Vst3Plugin::createEmbeddedEditor(QWidget* parent)
 	// only support embedding when no editor is open yet
 	if (m_editorWidget != nullptr) { return nullptr; }
 
-	m_view = owned(m_controller->createView(Vst::ViewType::kEditor));
-	m_editorCreationTried = true;
-	if (!m_view) { return nullptr; }
-
-	auto widget = new Vst3EditorWidget(this, m_view.get());
-	widget->setParent(parent);
-
-	ViewRect size = {};
-	int w = 640, h = 480;
-	if (m_view->getSize(&size) == kResultTrue)
+	Vst3EditorWidget* widget = nullptr;
+	auto discardEditor = [this, &widget]() noexcept
 	{
-		w = size.getWidth();
-		h = size.getHeight();
-	}
-
-	widget->setPluginSize(w, h, m_view->canResize() != kResultTrue);
-
-	m_view->setFrame(this);
-	// set before attached(): plug-ins report their real size via resizeView()
-	// while attaching, which must not be rejected
-	m_editorWidget = widget;
-	m_editorEmbedded = true;
-	if (m_view->attached(reinterpret_cast<void*>(widget->container()->winId()),
-			kPlatformTypeHWND) != kResultTrue)
-	{
-		m_view->setFrame(nullptr);
-		m_view = nullptr;
 		m_editorWidget = nullptr;
 		m_editorEmbedded = false;
+		detachEditorView();
 		delete widget;
+		widget = nullptr;
+	};
+
+	try
+	{
+		m_view = owned(m_controller->createView(Vst::ViewType::kEditor));
+		m_editorCreationTried = true;
+		if (!m_view) { return nullptr; }
+
+		widget = new Vst3EditorWidget(this, m_view.get());
+		widget->setParent(parent);
+		m_editorWidget = widget;
+		m_editorEmbedded = true;
+		m_editorAttached = false;
+
+		ViewRect size = {};
+		int w = 640, h = 480;
+		if (m_view->getSize(&size) == kResultTrue)
+		{
+			w = size.getWidth();
+			h = size.getHeight();
+		}
+
+		widget->setPluginSize(w, h, m_view->canResize() != kResultTrue);
+		m_view->setFrame(this);
+		m_editorAttached = true;
+		if (m_view->attached(reinterpret_cast<void*>(widget->container()->winId()),
+				kPlatformTypeHWND) != kResultTrue)
+		{
+			discardEditor();
+			return nullptr;
+		}
+
+		// Show the native window so the plug-in paints, then re-apply any size
+		// reported during attached().
+		widget->show();
+		if (m_view->getSize(&size) == kResultTrue)
+		{
+			w = size.getWidth();
+			h = size.getHeight();
+		}
+		widget->setPluginSize(w, h, m_view->canResize() != kResultTrue);
+		return widget;
+	}
+	catch (...)
+	{
+		discardEditor();
 		return nullptr;
 	}
-
-	// show the native window so the plug-in actually paints (some plug-ins,
-	// e.g. Ozone, only render once their window is visible), then re-apply the
-	// size since it may have changed while attaching
-	widget->show();
-	if (m_view->getSize(&size) == kResultTrue)
-	{
-		w = size.getWidth();
-		h = size.getHeight();
-	}
-	widget->setPluginSize(w, h, m_view->canResize() != kResultTrue);
-
-	// when the embedding widget goes away (dialog/effect closed), detach the
-	// plug-in view so we never touch a dead HWND
-	connect(widget, &QObject::destroyed, this, [this]()
-	{
-		if (m_view)
-		{
-			m_view->removed();
-			m_view->setFrame(nullptr);
-			m_view = nullptr;
-		}
-		m_editorWidget = nullptr;
-		m_editorEmbedded = false;
-	});
-
-	return widget;
 }
 
 
@@ -1058,22 +1332,51 @@ bool Vst3Plugin::editorVisible() const
 
 
 
+void Vst3Plugin::editorWidgetAboutToBeDestroyed(QWidget* widget) noexcept
+{
+	if (m_editorWidget != widget) { return; }
+	// Called from the derived widget destructor, before QWidget destroys the
+	// native child HWND used by the plug-in view.
+	m_editorWidget = nullptr;
+	m_editorEmbedded = false;
+	detachEditorView();
+}
+
+
+
+
+void Vst3Plugin::detachEditorView() noexcept
+{
+	// Drop the member reference first. A badly behaved plug-in may call back
+	// into resizeView() from removed()/setFrame(); it must see no live editor.
+	auto* view = m_view.take();
+	const bool attached = m_editorAttached;
+	m_editorAttached = false;
+	if (!view) { return; }
+	if (attached)
+	{
+		try { view->removed(); } catch (...) {}
+	}
+	try { view->setFrame(nullptr); } catch (...) {}
+	try { view->release(); } catch (...) {}
+}
+
+
 void Vst3Plugin::destroyEditor()
 {
-	if (m_view)
+	auto* editor = static_cast<Vst3EditorWidget*>(m_editorWidget);
+	const bool embedded = m_editorEmbedded;
+	m_editorWidget = nullptr;
+	m_editorEmbedded = false;
+	detachEditorView();
+
+	if (editor != nullptr)
 	{
-		m_view->removed();
-		m_view->setFrame(nullptr);
-		m_view = nullptr;
-	}
-	if (m_editorWidget != nullptr)
-	{
-		auto* editor = static_cast<Vst3EditorWidget*>(m_editorWidget);
-		if (m_editorEmbedded)
+		if (embedded)
 		{
 			// the embedding container (e.g. the effect dialog) owns the widget;
 			// just tell it the view is gone so its resize events stay safe
-			editor->clearView();
+			editor->detachHost();
 		}
 		else
 		{
@@ -1081,9 +1384,7 @@ void Vst3Plugin::destroyEditor()
 			// widget if it was never added to the workspace
 			delete editor->windowWidget();
 		}
-		m_editorWidget = nullptr;
 	}
-	m_editorEmbedded = false;
 }
 
 
@@ -1095,7 +1396,7 @@ void Vst3Plugin::syncOutputParameters()
 	// let the ARA plug-in process deferred model updates (analysis etc.)
 	if (m_araDocument)
 	{
-		m_araDocument->notifyModelUpdates();
+		try { m_araDocument->notifyModelUpdates(); } catch (...) {}
 		// log audio-read progress roughly every 2s (40 * 50ms timer)
 		static int s_tick = 0;
 		if (++s_tick >= 40)
@@ -1114,7 +1415,7 @@ void Vst3Plugin::syncOutputParameters()
 	if (!m_controller) { return; }
 	for (const auto& [id, value] : params)
 	{
-		m_controller->setParamNormalized(id, value);
+		try { m_controller->setParamNormalized(id, value); } catch (...) {}
 	}
 }
 
@@ -1173,16 +1474,20 @@ Steinberg::tresult PLUGIN_API Vst3Plugin::restartComponent(Steinberg::int32 flag
 
 	if ((flags & Vst::kParamValuesChanged) && m_controller)
 	{
-		// push all current controller values to the processor
-		const int32 count = m_controller->getParameterCount();
-		QMutexLocker lock(&m_queueMutex);
-		for (int32 i = 0; i < count; ++i)
+		try
 		{
-			Vst::ParameterInfo info;
-			if (m_controller->getParameterInfo(i, info) != kResultTrue) { continue; }
-			if (info.flags & Vst::ParameterInfo::kIsReadOnly) { continue; }
-			m_pendingParams[info.id] = m_controller->getParamNormalized(info.id);
+			// push all current controller values to the processor
+			const int32 count = m_controller->getParameterCount();
+			QMutexLocker lock(&m_queueMutex);
+			for (int32 i = 0; i < count; ++i)
+			{
+				Vst::ParameterInfo info;
+				if (m_controller->getParameterInfo(i, info) != kResultTrue) { continue; }
+				if (info.flags & Vst::ParameterInfo::kIsReadOnly) { continue; }
+				m_pendingParams[info.id] = m_controller->getParamNormalized(info.id);
+			}
 		}
+		catch (...) { return kResultFalse; }
 	}
 	return kResultOk;
 }
@@ -1199,11 +1504,15 @@ Steinberg::tresult PLUGIN_API Vst3Plugin::resizeView(Steinberg::IPlugView* view,
 	{
 		return kInvalidArgument;
 	}
-	static_cast<Vst3EditorWidget*>(m_editorWidget)->setPluginSize(
-			newSize->getWidth(), newSize->getHeight(),
-			m_view->canResize() != kResultTrue);
-	view->onSize(newSize);
-	return kResultTrue;
+	try
+	{
+		static_cast<Vst3EditorWidget*>(m_editorWidget)->setPluginSize(
+				newSize->getWidth(), newSize->getHeight(),
+				m_view->canResize() != kResultTrue);
+		view->onSize(newSize);
+		return kResultTrue;
+	}
+	catch (...) { return kResultFalse; }
 }
 
 
@@ -1402,30 +1711,34 @@ void Vst3Plugin::createParameterModels(Model* parent)
 	using namespace Steinberg;
 	if (m_failed || m_controller == nullptr || !m_params.empty()) { return; }
 
-	const int32 count = m_controller->getParameterCount();
-	for (int32 i = 0; i < count; ++i)
+	try
 	{
-		Vst::ParameterInfo info;
-		if (m_controller->getParameterInfo(i, info) != kResultTrue) { continue; }
-		// only expose parameters the plug-in allows to be automated, and skip
-		// read-only / hidden / list-separator "parameters"
-		if ((info.flags & Vst::ParameterInfo::kIsReadOnly) != 0) { continue; }
-		if ((info.flags & Vst::ParameterInfo::kCanAutomate) == 0) { continue; }
+		const int32 count = m_controller->getParameterCount();
+		for (int32 i = 0; i < count; ++i)
+		{
+			Vst::ParameterInfo info;
+			if (m_controller->getParameterInfo(i, info) != kResultTrue) { continue; }
+			// only expose parameters the plug-in allows to be automated, and skip
+			// read-only / hidden / list-separator "parameters"
+			if ((info.flags & Vst::ParameterInfo::kIsReadOnly) != 0) { continue; }
+			if ((info.flags & Vst::ParameterInfo::kCanAutomate) == 0) { continue; }
 
-		auto title = QString::fromStdString(VST3::StringConvert::convert(info.title));
-		if (title.isEmpty()) { title = QStringLiteral("Param %1").arg(info.id); }
+			auto title = QString::fromStdString(VST3::StringConvert::convert(info.title));
+			if (title.isEmpty()) { title = QStringLiteral("Param %1").arg(info.id); }
 
-		const auto current = static_cast<float>(m_controller->getParamNormalized(info.id));
-		// VST3 parameters are normalized to 0..1; a fine step keeps automation smooth
-		auto* model = new FloatModel(current, 0.f, 1.f, 0.001f, parent, title);
-		const auto id = info.id;
-		connect(model, &FloatModel::dataChanged, this, [this, id, model]() {
-			if (m_applyingParamFromPlugin) { return; }
-			sendParameterToPlugin(id, model->value());
-		}, Qt::DirectConnection);
+			const auto current = static_cast<float>(m_controller->getParamNormalized(info.id));
+			// VST3 parameters are normalized to 0..1; a fine step keeps automation smooth
+			auto* model = new FloatModel(current, 0.f, 1.f, 0.001f, parent, title);
+			const auto id = info.id;
+			connect(model, &FloatModel::dataChanged, this, [this, id, model]() {
+				if (m_applyingParamFromPlugin) { return; }
+				sendParameterToPlugin(id, model->value());
+			}, Qt::DirectConnection);
 
-		m_params.push_back({info.id, model, title});
+			m_params.push_back({info.id, model, title});
+		}
 	}
+	catch (...) { qWarning("Vst3Plugin: parameter discovery failed"); }
 }
 
 
@@ -1438,7 +1751,10 @@ void Vst3Plugin::sendParameterToPlugin(Steinberg::Vst::ParamID id, float normali
 		m_pendingParams[id] = normalized;
 	}
 	// keep the edit controller (and thus the plug-in GUI) in sync
-	if (m_controller) { m_controller->setParamNormalized(id, normalized); }
+	if (m_controller)
+	{
+		try { m_controller->setParamNormalized(id, normalized); } catch (...) {}
+	}
 }
 
 

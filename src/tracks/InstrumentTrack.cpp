@@ -29,6 +29,7 @@
 #include "ControllerConnection.h"
 #include "DataFile.h"
 #include "DetuningHelper.h"
+#include "DummyInstrument.h"
 #include "GuiApplication.h"
 #include "Mixer.h"
 #include "InstrumentTrackView.h"
@@ -335,6 +336,15 @@ void InstrumentTrack::processInEvent( const MidiEvent& event, const TimePos& tim
 		return;
 	}
 
+	// Never index the per-key arrays with malformed input from a MIDI device,
+	// project, or third-party plug-in.
+	if ((event.type() == MidiNoteOn || event.type() == MidiNoteOff
+			|| event.type() == MidiKeyPressure)
+			&& (event.key() < 0 || event.key() >= NumKeys))
+	{
+		return;
+	}
+
 	bool eventHandled = false;
 
 	switch( event.type() )
@@ -368,7 +378,8 @@ void InstrumentTrack::processInEvent( const MidiEvent& event, const TimePos& tim
 								std::numeric_limits<f_cnt_t>::max() / 2,
 								inputNote,
 								nullptr, event.channel(),
-								NotePlayHandle::Origin::MidiInput);
+								NotePlayHandle::Origin::MidiInput,
+								event.source(), event.internalBusHops());
 					m_notes[event.key()] = nph;
 					if( ! Engine::audioEngine()->addPlayHandle( nph ) )
 					{
@@ -411,7 +422,11 @@ void InstrumentTrack::processInEvent( const MidiEvent& event, const TimePos& tim
 		case MidiPitchBend:
 			// updatePitch() is connected to m_pitchModel::dataChanged() which will send out
 			// MidiPitchBend events
+			m_pitchEventSource = event.source();
+			m_pitchEventInternalBusHops = event.internalBusHops();
+			m_forwardingPitchEvent = true;
 			m_pitchModel.setValue( m_pitchModel.minValue() + event.pitchBend() * m_pitchModel.range() / MidiMaxPitchBend );
+			m_forwardingPitchEvent = false;
 			break;
 
 		case MidiControlChange:
@@ -458,6 +473,7 @@ void InstrumentTrack::processInEvent( const MidiEvent& event, const TimePos& tim
 			switch( event.metaEvent() )
 			{
 				case MidiNotePanning:
+					if (event.key() < 0 || event.key() >= NumKeys) { break; }
 					if( m_notes[event.key()] != nullptr )
 					{
 						eventHandled = true;
@@ -511,12 +527,17 @@ void InstrumentTrack::processOutEvent( const MidiEvent& event, const TimePos& ti
 
 			if( key >= 0 && key < NumKeys )
 			{
+				MidiEvent handledEvent = transposedEvent;
+				handledEvent.setChannel(handleEventOutputChannel);
 				if( m_runningMidiNotes[key] > 0 )
 				{
-					m_instrument->handleMidiEvent( MidiEvent( MidiNoteOff, handleEventOutputChannel, key, 0 ), time, offset );
+					MidiEvent noteOffEvent = handledEvent;
+					noteOffEvent.setType(MidiNoteOff);
+					noteOffEvent.setVelocity(0);
+					m_instrument->handleMidiEvent(noteOffEvent, time, offset);
 				}
 				++m_runningMidiNotes[key];
-				m_instrument->handleMidiEvent( MidiEvent( MidiNoteOn, handleEventOutputChannel, key, event.velocity() ), time, offset );
+				m_instrument->handleMidiEvent(handledEvent, time, offset);
 
 			}
 			m_midiNotesMutex.unlock();
@@ -527,9 +548,17 @@ void InstrumentTrack::processOutEvent( const MidiEvent& event, const TimePos& ti
 			m_midiNotesMutex.lock();
 			m_piano.setKeyState( event.key(), false );	// event.key() = original key
 
-			if( key >= 0 && key < NumKeys && --m_runningMidiNotes[key] <= 0 )
+			if (key >= 0 && key < NumKeys)
 			{
-				m_instrument->handleMidiEvent( MidiEvent( MidiNoteOff, handleEventOutputChannel, key, 0 ), time, offset );
+				if (m_runningMidiNotes[key] > 0) { --m_runningMidiNotes[key]; }
+				else { m_runningMidiNotes[key] = 0; }
+				if (m_runningMidiNotes[key] == 0)
+				{
+					MidiEvent handledEvent = transposedEvent;
+					handledEvent.setChannel(handleEventOutputChannel);
+					handledEvent.setVelocity(0);
+					m_instrument->handleMidiEvent(handledEvent, time, offset);
+				}
 			}
 			m_midiNotesMutex.unlock();
 			emit endNote();
@@ -676,7 +705,11 @@ void InstrumentTrack::updatePitch()
 {
 	updateBaseNote();
 
-	processOutEvent( MidiEvent( MidiPitchBend, midiPort()->realOutputChannel(), midiPitch() ) );
+	MidiEvent event(MidiPitchBend, midiPort()->realOutputChannel(), midiPitch(), 0,
+			nullptr, m_forwardingPitchEvent ? m_pitchEventSource : MidiEvent::Source::External);
+	event.setInternalBusHops(
+			m_forwardingPitchEvent ? m_pitchEventInternalBusHops : 0);
+	processOutEvent(event);
 }
 
 
@@ -709,7 +742,7 @@ int InstrumentTrack::masterKey( int _midi_key ) const
 {
 
 	int key = baseNote();
-	return std::clamp(_midi_key - (key - DefaultKey), 0, NumKeys);
+	return std::clamp(_midi_key - (key - DefaultKey), 0, NumKeys - 1);
 }
 
 
@@ -1178,10 +1211,32 @@ Instrument * InstrumentTrack::loadInstrument(const QString & _plugin_name,
 
 	silenceAllNotes( true );
 
+	// Stop and destroy the old instrument before constructing the replacement.
+	// Some instrument destructors remove every play handle belonging to the
+	// track; constructing first would therefore let the old destructor remove
+	// the new instrument's freshly registered handle as well.
 	lock();
-	delete m_instrument;
-	m_instrument = Instrument::instantiate(_plugin_name, this,
-					key, keyFromDnd);
+	Instrument* previous = m_instrument;
+	m_instrument = nullptr;
+	unlock();
+	delete previous;
+
+	Instrument* replacement = nullptr;
+	try
+	{
+		replacement = Instrument::instantiate(_plugin_name, this, key, keyFromDnd);
+	}
+	catch (...)
+	{
+		qWarning("InstrumentTrack: plug-in instantiation threw an exception");
+		// Keep the track valid after a faulty third-party constructor.  A dummy
+		// instrument produces silence and can be replaced normally by the user.
+		replacement = new DummyInstrument(this);
+	}
+	if (replacement == nullptr) { replacement = new DummyInstrument(this); }
+
+	lock();
+	m_instrument = replacement;
 	unlock();
 	setName(m_instrument->displayName());
 

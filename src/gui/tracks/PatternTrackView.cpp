@@ -57,7 +57,7 @@ PatternTrackView::PatternTrackView(PatternTrack* pt, TrackContainerView* tcv) :
 
 PatternTrackView::~PatternTrackView()
 {
-	getGUI()->patternEditor()->m_editor->removeViewsForPattern(PatternTrack::s_infoMap[m_patternTrack]);
+	cleanupPatternViews();
 }
 
 
@@ -65,8 +65,27 @@ PatternTrackView::~PatternTrackView()
 
 bool PatternTrackView::close()
 {
-	getGUI()->patternEditor()->m_editor->removeViewsForPattern(PatternTrack::s_infoMap[m_patternTrack]);
+	cleanupPatternViews();
 	return TrackView::close();
+}
+
+
+void PatternTrackView::cleanupPatternViews()
+{
+	if (m_patternViewsCleaned) { return; }
+	m_patternViewsCleaned = true;
+	// Look the index up live: pattern-track deletions renumber s_infoMap, so a
+	// cached index can point at a different, still-alive pattern. If the track
+	// is already unregistered its clip views were self-cleaned via
+	// destroyedClip; a non-inserting lookup also avoids polluting s_infoMap
+	// with a dangling key.
+	const auto it = PatternTrack::s_infoMap.constFind(m_patternTrack);
+	if (it == PatternTrack::s_infoMap.constEnd()) { return; }
+	if (getGUI() != nullptr && getGUI()->patternEditor() != nullptr
+			&& getGUI()->patternEditor()->m_editor != nullptr)
+	{
+		getGUI()->patternEditor()->m_editor->removeViewsForPattern(it.value());
+	}
 }
 
 

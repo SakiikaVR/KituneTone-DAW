@@ -207,6 +207,11 @@ void PatternEditor::dropEvent(QDropEvent* de)
 	{
 		DataFile dataFile( value.toUtf8() );
 		Track * t = Track::create( dataFile.content().firstChild().toElement(), model() );
+		if (t == nullptr)
+		{
+			de->ignore();
+			return;
+		}
 
 		for (Clip* clip : t->getClips())
 		{

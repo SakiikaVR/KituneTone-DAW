@@ -68,6 +68,9 @@ public:
 		return s_instanceOfMe;
 	}
 
+	//! Destroy the singleton without leaving inst() pointing at freed memory.
+	static void destroy();
+
 
 	const QString & workingDir() const
 	{

@@ -52,7 +52,9 @@ NotePlayHandle::NotePlayHandle( InstrumentTrack* instrumentTrack,
 								const Note& n,
 								NotePlayHandle *parent,
 								int midiEventChannel,
-								Origin origin ) :
+								Origin origin,
+								MidiEvent::Source midiSource,
+								uint8_t internalBusHops ) :
 	PlayHandle( PlayHandle::Type::NotePlayHandle, _offset ),
 	Note(n),
 	m_pluginData( nullptr ),
@@ -79,6 +81,8 @@ NotePlayHandle::NotePlayHandle( InstrumentTrack* instrumentTrack,
 	m_songGlobalParentOffset( 0 ),
 	m_midiChannel( midiEventChannel >= 0 ? midiEventChannel : instrumentTrack->midiPort()->realOutputChannel() ),
 	m_origin( origin ),
+	m_midiSource(parent ? parent->m_midiSource : midiSource),
+	m_internalBusHops(parent ? parent->m_internalBusHops : internalBusHops),
 	m_frequencyNeedsUpdate( false )
 {
 	lock();
@@ -140,7 +144,7 @@ NotePlayHandle::~NotePlayHandle()
 		m_instrumentTrack->deleteNotePluginData( this );
 	}
 
-	if( m_instrumentTrack->m_notes[key()] == this )
+	if (key() >= 0 && key() < NumKeys && m_instrumentTrack->m_notes[key()] == this)
 	{
 		m_instrumentTrack->m_notes[key()] = nullptr;
 	}
@@ -161,7 +165,9 @@ void NotePlayHandle::setVolume( volume_t _volume )
 
 	const int baseVelocity = m_instrumentTrack->midiPort()->baseVelocity();
 
-	m_instrumentTrack->processOutEvent( MidiEvent( MidiKeyPressure, midiChannel(), midiKey(), midiVelocity( baseVelocity ) ) );
+	MidiEvent event(MidiKeyPressure, midiChannel(), midiKey(), midiVelocity(baseVelocity), nullptr, m_midiSource);
+	event.setInternalBusHops(m_internalBusHops);
+	m_instrumentTrack->processOutEvent(event);
 }
 
 
@@ -232,8 +238,10 @@ void NotePlayHandle::play( SampleFrame* _working_buffer )
 		sendMidiPitchBend(offset());
 
 		// send MidiNoteOn event
+		MidiEvent event(MidiNoteOn, midiChannel(), midiKey(), midiVelocity(baseVelocity), nullptr, m_midiSource);
+		event.setInternalBusHops(m_internalBusHops);
 		m_instrumentTrack->processOutEvent(
-			MidiEvent( MidiNoteOn, midiChannel(), midiKey(), midiVelocity( baseVelocity ) ),
+			event,
 			TimePos::fromFrames( offset(), Engine::framesPerTick() ),
 			offset() );
 	}
@@ -395,8 +403,10 @@ void NotePlayHandle::noteOff( const f_cnt_t _s )
 		m_hasMidiNote = false;
 
 		// send MidiNoteOff event
+		MidiEvent event(MidiNoteOff, midiChannel(), midiKey(), 0, nullptr, m_midiSource);
+		event.setInternalBusHops(m_internalBusHops);
 		m_instrumentTrack->processOutEvent(
-				MidiEvent( MidiNoteOff, midiChannel(), midiKey(), 0 ),
+				event,
 				TimePos::fromFrames( _s, Engine::framesPerTick() ),
 				_s );
 	}
@@ -569,9 +579,11 @@ void NotePlayHandle::sendMidiPitchBend(f_cnt_t offset)
 		return;
 	}
 
+	MidiEvent event(MidiPitchBend, midiChannel(),
+			m_instrumentTrack->midiPitch(currentDetuning()), 0, nullptr, m_midiSource);
+	event.setInternalBusHops(m_internalBusHops);
 	m_instrumentTrack->processOutEvent(
-			MidiEvent(MidiPitchBend, midiChannel(),
-					m_instrumentTrack->midiPitch(currentDetuning())),
+			event,
 			TimePos::fromFrames(offset, Engine::framesPerTick()), offset);
 }
 
@@ -652,7 +664,9 @@ NotePlayHandle * NotePlayHandleManager::acquire( InstrumentTrack* instrumentTrac
 				const Note& noteToPlay,
 				NotePlayHandle* parent,
 				int midiEventChannel,
-				NotePlayHandle::Origin origin )
+				NotePlayHandle::Origin origin,
+				MidiEvent::Source midiSource,
+				uint8_t internalBusHops )
 {
 	// TODO: use some lockless data structures
 	s_mutex.lockForWrite();
@@ -660,7 +674,8 @@ NotePlayHandle * NotePlayHandleManager::acquire( InstrumentTrack* instrumentTrac
 	NotePlayHandle * nph = s_available[s_availableIndex--];
 	s_mutex.unlock();
 
-	new( (void*)nph ) NotePlayHandle( instrumentTrack, offset, frames, noteToPlay, parent, midiEventChannel, origin );
+	new( (void*)nph ) NotePlayHandle(instrumentTrack, offset, frames, noteToPlay,
+			parent, midiEventChannel, origin, midiSource, internalBusHops);
 	return nph;
 }
 

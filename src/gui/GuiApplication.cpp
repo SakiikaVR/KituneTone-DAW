@@ -39,9 +39,11 @@
 #include "PianoRoll.h"
 #include "ProjectNotes.h"
 #include "SongEditor.h"
+#include "SubWindow.h"
 
 #include <QApplication>
 #include <QDebug>
+#include <QPointer>
 #include <QDir>
 #include <QFontDatabase>
 #include <QtGlobal>
@@ -89,6 +91,19 @@ bool GuiApplication::isWayland()
 
 GuiApplication::GuiApplication()
 {
+	struct ConstructionGuard
+	{
+		GuiApplication* application;
+		bool committed = false;
+		~ConstructionGuard()
+		{
+			if (!committed && GuiApplication::s_instance == application)
+			{
+				GuiApplication::s_instance = nullptr;
+			}
+		}
+	} constructionGuard{this};
+
 	// Immediately register our SIGINT handler
 	createSocketNotifier();
 
@@ -215,10 +230,43 @@ GuiApplication::GuiApplication()
 	m_mainWindow->finalize();
 
 	m_loadingProgressLabel = nullptr;
+	constructionGuard.committed = true;
 }
 
 GuiApplication::~GuiApplication()
 {
+	// MainWindow owns tool plug-in views and their models. Destroy it while
+	// those views are still alive; deleting their detached wrappers first would
+	// leave MainWindow::m_tools containing dangling pointers.
+	delete m_mainWindow;
+
+	// Detached instrument/effect windows are no longer owned by MainWindow's
+	// MDI hierarchy.  Delete every such wrapper while its models and plug-ins
+	// still exist; destroyed() updates the known editor pointers below.
+	QList<QPointer<SubWindow>> detachedWindows;
+	for (QWidget* widget : QApplication::topLevelWidgets())
+	{
+		if (auto* subWindow = qobject_cast<SubWindow*>(widget))
+		{
+			detachedWindows.push_back(subWindow);
+		}
+	}
+	for (const auto& subWindow : detachedWindows)
+	{
+		// Deleting one plug-in window may synchronously close another. QPointer
+		// turns that entry null instead of leaving a stale snapshot pointer.
+		if (subWindow) { delete subWindow.data(); }
+	}
+
+	// Explicitly delete any known editor that survived either ownership path.
+	delete m_automationEditor;
+	delete m_pianoRoll;
+	delete m_patternEditor;
+	delete m_mixerView;
+	delete m_controllerRackView;
+	delete m_projectNotes;
+	delete m_microtunerConfig;
+	delete m_songEditor;
 	s_instance = nullptr;
 }
 

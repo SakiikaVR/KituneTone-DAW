@@ -505,10 +505,11 @@ void MidiClip::loadSettings( const QDomElement & _this )
         }
 
 	m_steps = _this.attribute( "steps" ).toInt();
-	if( m_steps == 0 )
+	if (m_steps <= 0)
 	{
 		m_steps = TimePos::stepsPerBar();
 	}
+	m_steps = std::min(m_steps, MaxSafeSteps);
 
 	checkType();
 
@@ -570,7 +571,7 @@ void MidiClip::clear()
 
 void MidiClip::addSteps()
 {
-	m_steps += TimePos::stepsPerBar();
+	m_steps = std::min(MaxSafeSteps, m_steps + TimePos::stepsPerBar());
 	updateLength();
 	emit dataChanged();
 }
@@ -578,6 +579,7 @@ void MidiClip::addSteps()
 void MidiClip::cloneSteps()
 {
 	int oldLength = m_steps;
+	if (oldLength > MaxSafeSteps / 2) { return; }
 	m_steps *= 2; // cloning doubles the track
 	for(int i = 0; i < oldLength; ++i )
 	{
@@ -669,8 +671,8 @@ void MidiClip::changeTimeSignature()
 		}
 	}
 	last_pos = last_pos.nextFullBar() * TimePos::ticksPerBar();
-	m_steps = std::max<tick_t>(TimePos::stepsPerBar(),
-				last_pos.getBar() * TimePos::stepsPerBar());
+	m_steps = std::clamp<tick_t>(last_pos.getBar() * TimePos::stepsPerBar(),
+				TimePos::stepsPerBar(), MaxSafeSteps);
 	updateLength();
 }
 

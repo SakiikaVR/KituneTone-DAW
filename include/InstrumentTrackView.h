@@ -25,6 +25,8 @@
 #ifndef LMMS_GUI_INSTRUMENT_TRACK_VIEW_H
 #define LMMS_GUI_INSTRUMENT_TRACK_VIEW_H
 
+#include <QPointer>
+
 #include "TrackView.h"
 
 #include "InstrumentTrack.h"
@@ -100,7 +102,10 @@ private:
 	static QPixmap determinePixmap(InstrumentTrack* instrumentTrack);
 
 private:
-	InstrumentTrackWindow * m_window;
+	// QPointer: the window may be destroyed before this view during shutdown
+	// (attached windows die with MainWindow, detached ones in the top-level
+	// sweep), so the pointer must self-null to avoid a double delete.
+	QPointer<InstrumentTrackWindow> m_window;
 
 	// widgets in track-settings-widget
 	TrackLabelButton * m_tlb;

@@ -74,7 +74,12 @@ public:
 		auto expected = ProcessingState::Queued;
 		if (m_state.compare_exchange_strong(expected, ProcessingState::InProgress))
 		{
-			doProcessing();
+			try { doProcessing(); }
+			catch (...)
+			{
+				m_state = ProcessingState::Done;
+				throw;
+			}
 			m_state = ProcessingState::Done;
 		}
 	}

@@ -26,11 +26,15 @@
 #ifndef LMMS_MIDI_PORT_H
 #define LMMS_MIDI_PORT_H
 
+#include <deque>
+
 #include <QString>
 #include <QList>
 #include <QMap>
+#include <QMutex>
 
 #include "Midi.h"
+#include "MidiEvent.h"
 #include "TimePos.h"
 #include "AutomatableModel.h"
 
@@ -38,7 +42,6 @@ namespace lmms
 {
 
 class MidiClient;
-class MidiEvent;
 class MidiEventProcessor;
 
 namespace gui
@@ -153,6 +156,16 @@ private slots:
 
 
 private:
+	struct QueuedInputEvent
+	{
+		MidiEvent event;
+		TimePos time;
+	};
+
+	void queueInternalEvent(const MidiEvent& event, const TimePos& time);
+	void drainInternalEvents();
+	static bool isReleaseEvent(const MidiEvent& event);
+
 	MidiClient* m_midiClient;
 	MidiEventProcessor* m_midiEventProcessor;
 
@@ -172,6 +185,11 @@ private:
 
 	Map m_readablePorts;
 	Map m_writablePorts;
+	QMutex m_internalQueueMutex;
+	std::deque<QueuedInputEvent> m_internalQueue;
+	bool m_internalDrainScheduled = false;
+	static constexpr std::size_t MaxInternalQueuedEvents = 4096;
+	static constexpr std::size_t InternalDrainBatchSize = 256;
 
 
 	friend class gui::ControllerConnectionDialog;

@@ -128,7 +128,16 @@ ClipView::ClipView( Clip * clip,
 			this, &ClipView::updatePosition);
 	connect( m_clip, SIGNAL(positionChanged()),
 			this, SLOT(updatePosition()));
-	connect( m_clip, SIGNAL(destroyedClip()), this, SLOT(close()));
+	connect(m_clip, &Clip::destroyedClip, this, [this] {
+		// Remove the view from both the track's list and QObject hierarchy
+		// immediately. QWidget::close() alone defers deletion and left a hidden
+		// view discoverable by selection code with a destroyed Clip pointer.
+		if (m_trackView) { m_trackView->getTrackContentWidget()->removeClipView(this); }
+		hide();
+		m_clip = nullptr;
+		setParent(nullptr);
+		deleteLater();
+	});
 	setModel( m_clip );
 	connect(m_clip, SIGNAL(colorChanged()), this, SLOT(update()));
 
@@ -154,11 +163,6 @@ ClipView::ClipView( Clip * clip,
 ClipView::~ClipView()
 {
 	delete m_hint;
-	// we have to give our track-container the focus because otherwise the
-	// op-buttons of our track-widgets could become focus and when the user
-	// presses space for playing song, just one of these buttons is pressed
-	// which results in unwanted effects
-	m_trackView->trackContainerView()->setFocus();
 }
 
 

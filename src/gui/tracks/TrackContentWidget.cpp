@@ -31,6 +31,7 @@
 #include <QMenu>
 #include <QMimeData>
 #include <QPainter>
+#include <QPointer>
 #include <QTimer>
 #include <QUrl>
 
@@ -572,11 +573,17 @@ bool TrackContentWidget::moveSampleClip(QDropEvent* de)
 	Engine::getSong()->setModified();
 
 	sourceView->setSelected(false);
-	QTimer::singleShot(0, this, [this, source, destination]() {
-		delete source;
+	QPointer<SampleClip> sourceGuard(source);
+	QPointer<SampleClip> destinationGuard(destination);
+	QTimer::singleShot(0, this, [this, sourceGuard, destinationGuard]() {
+		// Either clip (or its track) can disappear while this deferred move is
+		// waiting for Qt's drag loop to unwind.  QPointer prevents a double
+		// delete and avoids dereferencing a destination that no longer exists.
+		if (sourceGuard) { delete sourceGuard.data(); }
+		if (!destinationGuard) { return; }
 		for (ClipView* view : m_clipViews)
 		{
-			if (view->getClip() == destination)
+			if (view->getClip() == destinationGuard.data())
 			{
 				view->setSelected(true);
 				break;

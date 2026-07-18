@@ -248,17 +248,16 @@ MainWindow::~MainWindow()
 {
 	for( PluginView *view : m_tools )
 	{
-		delete view->model();
+		// ModelView's destructor still inspects its model, so the view must die
+		// before the separately-owned tool model.
+		Model* model = view->model();
 		delete view;
+		delete model;
 	}
-	// TODO: Close tools
-	// dependencies are such that the editors must be destroyed BEFORE Song is deletect in Engine::destroy
-	//   see issue #2015 on github
-	delete getGUI()->automationEditor();
-	delete getGUI()->pianoRoll();
-	delete getGUI()->songEditor();
-	// destroy engine which will do further cleanups etc.
-	Engine::destroy();
+	// GuiApplication owns the remaining top-level editors.  It destroys every
+	// GUI object first; main() then destroys Engine while QApplication is still
+	// alive.  Doing that work in this destructor body used to leave this
+	// window's child widgets and detached editors pointing at deleted models.
 }
 
 
