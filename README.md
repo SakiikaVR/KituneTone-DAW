@@ -60,21 +60,23 @@ XMLルート要素は `kitsunetone-project`、作成元は `KitsuneTone` とし�
 
 ホスト機能: 最大8チャンネル入出力、5系統のバス処理パイプライン、A/B状態比較、1×／2×／4×／8×オーバーサンプリング、Room EQ測定データのインポート
 
+各エフェクトの括弧内は、プラグイン画面上での表記(英語)です。
+
 | カテゴリ | 内容 |
 | --- | --- |
-| Analyzer(5種) | Level Meter、Oscilloscope、Spectrogram、Spectrum Analyzer、Stereo Meter |
-| Basics(8種) | Channel Divider、DC Offset、Matrix、MultiChannel Panel、Mute、Polarity Inversion、Stereo Balance、Volume |
-| Delay(2種) | Delay、Time Alignment |
-| Dynamics(10種) | Auto Leveler、Brickwall Limiter、Compressor、Expander、Gate、Multiband Compressor、Multiband Expander、Multiband Transient、Power Amp Sag、Transient Shaper |
-| EQ(14種) | 15Band GEQ、15Band PEQ、5Band Dynamic EQ、5Band PEQ、Band Pass Filter、Comb Filter、Earphone Cable Sim、Hi Pass Filter、Lo Pass Filter、Loudness Equalizer、Narrow Range、Room EQ、Tilt EQ、Tone Control |
-| Lo-Fi(8種) | Bit Crusher、Digital Error Emulator、DSD64 IMD Simulator、Hum Generator、Noise Blender、Simple Jitter、Vinyl Artifacts、Vinyl Simulator |
-| Modulation(4種) | Doppler Distortion、Pitch Shifter、Tremolo、Wow Flutter |
-| Others(1種) | Oscillator |
-| Resonator(3種) | Horn Resonator、Horn Resonator Plus、Modal Resonator |
-| Reverb(4種) | Dattorro Plate Reverb、FDN Reverb、IR Reverb、RS Reverb |
-| Saturation(7種) | Dynamic Saturation、Exciter、Hard Clipping、Harmonic Distortion、Multiband Saturation、Saturation、Sub Synth |
-| Spatial(4種) | Crossfeed Filter、MS Matrix、Multiband Balance、Stereo Blend |
-| Control(1種) | Section |
+| アナライザー(5種) | レベルメーター(Level Meter)、オシロスコープ(Oscilloscope)、スペクトログラム(Spectrogram)、スペクトラムアナライザー(Spectrum Analyzer)、ステレオメーター(Stereo Meter) |
+| 基本(8種) | チャンネルディバイダー(Channel Divider)、DCオフセット(DC Offset)、マトリクス(Matrix)、マルチチャンネルパネル(MultiChannel Panel)、ミュート(Mute)、極性反転(Polarity Inversion)、ステレオバランス(Stereo Balance)、ボリューム(Volume) |
+| ディレイ(2種) | ディレイ(Delay)、タイムアライメント(Time Alignment) |
+| ダイナミクス(10種) | オートレベラー(Auto Leveler)、ブリックウォールリミッター(Brickwall Limiter)、コンプレッサー(Compressor)、エキスパンダー(Expander)、ゲート(Gate)、マルチバンドコンプレッサー(Multiband Compressor)、マルチバンドエキスパンダー(Multiband Expander)、マルチバンドトランジェント(Multiband Transient)、パワーアンプ電源サグ(Power Amp Sag)、トランジェントシェイパー(Transient Shaper) |
+| EQ(14種) | 15バンドグラフィックEQ(15Band GEQ)、15バンドパラメトリックEQ(15Band PEQ)、5バンドダイナミックEQ(5Band Dynamic EQ)、5バンドパラメトリックEQ(5Band PEQ)、バンドパスフィルター(Band Pass Filter)、コムフィルター(Comb Filter)、イヤホンケーブルシミュレーター(Earphone Cable Sim)、ハイパスフィルター(Hi Pass Filter)、ローパスフィルター(Lo Pass Filter)、ラウドネスイコライザー(Loudness Equalizer)、ナローレンジ(Narrow Range)、ルームEQ(Room EQ)、ティルトEQ(Tilt EQ)、トーンコントロール(Tone Control) |
+| ローファイ(8種) | ビットクラッシャー(Bit Crusher)、デジタルエラーエミュレーター(Digital Error Emulator)、DSD64混変調シミュレーター(DSD64 IMD Simulator)、ハムノイズ生成(Hum Generator)、ノイズブレンダー(Noise Blender)、ジッター(Simple Jitter)、レコードノイズ(Vinyl Artifacts)、レコード再生シミュレーター(Vinyl Simulator) |
+| モジュレーション(4種) | ドップラー歪み(Doppler Distortion)、ピッチシフター(Pitch Shifter)、トレモロ(Tremolo)、ワウフラッター(Wow Flutter) |
+| その他(1種) | オシレーター(Oscillator) |
+| レゾネーター(3種) | ホーンレゾネーター(Horn Resonator)、ホーンレゾネーター+(Horn Resonator Plus)、モーダルレゾネーター(Modal Resonator) |
+| リバーブ(4種) | プレートリバーブ(Dattorro Plate Reverb)、FDNリバーブ(FDN Reverb)、IRリバーブ(IR Reverb)、RSリバーブ(RS Reverb) |
+| サチュレーション(7種) | ダイナミックサチュレーション(Dynamic Saturation)、エキサイター(Exciter)、ハードクリッピング(Hard Clipping)、倍音歪み(Harmonic Distortion)、マルチバンドサチュレーション(Multiband Saturation)、サチュレーション(Saturation)、サブシンセ(Sub Synth) |
+| 空間系(4種) | クロスフィードフィルター(Crossfeed Filter)、MSマトリクス(MS Matrix)、マルチバンドバランス(Multiband Balance)、ステレオブレンド(Stereo Blend) |
+| 制御(1種) | セクション(Section) |
 
 ## ソースからのビルド
 
