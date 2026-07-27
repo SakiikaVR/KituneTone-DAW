@@ -79,7 +79,9 @@ export class PluginListManager {
             
             // Add indicator and text to title
             categoryTitle.appendChild(collapseIndicator);
-            categoryTitle.appendChild(document.createTextNode(category));
+            const localizedCategory = window.kitsuneLocalizedCategoryName
+                ? window.kitsuneLocalizedCategoryName(category) : category;
+            categoryTitle.appendChild(document.createTextNode(localizedCategory));
             
             // Add click event to toggle category
             categoryTitle.addEventListener('click', () => {
@@ -155,7 +157,8 @@ export class PluginListManager {
         const item = document.createElement('div');
         item.className = 'plugin-item';
         item.draggable = true;
-        item.textContent = plugin.name;
+        item.textContent = window.kitsuneLocalizedPluginName
+            ? window.kitsuneLocalizedPluginName(plugin.name) : plugin.name;
         
         const description = document.createElement('div');
         description.className = 'plugin-description';
