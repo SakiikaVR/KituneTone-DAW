@@ -5,7 +5,23 @@
 // this is a pure display-layer annotation.
 (function () {
     'use strict';
-    const active = (navigator.language || '').toLowerCase().startsWith('ja');
+    const SETTING_KEY = 'kitsune_furigana';
+    // Follows the plug-in's own language setting, falling back to the browser
+    // locale before uiManager exists.
+    function japanese() {
+        const lang = window.uiManager?.userLanguage || navigator.language || '';
+        return lang.toLowerCase().startsWith('ja');
+    }
+    function furiganaEnabled() {
+        try {
+            return window.localStorage.getItem(SETTING_KEY) !== 'off';
+        } catch (e) {
+            return true;   // storage blocked: keep the default
+        }
+    }
+    function active() {
+        return japanese() && furiganaEnabled();
+    }
     const names = {
         'Level Meter': 'レベルメーター',
         'Oscilloscope': 'オシロスコープ',
@@ -99,7 +115,7 @@
     // English text when inactive/unknown. Returns nothing; replaces content.
     function applyRuby(element, englishName, reading) {
         while (element.firstChild) { element.removeChild(element.firstChild); }
-        if (active && reading) {
+        if (active() && reading) {
             const ruby = document.createElement('ruby');
             ruby.className = 'kitsune-name';
             ruby.appendChild(document.createTextNode(englishName));
@@ -122,7 +138,18 @@
     window.kitsuneLocalizedPluginName = function (name) { return name; };
     window.kitsuneLocalizedCategoryName = function (name) { return name; };
 
-    if (active && document.head) {
+    // Settings API used by the Config dialog.
+    window.kitsuneFuriganaAvailable = japanese;
+    window.kitsuneFuriganaEnabled = furiganaEnabled;
+    window.kitsuneSetFurigana = function (enabled) {
+        try {
+            window.localStorage.setItem(SETTING_KEY, enabled ? 'on' : 'off');
+        } catch (e) { /* storage blocked: applies to this session only */ }
+        // Re-render the effect list, category headers and pipeline items.
+        window.uiManager?.refreshDynamicLocalizedUI?.();
+    };
+
+    if (document.head) {
         const style = document.createElement('style');
         style.textContent =
             'ruby.kitsune-name { ruby-position: over; }\n' +

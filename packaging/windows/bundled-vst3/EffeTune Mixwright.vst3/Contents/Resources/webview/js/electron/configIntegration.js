@@ -211,6 +211,12 @@ export async function showConfigDialog(isElectron, currentConfig) {
             <label class="section-label" for="language-select" id="config-language-label"></label>
             <select id="language-select" class="config-select"></select>
           </div>
+          <div class="device-section" id="kitsune-furigana-section" ${window.kitsuneFuriganaAvailable?.() ? '' : 'hidden'}>
+            <div class="checkbox-container">
+              <input type="checkbox" id="kitsune-furigana" ${window.kitsuneFuriganaEnabled?.() !== false ? 'checked' : ''}>
+              <label for="kitsune-furigana" id="kitsune-furigana-label">エフェクト名にふりがなを表示</label>
+            </div>
+          </div>
           <div class="device-section">
             <label class="section-label" id="config-startup-view-label"></label>
             <div class="radio-container">
@@ -815,6 +821,17 @@ export async function showConfigDialog(isElectron, currentConfig) {
         await window.uiManager.setLanguagePreference(language, { persist: false });
         renderDialogTexts();
       }
+      // The furigana option only applies to the Japanese UI.
+      const furiganaSection = document.getElementById('kitsune-furigana-section');
+      if (furiganaSection) {
+        furiganaSection.hidden = !window.kitsuneFuriganaAvailable?.();
+      }
+    });
+  }
+  const furiganaCheckbox = document.getElementById('kitsune-furigana');
+  if (furiganaCheckbox) {
+    furiganaCheckbox.addEventListener('change', e => {
+      window.kitsuneSetFurigana?.(e.target.checked);
     });
   }
   function closeDialog() {
