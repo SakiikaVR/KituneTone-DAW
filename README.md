@@ -51,7 +51,30 @@ XMLルート要素は `kitsunetone-project`、作成元は `KitsuneTone` とし�
 - パターン内の複数MIDI／サンプル／オートメーションクリップと明示的小節数設定
 - 常時最大表示のトラックエディター、クリップの複数選択・複製・分割
 - ミキサー、エフェクトチェーン、コントローラーラック、プロジェクトノート
+- 多機能エフェクトプラグイン「EffeTune Mixwright」を標準搭載(下記参照)
 - Noto Sans／Noto Sans JP、日本語UI、アクセントカラーテーマ
+
+## 内蔵エフェクト: EffeTune Mixwright
+
+[EffeTune Mixwright](https://github.com/Frieve-A/effetune-mixwright)(Frieve作、MITライセンス)をVST3エフェクトとして同梱しています。エフェクトチェインの「追加」から選択すると、1つのプラグイン画面の中で下記71種のエフェクト・ツールを自由に組み合わせてチェインを構築できます。
+
+ホスト機能: 最大8チャンネル入出力、5系統のバス処理パイプライン、A/B状態比較、1×／2×／4×／8×オーバーサンプリング、Room EQ測定データのインポート
+
+| カテゴリ | 内容 |
+| --- | --- |
+| Analyzer(5種) | Level Meter、Oscilloscope、Spectrogram、Spectrum Analyzer、Stereo Meter |
+| Basics(8種) | Channel Divider、DC Offset、Matrix、MultiChannel Panel、Mute、Polarity Inversion、Stereo Balance、Volume |
+| Delay(2種) | Delay、Time Alignment |
+| Dynamics(10種) | Auto Leveler、Brickwall Limiter、Compressor、Expander、Gate、Multiband Compressor、Multiband Expander、Multiband Transient、Power Amp Sag、Transient Shaper |
+| EQ(14種) | 15Band GEQ、15Band PEQ、5Band Dynamic EQ、5Band PEQ、Band Pass Filter、Comb Filter、Earphone Cable Sim、Hi Pass Filter、Lo Pass Filter、Loudness Equalizer、Narrow Range、Room EQ、Tilt EQ、Tone Control |
+| Lo-Fi(8種) | Bit Crusher、Digital Error Emulator、DSD64 IMD Simulator、Hum Generator、Noise Blender、Simple Jitter、Vinyl Artifacts、Vinyl Simulator |
+| Modulation(4種) | Doppler Distortion、Pitch Shifter、Tremolo、Wow Flutter |
+| Others(1種) | Oscillator |
+| Resonator(3種) | Horn Resonator、Horn Resonator Plus、Modal Resonator |
+| Reverb(4種) | Dattorro Plate Reverb、FDN Reverb、IR Reverb、RS Reverb |
+| Saturation(7種) | Dynamic Saturation、Exciter、Hard Clipping、Harmonic Distortion、Multiband Saturation、Saturation、Sub Synth |
+| Spatial(4種) | Crossfeed Filter、MS Matrix、Multiband Balance、Stereo Blend |
+| Control(1種) | Section |
 
 ## ソースからのビルド
 
