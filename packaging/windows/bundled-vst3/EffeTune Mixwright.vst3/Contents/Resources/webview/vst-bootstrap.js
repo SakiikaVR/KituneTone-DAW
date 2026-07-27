@@ -18,6 +18,7 @@
     .config-dialog .config-dialog-content { display: block !important; }
     .config-dialog .device-section { display: none !important; }
     .config-dialog .device-section:has(#language-select) { display: block !important; }
+    .config-dialog .device-section:has(#kitsune-furigana):not([hidden]) { display: block !important; }
     .config-dialog .config-dialog-power-column { display: none !important; }
     .vst-os-controls {
       display: inline-flex;
