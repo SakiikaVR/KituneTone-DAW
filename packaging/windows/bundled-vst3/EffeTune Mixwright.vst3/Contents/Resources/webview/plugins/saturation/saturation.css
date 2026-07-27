@@ -1,0 +1,9 @@
+/* Saturation plugin specific styles */
+.saturation-plugin-ui {
+    position: relative;
+}
+
+.saturation-plugin-ui canvas {
+    margin: 10px auto;
+    display: block;
+}

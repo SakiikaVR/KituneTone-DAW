@@ -1,0 +1,76 @@
+.matrix-plugin-ui {
+}
+
+.matrix-table-wrapper {
+    width: 100%;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+}
+
+.matrix-table {
+    border-collapse: collapse;
+    width: 100%;
+    table-layout: fixed;
+}
+
+/* On mobile the 9-column table cannot fit 375px; let it keep a usable width
+   and scroll horizontally inside the wrapper instead of crushing the cells. */
+body.layout-mobile .matrix-table {
+    table-layout: auto;
+    width: max-content;
+    min-width: 860px;
+}
+
+body.layout-mobile .matrix-button {
+    min-width: 40px;
+    min-height: 40px;
+    font-size: 16px;
+}
+
+.matrix-table th, .matrix-table td {
+    border: 1px solid #444;
+    padding: 6px;
+    text-align: center;
+}
+
+.matrix-table th {
+    background-color: #333;
+    color: #fff;
+}
+
+.matrix-table td {
+    vertical-align: middle;
+}
+
+.matrix-button {
+    border: 1px solid #606060;
+    border-radius: 4px;
+    background-color: #808080;
+    margin: 2px;
+    padding: 4px 6px;
+    color: white;
+    border-radius: 3px;
+    cursor: pointer;
+    min-width: 30px;
+}
+
+.matrix-button.active {
+    background-color: #4CAF50;
+}
+
+.matrix-button.phase-button {
+    font-weight: bold;
+}
+
+.matrix-button.phase-button.active {
+    background-color: #aa0000;
+}
+
+.matrix-table .disabled {
+    opacity: 0.5;
+    background-color: #333;
+}
+
+.matrix-table button:disabled {
+    cursor: not-allowed;
+} 

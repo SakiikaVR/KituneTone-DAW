@@ -1,0 +1,129 @@
+{
+  "pipeline": [
+    {
+      "name": "Pitch Shifter",
+      "enabled": true,
+      "parameters": {
+        "ps": -6,
+        "ft": 0,
+        "ws": 150,
+        "xf": 35
+      }
+    },
+    {
+      "name": "Pitch Shifter",
+      "enabled": true,
+      "parameters": {
+        "ps": -6,
+        "ft": 0,
+        "ws": 150,
+        "xf": 35
+      }
+    },
+    {
+      "name": "Pitch Shifter",
+      "enabled": true,
+      "parameters": {
+        "ps": -6,
+        "ft": 0,
+        "ws": 150,
+        "xf": 35
+      }
+    },
+    {
+      "name": "Pitch Shifter",
+      "enabled": true,
+      "parameters": {
+        "ps": -6,
+        "ft": 0,
+        "ws": 150,
+        "xf": 35
+      }
+    },
+    {
+      "name": "Pitch Shifter",
+      "enabled": true,
+      "parameters": {
+        "ps": -6,
+        "ft": 0,
+        "ws": 150,
+        "xf": 35
+      }
+    },
+    {
+      "name": "Pitch Shifter",
+      "enabled": true,
+      "parameters": {
+        "ps": -6,
+        "ft": 0,
+        "ws": 150,
+        "xf": 35
+      }
+    },
+    {
+      "name": "Pitch Shifter",
+      "enabled": true,
+      "parameters": {
+        "ps": -6,
+        "ft": 0,
+        "ws": 150,
+        "xf": 35
+      }
+    },
+    {
+      "name": "Pitch Shifter",
+      "enabled": true,
+      "parameters": {
+        "ps": -6,
+        "ft": 0,
+        "ws": 150,
+        "xf": 35
+      }
+    },
+    {
+      "name": "5Band PEQ",
+      "enabled": true,
+      "parameters": {
+        "f0": 1160.3669775524222,
+        "g0": 0.16363636363636316,
+        "q0": 0.7,
+        "t0": "hp",
+        "e0": true,
+        "f1": 1160.3669775524222,
+        "g1": 0.08181818181818158,
+        "q1": 0.7,
+        "t1": "hp",
+        "e1": true,
+        "f2": 1160.3669775524222,
+        "g2": 0,
+        "q2": 0.7,
+        "t2": "hp",
+        "e2": true,
+        "f3": 2519.8420997897433,
+        "g3": -0.2454545454545473,
+        "q3": 1,
+        "t3": "bp",
+        "e3": true,
+        "f4": 5072.308078524662,
+        "g4": -0.08181818181818414,
+        "q4": 0.7,
+        "t4": "lp",
+        "e4": true
+      }
+    },
+    {
+      "name": "Volume",
+      "enabled": true,
+      "parameters": {
+        "vl": 24
+      }
+    },
+    {
+      "name": "Volume",
+      "enabled": true,
+      "parameters": {
+        "vl": 12
+      }
+    }
+  ]
+}

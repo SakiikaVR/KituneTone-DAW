@@ -1,0 +1,28 @@
+/* Gate plugin specific styles */
+.gate-plugin-ui {
+    position: relative;
+}
+
+.gate-plugin-ui canvas {
+    margin: 10px auto;
+    display: block;
+}
+
+.gate-plugin-ui .graph-label {
+    position: absolute;
+    color: #888;
+    font-size: 12px;
+}
+
+.gate-plugin-ui .graph-label.in {
+    bottom: 0;
+    left: 50%;
+    transform: translateX(-50%);
+}
+
+.gate-plugin-ui .graph-label.out {
+    left: 0;
+    top: 50%;
+    transform: translateY(-50%) rotate(-90deg);
+    transform-origin: left center;
+}

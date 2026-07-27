@@ -1,0 +1,44 @@
+/* Tone Control plugin specific styles */
+.tone-control-plugin-ui {
+    position: relative;
+}
+
+.tone-control-plugin-ui canvas {
+    margin: 10px auto;
+    display: block;
+    background: #222;
+}
+
+.tone-control-plugin-ui label {
+    min-width: 100px;
+}
+
+.tone-control-plugin-ui .parameter-row {
+    margin-bottom: 10px;
+}
+
+.tone-control-plugin-ui input[type="number"] {
+    width: 70px;
+    margin-left: 10px;
+}
+
+body.layout-mobile .tone-control-plugin-ui input[type="number"] {
+    min-width: 80px;
+    box-sizing: border-box;
+}
+
+.tone-control-plugin-ui .eq-reset-button {
+    position: absolute;
+    right: 10px;
+    bottom: 10px;
+    padding: 5px 15px;
+    background-color: #444;
+    color: #fff;
+    border: 1px solid #666;
+    border-radius: 4px;
+    cursor: pointer;
+}
+
+.tone-control-plugin-ui .eq-reset-button:hover {
+    background-color: #555;
+}

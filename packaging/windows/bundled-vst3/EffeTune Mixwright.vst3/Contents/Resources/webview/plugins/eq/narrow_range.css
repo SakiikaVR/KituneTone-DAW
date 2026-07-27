@@ -1,0 +1,50 @@
+/* Narrow Range plugin specific styles */
+.narrow-range-plugin-ui {
+    position: relative;
+}
+
+.narrow-range-plugin-ui canvas {
+    margin: 10px auto;
+    display: block;
+    background: #222;
+}
+
+.narrow-range-plugin-ui label {
+    min-width: 120px;
+}
+
+.narrow-range-plugin-ui .slope-select {
+    padding: 2px;
+    background: #333;
+    color: #ccc;
+    border: 1px solid #555;
+    border-radius: 3px;
+    font-size: 12px;
+    width: 90px;
+    cursor: pointer;
+}
+
+.narrow-range-plugin-ui .slope-select:focus {
+    outline: none;
+    border-color: #777;
+}
+
+.narrow-range-plugin-ui .slope-select option {
+    background: #333;
+    color: #ccc;
+    padding: 2px;
+}
+
+.narrow-range-plugin-ui .parameter-row {
+    display: flex;
+    align-items: center;
+}
+
+.narrow-range-plugin-ui .parameter-row input[type="range"] {
+    flex: 1;
+}
+
+.narrow-range-plugin-ui .parameter-row input[type="number"] {
+    width: 80px;
+    text-align: right;
+}

@@ -1,0 +1,54 @@
+{
+  "pipeline": [
+    {
+      "name": "Bit Crusher",
+      "enabled": true,
+      "parameters": {
+        "bd": 16,
+        "td": false,
+        "zf": 44100,
+        "be": 2,
+        "sd": 11
+      }
+    },
+    {
+      "name": "Simple Jitter",
+      "enabled": true,
+      "parameters": {
+        "rj": 100
+      }
+    },
+    {
+      "name": "5Band PEQ",
+      "enabled": true,
+      "parameters": {
+        "f0": 100,
+        "g0": 0,
+        "q0": 1,
+        "t0": "pk",
+        "e0": true,
+        "f1": 20000,
+        "g1": -9.40909090909091,
+        "q1": 0.7,
+        "t1": "lp",
+        "e1": true,
+        "f2": 20000,
+        "g2": 1.636363636363637,
+        "q2": 0.9,
+        "t2": "lp",
+        "e2": true,
+        "f3": 20000,
+        "g3": 5.5636363636363635,
+        "q3": 0.9,
+        "t3": "lp",
+        "e3": true,
+        "f4": 20000,
+        "g4": 9.163636363636362,
+        "q4": 0.9,
+        "t4": "lp",
+        "e4": true
+      },
+      "channel": "A"
+    }
+  ]
+}

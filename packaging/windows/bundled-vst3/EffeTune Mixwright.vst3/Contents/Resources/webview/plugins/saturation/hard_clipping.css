@@ -1,0 +1,28 @@
+/* Hard Clipping plugin specific styles */
+.hard-clipping-plugin-ui {
+    position: relative;
+}
+
+.hard-clipping-plugin-ui canvas {
+    margin: 10px auto;
+    display: block;
+}
+
+.hard-clipping-plugin-ui .graph-label {
+    position: absolute;
+    color: #888;
+    font-size: 12px;
+}
+
+.hard-clipping-plugin-ui .graph-label.in {
+    bottom: 0;
+    left: 50%;
+    transform: translateX(-50%);
+}
+
+.hard-clipping-plugin-ui .graph-label.out {
+    left: 0;
+    top: 50%;
+    transform: translateY(-50%) rotate(-90deg);
+    transform-origin: left center;
+}

@@ -1,0 +1,161 @@
+.multichannel-panel-ui {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.multichannel-panel-channel-container {
+    background: #2d2d2d;
+    border-radius: 4px;
+    padding: 10px;
+}
+
+.multichannel-panel-channel-row {
+    display: flex;
+    align-items: center;
+}
+
+.multichannel-panel-channel-header {
+    gap: 5px;
+    margin-bottom: 2px;
+}
+
+.multichannel-panel-channel-controls {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+}
+
+.multichannel-panel-channel-label, .multichannel-panel-channel-space {
+    width: 40px;
+    font-weight: bold;
+    display: block;
+}
+
+.multichannel-panel-level-meter {
+    flex-grow: 1;
+    border: 1px solid #555;
+}
+
+.multichannel-panel-button-controls {
+    display: flex;
+    gap: 2px;
+}
+
+.multichannel-panel-link-button, .multichannel-panel-mute-button, .multichannel-panel-solo-button {
+    font-size: 12px;
+    font-weight: bold;
+    cursor: pointer;
+    justify-content: center; 
+    align-items: center; 
+    display: flex;
+    color: #fff;
+    border: 1px solid #606060;
+    border-radius: 4px;
+    background-color: #808080;
+}
+
+.multichannel-panel-link-button {
+    margin: 0px 17px;
+    position: relative;
+    top: 24px;
+}
+
+.multichannel-panel-mute-button, .multichannel-panel-solo-button {
+    padding: 8px 10px;
+}
+
+.multichannel-panel-ui input[type="range"] {
+    width: 100px;
+    flex-grow: 1;
+}
+
+.multichannel-panel-ui input[type="number"] {
+    width: 80px;
+    padding: 4px;
+    background-color: #3d3d3d;
+    border: 1px solid #4d4d4d;
+    color: #ffffff;
+    border-radius: 4px;
+}
+
+.multichannel-panel-ui label {
+    margin-right: 5px;
+    min-width: 80px;
+}
+
+body.layout-mobile .multichannel-panel-ui,
+body.layout-mobile .multichannel-panel-channel-container {
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    box-sizing: border-box;
+    overflow-x: hidden;
+    overflow-x: clip;
+}
+
+body.layout-mobile .multichannel-panel-channel-header {
+    min-width: 0;
+}
+
+body.layout-mobile .multichannel-panel-level-meter {
+    flex: 1 1 0;
+    width: auto;
+    min-width: 0;
+}
+
+body.layout-mobile .multichannel-panel-channel-controls {
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px 8px;
+}
+
+body.layout-mobile .multichannel-panel-channel-space {
+    flex: 0 0 40px;
+}
+
+body.layout-mobile .multichannel-panel-button-controls {
+    flex: 0 0 auto;
+}
+
+body.layout-mobile .multichannel-panel-link-button,
+body.layout-mobile .multichannel-panel-mute-button,
+body.layout-mobile .multichannel-panel-solo-button {
+    width: 40px !important;
+    height: 40px !important;
+    min-width: 40px;
+    min-height: 40px;
+    padding: 0;
+    font-size: 16px;
+    line-height: 1;
+}
+
+body.layout-mobile .multichannel-panel-link-button {
+    margin: 0 !important;
+    position: static !important;
+    top: auto !important;
+}
+
+body.layout-mobile .multichannel-panel-ui label {
+    flex: 0 0 72px;
+    min-width: 0;
+    margin-right: 0;
+}
+
+body.layout-mobile .multichannel-panel-ui input[type="range"] {
+    flex: 1 1 var(--et-mobile-effect-slider-basis);
+    width: auto;
+    min-width: var(--et-mobile-effect-slider-min-width);
+    max-width: 100%;
+}
+
+body.layout-mobile .multichannel-panel-ui input[type="number"] {
+    flex: 0 0 var(--et-mobile-field-min-width);
+    height: var(--et-mobile-control-height) !important;
+    min-height: var(--et-mobile-control-height);
+    width: var(--et-mobile-field-min-width) !important;
+    min-width: var(--et-mobile-field-min-width);
+    max-width: var(--et-mobile-field-min-width);
+    box-sizing: border-box;
+    font-size: 16px;
+}

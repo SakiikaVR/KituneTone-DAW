@@ -1,0 +1,75 @@
+/* Modal Resonator plugin specific styles */
+.modal-resonator-container {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+    width: 100%;
+}
+
+/* Band settings area */
+.modal-resonator-frame {
+    background: #2d2d2d;
+    border-radius: 4px;
+    padding: 10px;
+    margin-bottom: 10px;
+}
+
+.modal-resonator-tabs {
+    display: flex;
+    gap: 2px;
+    margin-bottom: 20px;
+}
+
+.modal-resonator-tab {
+    padding: 8px 16px;
+    background: #333;
+    border: none;
+    cursor: pointer;
+    border-radius: 4px 4px 0 0;
+    color: #fff;
+}
+
+.modal-resonator-tab.active {
+    background: #444;
+}
+
+/* Content panel styles */
+.modal-resonator-content {
+    display: none;
+    width: 100%;
+}
+
+.modal-resonator-content.active {
+    display: block;
+}
+
+/* Ensure resonator content is full-width */
+.modal-resonator-content .plugin-parameter-ui {
+    width: 100%;
+}
+
+/* Checkbox styles */
+.modal-resonator-container input[type="checkbox"] {
+    width: auto;
+}
+
+body.layout-mobile .modal-resonator-container,
+body.layout-mobile .modal-resonator-frame {
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    box-sizing: border-box;
+    overflow-x: hidden;
+    overflow-x: clip;
+}
+
+body.layout-mobile .modal-resonator-tabs {
+    flex-wrap: wrap;
+    gap: 4px;
+}
+
+body.layout-mobile .modal-resonator-tab {
+    flex: 1 1 56px;
+    min-width: 0;
+    min-height: 40px;
+}

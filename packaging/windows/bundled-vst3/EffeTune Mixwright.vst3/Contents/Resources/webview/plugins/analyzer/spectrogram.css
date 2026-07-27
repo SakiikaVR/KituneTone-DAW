@@ -1,0 +1,46 @@
+.plugin-parameter-ui .radio-label {
+    margin-right: 15px;
+    cursor: pointer;
+}
+
+.plugin-parameter-ui .radio-label input[type="radio"] {
+    margin-right: 5px;
+}
+
+.plugin-parameter-ui .graph-container {
+    margin-top: 20px;
+}
+
+.plugin-parameter-ui canvas {
+    background-color: #1a1a1a;
+}
+
+.plugin-parameter-ui .analyzer-reset-button {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    padding: 5px 15px;
+    background-color: #444;
+    color: #fff;
+    border: none;
+    border-radius: 3px;
+    cursor: pointer;
+}
+
+.plugin-parameter-ui .analyzer-reset-button:hover {
+    background-color: #555;
+}
+
+body.layout-mobile .plugin-parameter-ui .analyzer-reset-button {
+    min-height: 40px;
+    min-width: 64px;
+    padding: 8px 14px;
+}
+
+/* Responsive support */
+@media (max-width: 1024px) {
+    .plugin-parameter-ui canvas {
+        width: 100%;
+        height: auto;
+    }
+}

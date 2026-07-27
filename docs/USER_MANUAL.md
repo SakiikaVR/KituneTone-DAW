@@ -1,6 +1,6 @@
-# 狐Tone 2.2.2 全機能説明書
+# 狐Tone 2.3.0 全機能説明書
 
-この説明書はWindows 10／11向け正式版「狐Tone 2.2.2」のユーザー操作をまとめたものです。狐ToneはVST3専用DAWであり、LMMS内蔵音源、LADSPA、LV2、VST2には対応しません。
+この説明書はWindows 10／11向け正式版「狐Tone 2.3.0」のユーザー操作をまとめたものです。狐ToneはVST3専用DAWであり、LMMS内蔵音源、LADSPA、LV2、VST2には対応しません。
 
 ## 目次
 
@@ -27,7 +27,7 @@
 
 ### インストーラ版
 
-1. GitHub Releasesから `KitsuneTone-2.2.2-win64-setup.exe` を取得します。
+1. GitHub Releasesから `KitsuneTone-2.3.0-win64-setup.exe` を取得します。
 2. インストーラを起動してインストール先を選びます。
 3. スタートメニューの「狐Tone」から起動します。
 
@@ -35,14 +35,14 @@
 
 ### ポータブル版
 
-1. `KitsuneTone-2.2.2-win64-portable.zip` を任意のフォルダーへ展開します。
+1. `KitsuneTone-2.3.0-win64-portable.zip` を任意のフォルダーへ展開します。
 2. 展開先の `KitsuneTone.exe` を起動します。
 
 ZIP内の一部だけを移動せず、`plugins`、`VST3`、`data`、Qt DLLを含む構成を保ってください。
 
 ### VST3の検索場所
 
-狐ToneはWindowsの共通VST3フォルダー、ユーザー側のVST3フォルダー、狐Tone本体と同じ場所にある `VST3` フォルダーを検索します。付属のTriangleSynthもVST3として読み込まれます。新しくインストールしたVST3が出ない場合は狐Toneを再起動してください。
+狐ToneはWindowsの共通VST3フォルダー、ユーザー側のVST3フォルダー、狐Tone本体と同じ場所にある `VST3` フォルダーを検索します。付属のTriangleSynth(音源)とEffeTune Mixwright(エフェクト、Frieve作・MITライセンス)もVST3として読み込まれます。新しくインストールしたVST3が出ない場合は狐Toneを再起動してください。
 
 ## 2. 画面構成
 
@@ -393,7 +393,7 @@ PortAudioまたはSDLの出力、バックエンド、出力デバイス、サ�
 
 ## 17. 互換性と制限事項
 
-- 狐Tone 2.2.2は64-bit Windows向けです。
+- 狐Tone 2.3.0は64-bit Windows向けです。
 - プラグイン形式はVST3のみです。
 - LMMSの `.mmp`、`.mmpz`、`.mpt` は開けません。
 - 狐Toneの `.ktp`、`.ktpz`、`.ktt` はLMMSとの互換性がありません。

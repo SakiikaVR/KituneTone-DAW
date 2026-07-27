@@ -1,0 +1,56 @@
+/* Exciter plugin specific styles */
+.exciter-plugin-ui {
+    position: relative;
+}
+
+.exciter-plugin-ui .slope-select {
+    padding: 2px;
+    background: #333;
+    color: #ccc;
+    border: 1px solid #555;
+    border-radius: 3px;
+    font-size: 12px;
+    width: 100%;
+    max-width: 120px;
+    cursor: pointer;
+}
+
+.exciter-plugin-ui .slope-select:focus {
+    outline: none;
+    border-color: #777;
+}
+
+.exciter-plugin-ui .slope-select option {
+    background: #333;
+    color: #ccc;
+    padding: 2px;
+}
+
+.exciter-plugin-ui .graphs-container {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-top: 10px;
+    justify-content: center;
+    align-items: flex-start;
+}
+
+.exciter-plugin-ui .exciter-hpf-graph {
+    flex: 3 1 360px;
+}
+
+.exciter-plugin-ui .exciter-saturation-graph {
+    flex: 1 1 180px;
+}
+
+.exciter-plugin-ui canvas {
+    display: block;
+    border: 1px solid #333;
+    box-sizing: border-box;
+}
+
+body.layout-mobile .exciter-plugin-ui .graphs-container {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+}

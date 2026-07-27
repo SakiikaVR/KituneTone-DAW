@@ -1,0 +1,60 @@
+{
+  "pipeline": [
+    {
+      "name": "Stereo Blend",
+      "enabled": true,
+      "parameters": {
+        "stereo": 0
+      }
+    },
+    {
+      "name": "Volume",
+      "enabled": true,
+      "parameters": {
+        "vl": -12.1
+      }
+    },
+    {
+      "name": "Saturation",
+      "enabled": true,
+      "parameters": {
+        "dr": 4.3,
+        "bs": -0.1,
+        "mx": 100,
+        "gn": 2.9
+      }
+    },
+    {
+      "name": "Narrow Range",
+      "enabled": true,
+      "parameters": {
+        "hf": 183,
+        "hs": -12,
+        "lf": 1500,
+        "ls": -12
+      }
+    },
+    {
+      "name": "Noise Blender",
+      "enabled": true,
+      "parameters": {
+        "nt": "white",
+        "lv": -36,
+        "pc": false
+      }
+    },
+    {
+      "name": "Wow Flutter",
+      "enabled": true,
+      "parameters": {
+        "rt": 0.5,
+        "dp": 4.9,
+        "rn": 39.4,
+        "rc": 2.5,
+        "rs": -6,
+        "cp": 0,
+        "cs": 100
+      }
+    }
+  ]
+}

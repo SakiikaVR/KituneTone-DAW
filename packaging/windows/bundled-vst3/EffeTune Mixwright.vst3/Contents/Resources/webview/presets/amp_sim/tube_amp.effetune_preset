@@ -1,0 +1,62 @@
+{
+  "pipeline": [
+    {
+      "name": "Volume",
+      "enabled": true,
+      "parameters": {
+        "vl": -10
+      }
+    },
+    {
+      "name": "Saturation",
+      "enabled": true,
+      "parameters": {
+        "dr": 1.9,
+        "bs": -0.1,
+        "mx": 100,
+        "gn": 4
+      }
+    },
+    {
+      "name": "Power Amp Sag",
+      "enabled": true,
+      "parameters": {
+        "ss": 3,
+        "ps": 40,
+        "rs": 50,
+        "mb": true
+      }
+    },
+    {
+      "name": "5Band PEQ",
+      "enabled": true,
+      "parameters": {
+        "f0": 101.47202016208712,
+        "g0": 5.727272727272729,
+        "q0": 1,
+        "t0": "pk",
+        "e0": true,
+        "f1": 316,
+        "g1": 0,
+        "q1": 1,
+        "t1": "pk",
+        "e1": true,
+        "f2": 1000,
+        "g2": 0,
+        "q2": 1,
+        "t2": "pk",
+        "e2": true,
+        "f3": 3160,
+        "g3": 0,
+        "q3": 1,
+        "t3": "pk",
+        "e3": true,
+        "f4": 10000,
+        "g4": 0,
+        "q4": 1,
+        "t4": "pk",
+        "e4": true
+      }
+    }
+  ]
+}

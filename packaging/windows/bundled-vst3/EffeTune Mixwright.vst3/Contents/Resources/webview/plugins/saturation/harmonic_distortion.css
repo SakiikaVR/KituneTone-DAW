@@ -1,0 +1,28 @@
+/* Harmonic Distortion plugin specific styles */
+.harmonic-distortion-plugin-ui {
+    position: relative;
+}
+
+.harmonic-distortion-plugin-ui canvas {
+    margin: 10px auto;
+    display: block;
+}
+
+.harmonic-distortion-plugin-ui .graph-label {
+    position: absolute;
+    color: #888;
+    font-size: 12px;
+}
+
+.harmonic-distortion-plugin-ui .graph-label.in {
+    bottom: 0;
+    left: 50%;
+    transform: translateX(-50%);
+}
+
+.harmonic-distortion-plugin-ui .graph-label.out {
+    left: 0;
+    top: 50%;
+    transform: translateY(-50%) rotate(-90deg);
+    transform-origin: left center;
+} 

@@ -1,0 +1,94 @@
+{
+  "pipeline": [
+    {
+      "name": "Volume",
+      "enabled": true,
+      "parameters": {
+        "vl": -3.5
+      }
+    },
+    {
+      "name": "Stereo Blend",
+      "enabled": true,
+      "parameters": {
+        "stereo": 130
+      }
+    },
+    {
+      "name": "Multiband Compressor",
+      "enabled": true,
+      "parameters": {
+        "f1": 100,
+        "f2": 500,
+        "f3": 2000,
+        "f4": 8000,
+        "bands": [
+          {
+            "t": -20,
+            "r": 4,
+            "a": 30,
+            "rl": 150,
+            "k": 6,
+            "g": -1,
+            "gr": 0
+          },
+          {
+            "t": -22,
+            "r": 3,
+            "a": 20,
+            "rl": 120,
+            "k": 4,
+            "g": 0,
+            "gr": 0
+          },
+          {
+            "t": -25,
+            "r": 2.5,
+            "a": 15,
+            "rl": 80,
+            "k": 4,
+            "g": 1,
+            "gr": 0
+          },
+          {
+            "t": -28,
+            "r": 2,
+            "a": 10,
+            "rl": 60,
+            "k": 3,
+            "g": 1.5,
+            "gr": 0
+          },
+          {
+            "t": -18,
+            "r": 5,
+            "a": 5,
+            "rl": 40,
+            "k": 2,
+            "g": -2,
+            "gr": 0
+          }
+        ]
+      }
+    },
+    {
+      "name": "Saturation",
+      "enabled": true,
+      "parameters": {
+        "dr": 1.5,
+        "bs": 0.1,
+        "mx": 100,
+        "gn": 0
+      }
+    },
+    {
+      "name": "Noise Blender",
+      "enabled": true,
+      "parameters": {
+        "nt": "white",
+        "lv": -48,
+        "pc": true
+      }
+    }
+  ]
+}

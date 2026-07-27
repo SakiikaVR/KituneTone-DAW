@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self' blob: data:; script-src 'self' 'unsafe-inline' 'unsafe-eval' blob:; connect-src 'self' blob:; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline' blob:;">
+    <title>EffeTune Mixwright</title>
+
+    <!-- SEO Meta Tags -->
+    <meta name="description" content="A real-time audio effect processor for audio enthusiasts. Features professional-grade effects, drag-and-drop interface, live visualization, and multi-channel processing.">
+    <meta name="keywords" content="audio effects, real-time audio processing, equalizer, compressor, reverb, audio visualization, music enhancement, audio processor, VST alternative, web audio">
+    <meta name="author" content="Frieve">
+    <meta name="robots" content="index, follow">
+    <link rel="canonical" href="https://effetune.frieve.com/effetune.html">
+
+    <!-- Open Graph / Facebook -->
+    <meta property="og:type" content="website">
+    <meta property="og:url" content="https://effetune.frieve.com/effetune.html">
+    <meta property="og:title" content="EffeTune Mixwright - Real-time Audio Effect Processor">
+    <meta property="og:description" content="A real-time audio effect processor for audio enthusiasts. Features professional-grade effects, drag-and-drop interface, and live visualization.">
+    <meta property="og:image" content="https://effetune.frieve.com/images/screenshot.png">
+    <meta property="og:image:width" content="1200">
+    <meta property="og:image:height" content="630">
+    <meta property="og:site_name" content="EffeTune Mixwright">
+    <meta property="og:locale" content="en_US">
+
+    <!-- Twitter Card -->
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:site" content="@frievea">
+    <meta name="twitter:creator" content="@frievea">
+    <meta name="twitter:title" content="EffeTune Mixwright - Real-time Audio Effect Processor">
+    <meta name="twitter:description" content="A real-time audio effect processor for audio enthusiasts. Features professional-grade effects, drag-and-drop interface, and live visualization.">
+    <meta name="twitter:image" content="https://effetune.frieve.com/images/screenshot.png">
+
+    <!-- Structured Data -->
+    <script type="application/ld+json">
+    {
+        "@context": "https://schema.org",
+        "@type": "SoftwareApplication",
+        "name": "EffeTune Mixwright",
+        "description": "A real-time audio effect processor designed for audio enthusiasts to enhance their music listening experience.",
+        "url": "https://effetune.frieve.com",
+        "applicationCategory": "MultimediaApplication",
+        "operatingSystem": "Windows, macOS, Linux, Web Browser",
+        "offers": {
+            "@type": "Offer",
+            "price": "0",
+            "priceCurrency": "USD"
+        },
+        "author": {
+            "@type": "Organization",
+            "name": "Frieve",
+            "url": "https://www.frieve.com"
+        },
+        "screenshot": "https://effetune.frieve.com/images/screenshot.png",
+        "downloadUrl": "https://github.com/Frieve-A/effetune/releases/",
+        "featureList": [
+            "Real-time audio processing",
+            "Drag-and-drop effect chain builder",
+            "Live audio visualization",
+            "Professional-grade audio effects",
+            "Multi-channel processing",
+            "Frequency response measurement"
+        ],
+        "sameAs": [
+            "https://github.com/Frieve-A/effetune",
+            "https://www.youtube.com/@frieveamusic"
+        ]
+    }
+    </script>
+
+    <link rel="stylesheet" href="effetune.css">
+    <link rel="icon" href="images/favicon.ico" type="image/x-icon">
+    <link rel="icon" href="images/icon_192x192.png" type="image/png" sizes="192x192">
+    <link rel="apple-touch-icon" sizes="180x180" href="images/icon_180x180.png">
+    <link rel="apple-touch-icon" sizes="192x192" href="images/icon_192x192.png">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="theme-color" content="#000000">
+    <script>
+        // Capture the PWA install prompt as early as possible so the browser's
+        // default mini-infobar is suppressed and we can trigger installation
+        // from the settings menu instead.
+        (function() {
+            window.deferredInstallPrompt = window.deferredInstallPrompt || null;
+            window.addEventListener('beforeinstallprompt', function(event) {
+                event.preventDefault();
+                window.deferredInstallPrompt = event;
+                window.dispatchEvent(new Event('pwa-install-available'));
+            });
+            window.addEventListener('appinstalled', function() {
+                window.deferredInstallPrompt = null;
+                window.dispatchEvent(new Event('pwa-install-completed'));
+            });
+        })();
+    </script>
+    <script src="vst-bootstrap.js"></script>
+</head>
+<body>
+    <script>
+        // Apply the Web startup view preference before the effect pipeline markup can paint.
+        (function() {
+            if (window.electronAPI) {
+                return;
+            }
+
+            try {
+                var params = new URLSearchParams(window.location.search || '');
+                if (params.has('p') || params.has('dbt')) {
+                    return;
+                }
+
+                var rawConfig = window.localStorage && window.localStorage.getItem('effetune_app_config');
+                var config = rawConfig ? JSON.parse(rawConfig) : null;
+                if (config && config.startupView === 'library') {
+                    document.body.classList.add('view-library');
+                }
+            } catch (error) {
+                // Startup view is optional; invalid or unavailable storage falls back to Effect Pipeline.
+            }
+        })();
+    </script>
+    <div class="title-container">
+        <h1>EffeTune Mixwright<img src="images/icon_64x64.png" class="title-icon" alt="EffeTune Mixwright Icon" draggable="false"><div class="message-display" id="errorDisplay">Loading...</div></h1>
+        <div class="header-buttons">
+            <button class="header-button open-music-button" id="openMusicButton" title="Open music files"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" draggable="false"><path d="M6 14.5 7.7 11a2 2 0 0 1 1.8-1.1H21a1.5 1.5 0 0 1 1.45 1.9l-1.6 5.7A2 2 0 0 1 18.95 19H4a2 2 0 0 1-2-2V5.5a2 2 0 0 1 2-2h3.7a2 2 0 0 1 1.66.9l.74 1.1a2 2 0 0 0 1.66.9H18a2 2 0 0 1 2 2v1.7"/></svg></button>
+            <button class="header-button view-switch-button effect-pipeline-button active" id="effectPipelineButton" title="Effect Pipeline" aria-label="Effect Pipeline" aria-pressed="true"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" draggable="false"><rect x="3" y="4" width="7" height="6" rx="1.5"/><rect x="14" y="4" width="7" height="6" rx="1.5"/><rect x="3" y="14" width="7" height="6" rx="1.5"/><rect x="14" y="14" width="7" height="6" rx="1.5"/><path d="M10 7h4M10 17h4M6.5 10v4M17.5 10v4"/></svg></button>
+            <button class="header-button view-switch-button open-library-button" id="openLibraryButton" title="Music Library" aria-label="Music Library" aria-pressed="false"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" draggable="false"><path d="M4 19.5V5.2A2.2 2.2 0 0 1 6.2 3H20v16H6.2A2.2 2.2 0 0 0 4 21.2"/><path d="M8 7h8M8 11h6M8 15h7"/></svg></button>
+            <div class="settings-menu-container">
+                <button class="header-button settings-menu-button" id="settingsMenuButton" title="Settings" aria-label="Settings"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" draggable="false"><path d="M12 15.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7z"/><path d="M19.4 15a1.7 1.7 0 0 0 .34 1.88l.05.05a2 2 0 0 1-2.83 2.83l-.05-.05a1.7 1.7 0 0 0-1.88-.34 1.7 1.7 0 0 0-1.03 1.56V21a2 2 0 0 1-4 0v-.07A1.7 1.7 0 0 0 8.97 19.4a1.7 1.7 0 0 0-1.88.34l-.05.05a2 2 0 1 1-2.83-2.83l.05-.05A1.7 1.7 0 0 0 4.6 15a1.7 1.7 0 0 0-1.56-1.03H3a2 2 0 0 1 0-4h.07A1.7 1.7 0 0 0 4.6 8.97a1.7 1.7 0 0 0-.34-1.88l-.05-.05a2 2 0 1 1 2.83-2.83l.05.05A1.7 1.7 0 0 0 8.97 4.6 1.7 1.7 0 0 0 10 3.07V3a2 2 0 0 1 4 0v.07a1.7 1.7 0 0 0 1.03 1.53 1.7 1.7 0 0 0 1.88-.34l.05-.05a2 2 0 1 1 2.83 2.83l-.05.05A1.7 1.7 0 0 0 19.4 8.97 1.7 1.7 0 0 0 20.93 10H21a2 2 0 0 1 0 4h-.07A1.7 1.7 0 0 0 19.4 15z"/></svg></button>
+                <div class="settings-menu" id="settingsMenu">
+                    <button type="button" class="settings-menu-item" data-power-resume-action hidden>Resume audio processing</button>
+                    <button class="settings-menu-item" id="configSettingsButton">Config</button>
+                    <button class="settings-menu-item" id="audioConfigSettingsButton">Audio Configuration</button>
+                    <button class="settings-menu-item" id="benchmarkSettingsButton">Performance Benchmark</button>
+                    <button class="settings-menu-item" id="measurementSettingsButton">Frequency Response Measurement</button>
+                    <button class="settings-menu-item" id="resetAudioSettingsButton">Reset Audio</button>
+                    <install class="settings-menu-install" id="installAppElement" hidden></install>
+                    <button type="button" class="settings-menu-item" id="installAppButton" hidden>Install App</button>
+                </div>
+            </div>
+        </div>
+        <div class="subtitle-container">
+            <button class="header-button sidebar-button" id="sidebarButton" title="Toggle plugin list"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" draggable="false"><rect x="3" y="4" width="18" height="16" rx="2.2"/><path d="M9.5 4v16"/><path d="M5.6 8h1.6"/><path d="M5.6 11h1.6"/><path d="M5.6 14h1.6"/></svg></button>
+            <span class="subtitle">Color the music, unleash your senses. Craft your own signature sound.</span>
+            <a href="javascript:void(0);" class="whats-this" id="whatsThisLink">What's this app?</a>
+        </div>
+    </div>
+    <div class="header">
+    </div>
+
+    <div class="main-container">
+        <div class="plugin-list" id="pluginList">
+            <div class="plugin-list-header">
+                <div class="tab-switcher" id="tabSwitcher">
+                    <button class="tab-button active" id="effectsTab">Effects</button>
+                    <button class="tab-button" id="systemPresetsTab">S.Presets</button>
+                    <button class="tab-button" id="userPresetsTab">U.Preset</button>
+                </div>
+                <h2 id="availableEffectsTitle" style="display: none;">Available Effects</h2>
+                <input type="text" id="effectSearchInput" class="effect-search-input" placeholder="Search effects..." style="display: none;">
+                <button type="button" class="input-clear-button effect-search-clear-button" id="effectSearchClearButton" title="Clear search" aria-label="Clear search">&times;</button>
+                <button class="header-button search-button" id="effectSearchButton" title="Search effects"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" draggable="false"><circle cx="10.5" cy="10.5" r="6.2"/><path d="M20 20l-4.9-4.9"/></svg></button>
+            </div>
+            <!-- Plugin list will be populated by JavaScript -->
+        </div>
+        <div class="plugin-list-pull-tab" id="pluginListPullTab">◀</div>
+
+        <div class="pipeline" id="pipeline">
+            <div class="pipeline-header">
+                <button class="toggle-button master-toggle" title="Toggle all effects">ON</button>
+                <span class="pipeline-title">Effect Pipeline</span>
+                <div class="pipeline-toggle-container">
+                    <button class="header-button pipeline-toggle-button" id="pipelineToggleButton" title="Toggle A/B (T)">A</button>
+                    <div class="pipeline-menu-container">
+                        <button class="header-button pipeline-menu-button" id="pipelineMenuButton" title="Pipeline menu">▼</button>
+                        <div class="pipeline-menu" id="pipelineMenu">
+                            <button class="pipeline-menu-item" id="copyAToBButton">A → B</button>
+                            <button class="pipeline-menu-item" id="copyBToAButton">B → A</button>
+                        </div>
+                    </div>
+                </div>
+                <div class="sample-rate" id="sampleRate"></div>
+                <div class="pipeline-header-right">
+                    <button class="header-button undo-button" id="undoButton" title="Undo">↶</button>
+                    <button class="header-button redo-button" id="redoButton" title="Redo">↷</button>
+                    <button class="header-button cut-button" id="cutButton" title="Cut settings"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" draggable="false"><circle cx="6" cy="6" r="2.6"/><circle cx="6" cy="18" r="2.6"/><path d="M8.2 7.7 20 19.5"/><path d="M20 4.5 8.2 16.3"/><path d="M11.5 12 13 13.2"/></svg></button>
+                    <button class="header-button copy-button" id="copyButton" title="Copy settings"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" draggable="false"><rect x="8.5" y="8.5" width="12" height="12" rx="2.2"/><path d="M4.5 15.5A2 2 0 0 1 3 13.5v-9a2 2 0 0 1 2-2h9a2 2 0 0 1 2 1.9"/></svg></button>
+                    <button class="header-button paste-button" id="pasteButton" title="Paste settings"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" draggable="false"><rect x="8" y="2.5" width="8" height="4" rx="1.2"/><path d="M16 4.5h2a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-12a2 2 0 0 1 2-2h2"/></svg></button>
+                    <div class="pipeline-preset-controls">
+                        <div class="select-container preset-combobox" id="presetSelectContainer">
+                            <input type="text" class="preset-select" id="presetSelect" role="combobox" aria-autocomplete="list" aria-controls="presetList" aria-expanded="false" placeholder="" autocomplete="off" autocapitalize="none" autocorrect="off" spellcheck="false">
+                            <button type="button" class="input-clear-button preset-clear-button" id="presetClearButton" title="Clear preset name" aria-label="Clear preset name">&times;</button>
+                            <button type="button" class="preset-dropdown-button" id="presetDropdownButton" aria-label="Show preset list" aria-controls="presetList" aria-expanded="false">▼</button>
+                            <div class="preset-list" id="presetList" role="listbox"></div>
+                        </div>
+                        <button class="header-button save-button" id="savePresetButton" title="Save preset"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" draggable="false"><path d="M15.2 3.5a2 2 0 0 1 1.4.6l3.3 3.3a2 2 0 0 1 .6 1.4V18.5a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-13a2 2 0 0 1 2-2z"/><path d="M16.5 20.5v-6a1 1 0 0 0-1-1h-7a1 1 0 0 0-1 1v6"/><path d="M8 3.5v3.2a1 1 0 0 0 1 1h5"/></svg></button>
+                        <button class="header-button delete-preset-button" id="deletePresetButton" title="Delete preset"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" draggable="false"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+                        <button class="header-button share-button" id="shareButton" title="Share pipeline">Share</button>
+                    </div>
+                    <button class="column-control-button" id="decreaseColumnsButton" title="Decrease columns"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" draggable="false"><path d="M5.5 12h13"/></svg></button>
+                    <button class="column-control-button" id="increaseColumnsButton" title="Increase columns"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" draggable="false"><path d="M12 5.5v13M5.5 12h13"/></svg></button>
+                </div>
+            </div>
+            <div id="pipelineList">
+                <div class="pipeline-empty" id="pipelineEmpty">
+                    Drag plugins here to build your effect pipeline
+                </div>
+                <!-- Columns and plugin items will be added here by JS -->
+            </div>
+        </div>
+    </div>
+    <script type="module" src="js/app.js"></script>
+    <div style="text-align: center; margin-top: 20px; color: #666; font-size: 12px;">
+        EffeTune Mixwright version <span id="app-version"></span> (C) Frieve 2025, 2026
+    </div>
+</body>
+</html>

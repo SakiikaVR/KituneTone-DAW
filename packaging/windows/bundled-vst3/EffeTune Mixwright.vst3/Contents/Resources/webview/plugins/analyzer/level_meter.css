@@ -1,0 +1,50 @@
+/* Level Meter plugin */
+.level-meter-plugin-ui {
+    position: relative;
+    width: 100%;
+    max-width: 1024px; /* Match canvas logical width */
+    padding: 0;
+    height: auto;
+    aspect-ratio: 16 / 1;
+}
+
+.level-meter-plugin-ui canvas {
+    width: 100%;
+    height: 100%;
+    display: block;
+    position: absolute;
+    top: 0;
+    left: 0;
+}
+
+.meter-background {
+    z-index: 1;
+}
+
+.meter-foreground {
+    opacity: 0.9;
+}
+
+.overload-indicator {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    padding: 4px 8px;
+    background-color: #ff6b6b;
+    color: #ffffff;
+    border-radius: 4px;
+    animation: blink 0.5s infinite;
+    z-index: 3;
+    white-space: nowrap;
+}
+
+@keyframes blink {
+    50% {
+        opacity: 0.5;
+    }
+}
+
+body.layout-mobile .level-meter-plugin-ui {
+    min-height: 42px;
+}

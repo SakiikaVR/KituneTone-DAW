@@ -1,0 +1,31 @@
+{
+  "pipeline": [
+    {
+      "name": "Mute",
+      "enabled": true,
+      "parameters": {},
+      "inputBus": 1,
+      "outputBus": 1
+    },
+    {
+      "name": "Noise Blender",
+      "enabled": true,
+      "parameters": {
+        "nt": "white",
+        "lv": -53.3,
+        "pc": true
+      },
+      "inputBus": 1,
+      "outputBus": 1
+    },
+    {
+      "name": "Hi Pass Filter",
+      "enabled": true,
+      "parameters": {
+        "fr": 40000,
+        "sl": -12
+      },
+      "inputBus": 1
+    }
+  ]
+}

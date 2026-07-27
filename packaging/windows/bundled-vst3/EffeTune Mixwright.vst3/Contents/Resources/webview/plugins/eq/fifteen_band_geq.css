@@ -1,0 +1,102 @@
+/* 15Band GEQ plugin specific styles */
+.fifteen-band-geq-plugin-ui {
+    position: relative;
+}
+
+.fifteen-band-geq-plugin-ui .fifteen-band-geq-radio-label {
+    margin-right: 15px;
+    cursor: pointer;
+}
+
+.fifteen-band-geq-plugin-ui .fifteen-band-geq-radio-label input {
+    margin-right: 5px;
+}
+
+.fifteen-band-geq-plugin-ui .parameter-row {
+    margin-bottom: 20px;
+}
+
+.fifteen-band-geq-plugin-ui .sliders-container {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: 20px;
+}
+
+.fifteen-band-geq-plugin-ui .slider-container {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    margin: 0 5px;
+    width: 50px;
+}
+
+.fifteen-band-geq-plugin-ui .freq-label {
+    font-size: 12px;
+    margin-bottom: 5px;
+    white-space: nowrap;
+    text-align: center;
+}
+
+.fifteen-band-geq-plugin-ui .value-display {
+    font-size: 12px;
+    margin-top: 5px;
+    white-space: nowrap;
+    width: 50px;
+    text-align: center;
+}
+
+.fifteen-band-geq-plugin-ui .vertical-slider {
+    writing-mode: vertical-lr;
+    direction: rtl;
+    width: 20px;
+    height: 200px;
+    margin: 0;
+    padding: 0;
+}
+
+body.layout-mobile .fifteen-band-geq-plugin-ui .sliders-container {
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 12px 6px;
+}
+
+body.layout-mobile .fifteen-band-geq-plugin-ui .slider-container {
+    flex: 0 1 46px;
+    width: 46px;
+    margin: 0;
+}
+
+body.layout-mobile .fifteen-band-geq-plugin-ui .value-display {
+    width: 46px;
+}
+
+body.layout-mobile .fifteen-band-geq-plugin-ui .vertical-slider {
+    height: 160px;
+}
+
+.fifteen-band-geq-plugin-ui canvas {
+    margin: 10px auto;
+    display: block;
+    background: #222;
+}
+
+.fifteen-band-geq-plugin-ui .graph-container {
+    margin-top: 0;
+}
+
+.fifteen-band-geq-plugin-ui .eq-reset-button {
+    position: absolute;
+    right: 10px;
+    bottom: 10px;
+    padding: 5px 15px;
+    background-color: #444;
+    color: #fff;
+    border: 1px solid #666;
+    border-radius: 4px;
+    cursor: pointer;
+}
+
+.fifteen-band-geq-plugin-ui .eq-reset-button:hover {
+    background-color: #555;
+}

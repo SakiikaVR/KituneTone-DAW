@@ -1,0 +1,144 @@
+/* Styles for FiveBandDynamicEQ Plugin */
+
+/* Base container inherits standard padding etc. from .plugin-container */
+.five-band-dynamic-eq-plugin-ui {
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+}
+
+.five-band-dynamic-eq-container {
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+    gap: 10px;
+}
+
+.fbdyn-band-settings {
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+    background: #2d2d2d;
+    border-radius: 4px;
+    overflow: hidden;
+}
+
+.fbdyn-band-tabs {
+    display: flex;
+    gap: 2px;
+    margin-bottom: 10px;
+    padding: 10px 10px 0;
+}
+
+.fbdyn-band-tab {
+    padding: 8px 16px;
+    background: #333;
+    border: none;
+    cursor: pointer;
+    border-radius: 4px 4px 0 0;
+    color: #fff;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.fbdyn-band-tab.active {
+    background: #444;
+}
+
+.fbdyn-band-tab.disabled {
+    opacity: 0.5;
+}
+
+.fbdyn-band-tab-checkbox {
+    margin-right: 5px;
+}
+
+.fbdyn-band-contents {
+    padding: 10px;
+    background-color: #2d2d2d;
+}
+
+.fbdyn-band-content {
+    display: none;
+}
+
+.fbdyn-band-content.active {
+    display: flex;
+    flex-direction: column;
+}
+
+/* Styles for two-column layout */
+.fbdyn-two-columns {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 15px;
+    width: 100%;
+}
+
+.fbdyn-column {
+    display: flex;
+    flex-direction: column;
+}
+
+.fbdyn-column .parameter-row {
+    margin: 2px 0;
+}
+
+/* Graph Area - match 5-band PEQ */
+.fbdyn-graph {
+    width: 100%;
+    height: 100%;
+    background-color: #1a1a1a;
+    border: 1px solid #333;
+    border-radius: 4px;
+    position: relative;
+    overflow: hidden;
+    margin-top: 0;
+    margin-bottom: 0;
+}
+
+.fbdyn-graph canvas {
+    display: block;
+    width: 100%;
+    height: 100%;
+}
+
+body.layout-mobile .five-band-dynamic-eq-plugin-ui,
+body.layout-mobile .fbdyn-band-settings {
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    box-sizing: border-box;
+    overflow-x: hidden;
+    overflow-x: clip;
+}
+
+body.layout-mobile .fbdyn-band-tabs {
+    flex-wrap: wrap;
+    gap: 4px;
+}
+
+body.layout-mobile .fbdyn-band-tab {
+    flex: 1 1 56px;
+    min-width: 0;
+    min-height: 40px;
+}
+
+body.layout-mobile .fbdyn-two-columns {
+    grid-template-columns: 1fr !important;
+}
+
+body.layout-mobile .fbdyn-graph {
+    aspect-ratio: 2 / 1;
+}
+
+:root {
+    --graph-background-color: #1a1a1a;
+    --graph-grid-color: #333;
+    --graph-text-color: #666;
+    --graph-line-color-primary-rgb: 0, 200, 0;   /* Dynamic EQ curve (dark green) */
+    --graph-line-color-secondary-rgb: 160, 160, 160; /* Sidechain filter (gray) */
+    --graph-line-color-tertiary-rgb: 120, 220, 120;  /* Static EQ curve (light green) */
+}

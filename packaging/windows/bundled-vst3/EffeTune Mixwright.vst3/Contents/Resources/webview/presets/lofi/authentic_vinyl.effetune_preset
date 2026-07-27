@@ -1,0 +1,168 @@
+{
+  "pipeline": [
+    {
+      "name": "Narrow Range",
+      "enabled": true,
+      "parameters": {
+        "hf": 20,
+        "hs": 0,
+        "lf": 8400,
+        "ls": -6
+      }
+    },
+    {
+      "name": "MS Matrix",
+      "enabled": true,
+      "parameters": {
+        "md": 0,
+        "mg": 0,
+        "sg": 0,
+        "sw": 0
+      }
+    },
+    {
+      "name": "5Band PEQ",
+      "enabled": true,
+      "parameters": {
+        "f0": 81.56369426401018,
+        "g0": 0.1818181818181813,
+        "q0": 0.71,
+        "t0": "hp",
+        "e0": true,
+        "f1": 316,
+        "g1": 0,
+        "q1": 1,
+        "t1": "pk",
+        "e1": true,
+        "f2": 1000,
+        "g2": 0,
+        "q2": 1,
+        "t2": "pk",
+        "e2": true,
+        "f3": 3160,
+        "g3": 0,
+        "q3": 1,
+        "t3": "pk",
+        "e3": true,
+        "f4": 10000,
+        "g4": 0,
+        "q4": 1,
+        "t4": "pk",
+        "e4": true
+      },
+      "channel": "R"
+    },
+    {
+      "name": "MS Matrix",
+      "enabled": true,
+      "parameters": {
+        "md": 1,
+        "mg": 0,
+        "sg": 0,
+        "sw": 0
+      }
+    },
+    {
+      "name": "Multiband Saturation",
+      "enabled": true,
+      "parameters": {
+        "f1": 200,
+        "f2": 4000,
+        "bands": [
+          {
+            "dr": 1.5,
+            "bs": 0.1,
+            "mx": 50,
+            "gn": 0
+          },
+          {
+            "dr": 1.5,
+            "bs": 0.1,
+            "mx": 50,
+            "gn": 0
+          },
+          {
+            "dr": 1.5,
+            "bs": 0.1,
+            "mx": 50,
+            "gn": 0
+          }
+        ]
+      }
+    },
+    {
+      "name": "5Band PEQ",
+      "enabled": true,
+      "parameters": {
+        "f0": 20,
+        "g0": 18,
+        "q0": 1,
+        "t0": "pk",
+        "e0": true,
+        "f1": 316,
+        "g1": 0,
+        "q1": 1,
+        "t1": "pk",
+        "e1": true,
+        "f2": 1000,
+        "g2": 0,
+        "q2": 1,
+        "t2": "pk",
+        "e2": true,
+        "f3": 3160,
+        "g3": 0,
+        "q3": 1,
+        "t3": "pk",
+        "e3": true,
+        "f4": 10000,
+        "g4": 0,
+        "q4": 1,
+        "t4": "pk",
+        "e4": true
+      }
+    },
+    {
+      "name": "Wow Flutter",
+      "enabled": true,
+      "parameters": {
+        "rt": 0.5,
+        "dp": 0.3,
+        "rn": 2,
+        "rc": 5,
+        "rs": -6,
+        "cp": 0,
+        "cs": 100
+      }
+    },
+    {
+      "name": "Vinyl Artifacts",
+      "enabled": true,
+      "parameters": {
+        "pp": 20,
+        "pl": -24,
+        "cm": 500,
+        "cl": -33,
+        "hs": -42,
+        "rb": -50,
+        "xt": 60,
+        "tn": 0,
+        "wr": 100,
+        "rt": 25,
+        "rm": "Velocity",
+        "mx": 100
+      }
+    },
+    {
+      "name": "Hum Generator",
+      "enabled": true,
+      "parameters": {
+        "fr": 50,
+        "tp": "Standard",
+        "hm": 50,
+        "tn": 10,
+        "in": 1,
+        "lv": -65
+      }
+    }
+  ]
+}

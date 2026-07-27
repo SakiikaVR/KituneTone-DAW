@@ -1,0 +1,8 @@
+.dynamic-saturation-plugin-ui {
+    position: relative;
+}
+
+.dynamic-saturation-plugin-ui canvas {
+    margin: 10px auto;
+    display: block;
+}

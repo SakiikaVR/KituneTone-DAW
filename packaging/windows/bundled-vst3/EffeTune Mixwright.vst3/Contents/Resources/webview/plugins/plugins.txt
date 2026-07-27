@@ -1,0 +1,92 @@
+# Categories definition
+# Categories are sorted alphabetically
+[categories]
+Analyzer: Analysis tools
+Basics: Basic audio effects
+Delay: Delay effects
+Dynamics: Dynamic range effects
+EQ: Equalization effects
+Lo-Fi: Lo-Fi audio effects
+Modulation: Modulation effects
+Others: Other audio tools and generators
+Resonator: Resonator effects
+Reverb: Reverberation effects
+Saturation: Saturation and distortion effects
+Spatial: Spatial audio effects
+Control: Control tools
+
+# Plugin definitions
+# format: path: Display Name | Category | Class Name | Has CSS (optional)
+# Plugins are sorted by category, then alphabetically by path
+[plugins]
+analyzer/level_meter: Level Meter | Analyzer | LevelMeterPlugin | css
+analyzer/oscilloscope: Oscilloscope | Analyzer | OscilloscopePlugin | css
+analyzer/spectrogram: Spectrogram | Analyzer | SpectrogramPlugin | css
+analyzer/spectrum_analyzer: Spectrum Analyzer | Analyzer | SpectrumAnalyzerPlugin | css
+analyzer/stereo_meter: Stereo Meter | Analyzer | StereoMeterPlugin | css
+basics/channel_divider: Channel Divider | Basics | ChannelDividerPlugin | css
+basics/dc_offset: DC Offset | Basics | DCOffsetPlugin
+basics/matrix: Matrix | Basics | MatrixPlugin | css
+basics/multi_channel_panel: MultiChannel Panel | Basics | MultiChannelPanelPlugin | css
+basics/mute: Mute | Basics | MutePlugin
+basics/polarity_inversion: Polarity Inversion | Basics | PolarityInversionPlugin
+basics/stereo_balance: Stereo Balance | Basics | StereoBalancePlugin
+basics/volume: Volume | Basics | VolumePlugin
+delay/delay: Delay | Delay | DelayPlugin
+delay/time_alignment: Time Alignment | Delay | TimeAlignmentPlugin
+dynamics/auto_leveler: Auto Leveler | Dynamics | AutoLevelerPlugin | css
+dynamics/brickwall_limiter: Brickwall Limiter | Dynamics | BrickwallLimiterPlugin
+dynamics/compressor: Compressor | Dynamics | CompressorPlugin | css
+dynamics/expander: Expander | Dynamics | ExpanderPlugin | css
+dynamics/gate: Gate | Dynamics | GatePlugin | css
+dynamics/multiband_compressor: Multiband Compressor | Dynamics | MultibandCompressorPlugin | css
+dynamics/multiband_expander: Multiband Expander | Dynamics | MultibandExpanderPlugin | css
+dynamics/multiband_transient: Multiband Transient | Dynamics | MultibandTransientPlugin | css
+dynamics/power_amp_sag: Power Amp Sag | Dynamics | PowerAmpSagPlugin | css
+dynamics/transient_shaper: Transient Shaper | Dynamics | TransientShaperPlugin | css
+eq/fifteen_band_geq: 15Band GEQ | EQ | FifteenBandGEQPlugin | css
+eq/fifteen_band_peq: 15Band PEQ | EQ | FifteenBandPEQPlugin | css
+eq/five_band_dynamic_eq: 5Band Dynamic EQ | EQ | FiveBandDynamicEQ | css
+eq/five_band_peq: 5Band PEQ | EQ | FiveBandPEQPlugin | css
+eq/band_pass_filter: Band Pass Filter | EQ | BandPassFilterPlugin | css
+eq/comb_filter: Comb Filter | EQ | CombFilterPlugin | css
+eq/earphone_cable_sim: Earphone Cable Sim | EQ | EarphoneCableSimPlugin | css
+eq/hi_pass_filter: Hi Pass Filter | EQ | HiPassFilterPlugin | css
+eq/lo_pass_filter: Lo Pass Filter | EQ | LoPassFilterPlugin | css
+eq/loudness_equalizer: Loudness Equalizer | EQ | LoudnessEqualizerPlugin | css
+eq/narrow_range: Narrow Range | EQ | NarrowRangePlugin | css
+eq/room_eq: Room EQ | EQ | RoomEqPlugin | css
+eq/tilt_eq: Tilt EQ | EQ | TiltEQPlugin | css
+eq/tone_control: Tone Control | EQ | ToneControlPlugin | css
+lofi/bit_crusher: Bit Crusher | Lo-Fi | BitCrusherPlugin
+lofi/digital_error_emulator: Digital Error Emulator | Lo-Fi | DigitalErrorEmulatorPlugin
+lofi/dsd64_imd_simulator: DSD64 IMD Simulator | Lo-Fi | DSD64IMDSimulatorPlugin | css
+lofi/hum_generator: Hum Generator | Lo-Fi | HumGeneratorPlugin
+lofi/noise_blender: Noise Blender | Lo-Fi | NoiseBlenderPlugin
+lofi/simple_jitter: Simple Jitter | Lo-Fi | SimpleJitterPlugin
+lofi/vinyl_artifacts: Vinyl Artifacts | Lo-Fi | VinylArtifactsPlugin
+lofi/vinyl_simulator: Vinyl Simulator | Lo-Fi | VinylSimulatorPlugin | css
+modulation/doppler_distortion: Doppler Distortion | Modulation | DopplerDistortionPlugin
+modulation/pitch_shifter: Pitch Shifter | Modulation | PitchShifterPlugin
+modulation/tremolo: Tremolo | Modulation | TremoloPlugin
+modulation/wow_flutter: Wow Flutter | Modulation | WowFlutterPlugin
+others/oscillator: Oscillator | Others | OscillatorPlugin
+resonator/horn_resonator: Horn Resonator | Resonator | HornResonatorPlugin
+resonator/horn_resonator_plus: Horn Resonator Plus | Resonator | HornResonatorPlusPlugin
+resonator/modal_resonator: Modal Resonator | Resonator | ModalResonatorPlugin | css
+reverb/dattorro_plate_reverb: Dattorro Plate Reverb | Reverb | DattorroPlateReverbPlugin
+reverb/fdn_reverb: FDN Reverb | Reverb | FDNReverbPlugin
+reverb/ir_reverb: IR Reverb | Reverb | IRReverbPlugin | css
+reverb/rs_reverb: RS Reverb | Reverb | RSReverbPlugin
+saturation/dynamic_saturation: Dynamic Saturation | Saturation | DynamicSaturationPlugin | css
+saturation/exciter: Exciter | Saturation | ExciterPlugin | css
+saturation/hard_clipping: Hard Clipping | Saturation | HardClippingPlugin | css
+saturation/harmonic_distortion: Harmonic Distortion | Saturation | HarmonicDistortionPlugin | css
+saturation/multiband_saturation: Multiband Saturation | Saturation | MultibandSaturationPlugin | css
+saturation/saturation: Saturation | Saturation | SaturationPlugin | css
+saturation/sub_synth: Sub Synth | Saturation | SubSynthPlugin | css
+spatial/crossfeed_filter: Crossfeed Filter | Spatial | CrossfeedFilterPlugin
+spatial/ms_matrix: MS Matrix | Spatial | MSMatrixPlugin
+spatial/multiband_balance: Multiband Balance | Spatial | MultibandBalancePlugin | css
+spatial/stereo_blend: Stereo Blend | Spatial | StereoBlendPlugin
+control/section: Section | Control | SectionPlugin

@@ -1,0 +1,90 @@
+{
+  "pipeline": [
+    {
+      "name": "Stereo Blend",
+      "enabled": true,
+      "parameters": {
+        "stereo": 60
+      }
+    },
+    {
+      "name": "Multiband Saturation",
+      "enabled": true,
+      "parameters": {
+        "f1": 200,
+        "f2": 4000,
+        "bands": [
+          {
+            "dr": 1.5,
+            "bs": 0.1,
+            "mx": 50,
+            "gn": 0
+          },
+          {
+            "dr": 1.5,
+            "bs": 0.1,
+            "mx": 50,
+            "gn": 0
+          },
+          {
+            "dr": 1.5,
+            "bs": 0.1,
+            "mx": 50,
+            "gn": 0
+          }
+        ]
+      }
+    },
+    {
+      "name": "Narrow Range",
+      "enabled": true,
+      "parameters": {
+        "hf": 20,
+        "hs": -24,
+        "lf": 8400,
+        "ls": -6
+      }
+    },
+    {
+      "name": "Wow Flutter",
+      "enabled": true,
+      "parameters": {
+        "rt": 0.5,
+        "dp": 0.3,
+        "rn": 2,
+        "rc": 5,
+        "rs": -6,
+        "cp": 0,
+        "cs": 100
+      }
+    },
+    {
+      "name": "Tremolo",
+      "enabled": true,
+      "parameters": {
+        "rt": 10,
+        "dp": 0,
+        "rn": 50,
+        "rc": 13,
+        "rs": -6,
+        "cp": 0,
+        "cs": 100
+      }
+    },
+    {
+      "name": "RS Reverb",
+      "enabled": true,
+      "parameters": {
+        "pd": 10,
+        "rs": 10,
+        "rt": 2.4,
+        "ds": 8,
+        "df": 0.7,
+        "dp": 80,
+        "hd": 2000,
+        "ld": 200,
+        "mx": 16
+      }
+    }
+  ]
+}

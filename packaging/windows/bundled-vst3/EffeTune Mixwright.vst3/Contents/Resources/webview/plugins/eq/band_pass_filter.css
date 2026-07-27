@@ -1,0 +1,50 @@
+/* Band Pass Filter plugin specific styles */
+.band-pass-filter-plugin-ui {
+    position: relative;
+}
+
+.band-pass-filter-plugin-ui canvas {
+    margin: 10px auto;
+    display: block;
+    background: #222;
+}
+
+.band-pass-filter-plugin-ui label {
+    min-width: 120px;
+}
+
+.band-pass-filter-plugin-ui .slope-select {
+    padding: 2px;
+    background: #333;
+    color: #ccc;
+    border: 1px solid #555;
+    border-radius: 3px;
+    font-size: 12px;
+    width: 90px;
+    cursor: pointer;
+}
+
+.band-pass-filter-plugin-ui .slope-select:focus {
+    outline: none;
+    border-color: #777;
+}
+
+.band-pass-filter-plugin-ui .slope-select option {
+    background: #333;
+    color: #ccc;
+    padding: 2px;
+}
+
+.band-pass-filter-plugin-ui .parameter-row {
+    display: flex;
+    align-items: center;
+}
+
+.band-pass-filter-plugin-ui .parameter-row input[type="range"] {
+    flex: 1;
+}
+
+.band-pass-filter-plugin-ui .parameter-row input[type="number"] {
+    width: 80px;
+    text-align: right;
+}

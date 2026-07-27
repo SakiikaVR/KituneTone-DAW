@@ -1,0 +1,972 @@
+const OSCILLOSCOPE_TAP_SCOPE_SNAPSHOT = 3;
+const OSCILLOSCOPE_TELEMETRY_VERSION = 2;
+const OSCILLOSCOPE_MAX_RAW_SAMPLES = 2048;
+const OSCILLOSCOPE_MAX_CAPTURE_SAMPLES = 65536;
+const OSCILLOSCOPE_M4_BUCKET_COUNT = 512;
+const OSCILLOSCOPE_PAYLOAD_HEADER_BYTES = 16;
+const OSCILLOSCOPE_M4_BUCKET_BYTES = 18;
+const OSCILLOSCOPE_ENCODING_RAW = 0;
+const OSCILLOSCOPE_ENCODING_M4 = 1;
+const OSCILLOSCOPE_TRIGGERED_FLAG = 1 << 0;
+
+class OscilloscopePlugin extends PluginBase {
+    constructor() {
+      super('Oscilloscope', 'Real-time waveform visualization');
+  
+      // ---------------------------
+      // Parameter Initialization
+      // ---------------------------
+      // Display Time (dt): total time displayed along the horizontal axis.
+      // Allowed range: 1 ms to 100 ms (internal unit: sec)
+      this.displayTime = 0.01; // default 10 ms = 0.01 sec
+  
+      // Trigger parameters:
+      // Trigger Mode (tm): "Auto" (continuous sweep with forced update) or "Normal" (freeze display if no trigger)
+      this.triggerMode = 'Auto';
+      // Trigger Level (tl): linear amplitude value (expected raw signal in [-1,1])
+      this.triggerLevel = 0.0;
+      // Trigger Edge (te): "Rising" or "Falling"
+      this.triggerEdge = 'Rising';
+      // Holdoff (ho): minimum time between triggers.
+      // Allowed range: 0.1 ms to 10 ms (internal unit: sec)
+      this.holdoff = 0.0001; // default 0.1 ms
+  
+      // Display Level (dl): in dB, allowed range: -96 dB to 0 dB.
+      // The vertical axis is drawn from -gridMax to gridMax,
+      // where gridMax = Math.pow(10, displayLevel/20) and the drawing factor is 1/gridMax.
+      this.displayLevel = 0; // default 0 dB
+      // Vertical Offset (vo): linear offset in [-1,1]; 0 means centered.
+      this.verticalOffset = 0;
+  
+      // ---------------------------
+      // Drawing and Buffer Setup
+      // ---------------------------
+      this.canvas = null;
+      this.ctx = null;
+      this.animationId = null;
+      this.animationFrameId = null;
+      this.drawInterval = 1000 / 30; // target 30 FPS
+      this.resizeGraphDisposer = null;
+      this.graphDpr = 1;
+      this.graphCssWidth = 1024;
+      this.scopeSnapshot = null;
+      this._dspTelemetryHub = null;
+      this._dspTelemetryTapId = null;
+      this._dspTelemetryUnsubscribe = null;
+      this._boundDspScopeTelemetry = frame => this.handleDspScopeTelemetry(frame);
+  
+      // Circular buffer for waveform data.
+      this.bufferSize = 65536;
+      this.waveformBuffer = new Float32Array(this.bufferSize);
+      // triggerIndex: updated by the Audio Worklet processor upon trigger detection.
+      this.triggerIndex = 0;
+      // lastBufferPosition: current write position received from the Worklet.
+      this.lastBufferPosition = 0;
+  
+      // Sample rate (will be updated from processor parameters)
+      this.sampleRate = 44100;
+  
+      // ---------------------------
+      // Accumulation state for waveform capture
+      // ---------------------------
+      // frozenDisplayBuffer: frozen snapshot captured once Display Time samples have been accumulated.
+      this.frozenDisplayBuffer = null;
+      // lastProcessedTriggerIndex: used to detect new trigger events.
+      this.lastProcessedTriggerIndex = null;
+      // accumulating: flag indicating that accumulation is in progress.
+      this.accumulating = false;
+      // accumulationBuffer: separate buffer to accumulate samples after trigger.
+      this.accumulationBuffer = null;
+      // accumulationBufferIndex: current write index in the accumulation buffer.
+      this.accumulationBufferIndex = 0;
+      // lastAccumulationBufferPos: last circular buffer index processed for accumulation.
+      this.lastAccumulationBufferPos = 0;
+  
+      // ---------------------------
+      // Internal event listener bookkeeping.
+      // ---------------------------
+      this.boundEventListeners = new Map();
+  
+      // ---------------------------
+      // Register Audio Worklet Processor
+      // ---------------------------
+      this.registerProcessor(OscilloscopePlugin.processorFunction);
+
+      this.observer = null;
+    }
+  
+    // clearBuffer: Clears the internal circular buffer and accumulation state.
+    clearBuffer() {
+      this.waveformBuffer.fill(0);
+      this.lastBufferPosition = 0;
+      this.triggerIndex = 0;
+      this.frozenDisplayBuffer = null;
+      this.lastProcessedTriggerIndex = null;
+      this.accumulating = false;
+      this.accumulationBuffer = null;
+      this.accumulationBufferIndex = 0;
+      this.lastAccumulationBufferPos = 0;
+      this.scopeSnapshot = null;
+    }
+  
+    // ================================================================
+    // Audio Worklet Processor function
+    //
+    // This function runs in the Audio Worklet context. It writes input audio
+    // into a circular buffer and performs edge–trigger detection.
+    // Additionally, it passes the sampleRate parameter.
+    // ================================================================
+    static processorFunction = `
+      // Copy the input data into a result buffer.
+      const result = data;
+  
+      const { channelCount, blockSize } = parameters;
+      // Use short parameter names:
+      // tm: triggerMode, tl: triggerLevel, te: triggerEdge, ho: holdoff
+      const mode = parameters.tm;
+  
+      // Initialize state if needed.
+      if (!context.initialized || !context.buffer) {
+        context.buffer = [new Float32Array(65536)];
+        context.bufferPosition = 0;
+        context.initialized = true;
+        context.lastTriggerTime = 0;
+        context.triggerIndex = 0;
+        context.lastAutoSweepTime = 0;
+      }
+  
+      // Write the average of L/R channels into the circular buffer.
+      const averageBuffer = context.buffer[0];
+      let currentPosition = context.bufferPosition;
+      for (let i = 0; i < blockSize; i++) {
+        const leftSample = data[i] || 0;
+        const rightSample = channelCount > 1 ? data[blockSize + i] : leftSample;
+        const averageSample = (leftSample + rightSample) * 0.5;
+        averageBuffer[currentPosition] = averageSample;
+        currentPosition = (currentPosition + 1) & (65536 - 1);
+      }
+      context.bufferPosition = currentPosition;
+  
+      let triggered = false;
+      const trigLevel = parameters.tl;
+      const rising = parameters.te === 'Rising';
+      let prevAvg = averageBuffer[(currentPosition - blockSize + 65536) & (65536 - 1)];
+      for (let i = 0; i < blockSize; i++) {
+        const currentSampleIndexInBuffer = (currentPosition - blockSize + i + 65536) & (65536 - 1);
+        const currAvg = averageBuffer[currentSampleIndexInBuffer];
+        
+        if ((rising && prevAvg < trigLevel && currAvg >= trigLevel) ||
+            (!rising && prevAvg > trigLevel && currAvg <= trigLevel)) {
+          if (time - context.lastTriggerTime >= parameters.ho) {
+            context.triggerIndex = currentSampleIndexInBuffer;
+            context.lastTriggerTime = time;
+            triggered = true;
+            if (mode === 'Auto') {
+              context.lastAutoSweepTime = time;
+            }
+            break;
+          }
+        }
+        prevAvg = currAvg;
+      }
+      if (mode === 'Auto' && !triggered) {
+        if (!context.lastAutoSweepTime) {
+          context.lastAutoSweepTime = time;
+        }
+        if (time - context.lastAutoSweepTime >= 0.1) {
+          context.triggerIndex = context.bufferPosition;
+          context.lastAutoSweepTime = time;
+        }
+      }
+  
+      result.measurements = {
+        buffer: context.buffer[0],
+        triggerIndex: context.triggerIndex,
+        currentPosition: context.bufferPosition,
+        time: time,
+        sampleRate: parameters.sampleRate
+      };
+  
+      return result;
+    `;
+  
+    // ================================================================
+    // createUI: Build the UI (parameter controls + canvas).
+    // All comments are in English.
+    // ================================================================
+    createUI() {
+      this.ensureDspTelemetrySubscription();
+      if (this.observer) {
+        this.observer.disconnect();
+      }
+      if (this.resizeGraphDisposer) {
+        this.resizeGraphDisposer();
+        this.resizeGraphDisposer = null;
+      }
+      const container = document.createElement('div');
+      container.className = 'plugin-parameter-ui oscilloscope-plugin-ui';
+  
+      const parametersGrid = document.createElement('div');
+      parametersGrid.className = 'parameters-grid';
+  
+      // --- Display Time Control (ms) ---
+      parametersGrid.appendChild(this.createParameterControl(
+        'Display Time', 1, 100, 1,
+        (this.displayTime * 1000).toFixed(0),
+        (value) => {
+          this.setDisplayTime(value / 1000);
+          this.clearBuffer();
+          this.updateParameters();
+        },
+        'ms'
+      ));
+  
+      // --- Trigger Mode Control (Auto/Normal) ---
+      const tmRow = document.createElement('div');
+      tmRow.className = 'parameter-row';
+  
+      const tmLabel = document.createElement('label');
+      tmLabel.textContent = 'Trigger Mode:';
+
+      const modes = ['Auto', 'Normal'];
+      const modeRadios = modes.map(mode => {
+        const label = document.createElement('label');
+        label.className = 'radio-label';
+        const radioId = `${this.id}-${this.name}-trigger-mode-${mode.toLowerCase()}`;
+        label.htmlFor = radioId;
+
+        const radio = document.createElement('input');
+        radio.type = 'radio';
+        radio.id = radioId;
+        radio.name = `${this.id}-${this.name}-trigger-mode`;
+        radio.value = mode;
+        radio.checked = (mode === this.triggerMode);
+        radio.autocomplete = "off";
+  
+        const radioHandler = (e) => {
+          if (e.target.checked) {
+            this.setTriggerMode(e.target.value);
+            this.clearBuffer();
+          }
+        };
+        radio.addEventListener('change', radioHandler);
+        this.boundEventListeners.set(radio, radioHandler);
+  
+        label.appendChild(radio);
+        label.appendChild(document.createTextNode(mode));
+        return label;
+      });
+      tmRow.appendChild(tmLabel);
+      modeRadios.forEach(r => tmRow.appendChild(r));
+      parametersGrid.appendChild(tmRow);
+  
+      // --- Trigger Level Control ---
+      parametersGrid.appendChild(this.createParameterControl(
+        'Trigger Level', -1.0, 1.0, 0.01,
+        this.triggerLevel,
+        (value) => {
+          this.setTriggerLevel(value);
+          this.updateParameters();
+        },
+        ''
+      ));
+  
+      // --- Trigger Edge Control (Rising/Falling) ---
+      const teRow = document.createElement('div');
+      teRow.className = 'parameter-row';
+  
+      const teLabel = document.createElement('label');
+      teLabel.textContent = 'Trigger Edge:';
+
+      const edges = ['Rising', 'Falling'];
+      const edgeRadios = edges.map(edge => {
+        const label = document.createElement('label');
+        label.className = 'radio-label';
+        const radioId = `${this.id}-${this.name}-trigger-edge-${edge.toLowerCase()}`;
+        label.htmlFor = radioId;
+
+        const radio = document.createElement('input');
+        radio.type = 'radio';
+        radio.id = radioId;
+        radio.name = `${this.id}-${this.name}-trigger-edge`;
+        radio.value = edge;
+        radio.checked = (edge === this.triggerEdge);
+        radio.autocomplete = "off";
+  
+        const radioHandler = (e) => {
+          if (e.target.checked) {
+            this.setTriggerEdge(e.target.value);
+            this.clearBuffer();
+          }
+        };
+        radio.addEventListener('change', radioHandler);
+        this.boundEventListeners.set(radio, radioHandler);
+  
+        label.appendChild(radio);
+        label.appendChild(document.createTextNode(edge));
+        return label;
+      });
+      teRow.appendChild(teLabel);
+      edgeRadios.forEach(r => teRow.appendChild(r));
+      parametersGrid.appendChild(teRow);
+  
+      // --- Holdoff Control (ms) ---
+      parametersGrid.appendChild(this.createParameterControl(
+        'Holdoff', 0.1, 10, 0.1,
+        (this.holdoff * 1000).toFixed(1),
+        (value) => {
+          this.setHoldoff(value / 1000);
+          this.updateParameters();
+        },
+        'ms'
+      ));
+  
+      // --- Display Level Control (dB) ---
+      parametersGrid.appendChild(this.createParameterControl(
+        'Display Level', -96, 0, 1,
+        this.displayLevel,
+        (value) => {
+          this.setDisplayLevel(value);
+          this.updateParameters();
+        },
+        'dB'
+      ));
+
+      // --- Vertical Offset Control ---
+      parametersGrid.appendChild(this.createParameterControl(
+        'Vertical Offset', -1.0, 1.0, 0.01,
+        this.verticalOffset,
+        (value) => {
+          this.setVerticalOffset(value);
+          this.updateParameters();
+        },
+        ''
+      ));
+  
+      container.appendChild(parametersGrid);
+  
+      // --- Graph Container and Canvas ---
+      const graph = this.createResponsiveGraph({
+        maxWidth: 1024,
+        aspectRatio: '32 / 15',
+        mobileAspectRatio: '4 / 3',
+        onResize: ({ canvas, cssWidth, dpr }) => {
+          this.canvas = canvas;
+          this.graphCssWidth = cssWidth;
+          this.graphDpr = dpr;
+          this.ctx = canvas.getContext('2d', { alpha: false });
+          this.drawWaveform();
+        }
+      });
+      const graphContainer = graph.container;
+      this.canvas = graph.canvas;
+      this.ctx = this.canvas.getContext('2d', { alpha: false });
+      this.resizeGraphDisposer = graph.dispose;
+  
+      container.appendChild(graphContainer);
+  
+      if (this.observer == null) {
+        this.observer = new IntersectionObserver(this.handleIntersect.bind(this));
+      }
+      this.observer.observe(this.canvas);
+
+      return container;
+    }
+  
+    // ---------------------------
+    // Setter Methods
+    // ---------------------------
+    setDisplayTime(value) {
+      const newValue = typeof value === 'number' ? value : parseFloat(value);
+      if (!isNaN(newValue)) {
+        // Clamp to allowed range: 0.001 sec (1 ms) to 0.1 sec (100 ms)
+        this.displayTime = newValue < 0.001 ? 0.001 : (newValue > 0.1 ? 0.1 : newValue);
+        this.clearBuffer();
+      }
+      this.updateParameters();
+    }
+  
+    setTriggerMode(value) {
+      if (['Auto', 'Normal'].includes(value)) {
+        this.triggerMode = value;
+        // Clear frozen snapshot when mode changes.
+        this.frozenDisplayBuffer = null;
+        this.lastProcessedTriggerIndex = null;
+        this.clearBuffer();
+        this.updateParameters();
+      }
+    }
+  
+    setTriggerLevel(value) {
+      const newValue = typeof value === 'number' ? value : parseFloat(value);
+      if (!isNaN(newValue)) {
+        this.triggerLevel = newValue < -1 ? -1 : (newValue > 1 ? 1 : newValue);
+        this.updateParameters();
+      }
+    }
+  
+    setTriggerEdge(value) {
+      if (['Rising', 'Falling'].includes(value)) {
+        this.triggerEdge = value;
+        this.frozenDisplayBuffer = null;
+        this.lastProcessedTriggerIndex = null;
+        this.updateParameters();
+      }
+    }
+  
+    setHoldoff(value) {
+      const newValue = typeof value === 'number' ? value : parseFloat(value);
+      if (!isNaN(newValue)) {
+        this.holdoff = newValue < 1e-4 ? 1e-4 : (newValue > 1e-2 ? 1e-2 : newValue);
+      }
+      this.updateParameters();
+    }
+  
+    // Display Level: in dB (dl); effective drawing factor = 1/Math.pow(10, displayLevel/20)
+    setDisplayLevel(value) {
+      const newValue = typeof value === 'number' ? value : parseInt(value);
+      if (!isNaN(newValue)) {
+        this.displayLevel = newValue < -96 ? -96 : (newValue > 0 ? 0 : newValue);
+        this.updateParameters();
+      }
+    }
+  
+    setVerticalOffset(value) {
+      const newValue = typeof value === 'number' ? value : parseFloat(value);
+      if (!isNaN(newValue)) {
+        this.verticalOffset = newValue < -1 ? -1 : (newValue > 1 ? 1 : newValue);
+        this.updateParameters();
+      }
+    }
+  
+    // ---------------------------
+    // Parameter Getters / Updater
+    // Return parameters with short names as per the development guide.
+    // ---------------------------
+    getParameters() {
+      this.ensureDspTelemetrySubscription();
+      return {
+        type: this.constructor.name,
+        enabled: this.enabled,
+        dt: this.displayTime,      // Display Time
+        tm: this.triggerMode,      // Trigger Mode
+        tl: this.triggerLevel,     // Trigger Level
+        te: this.triggerEdge,      // Trigger Edge
+        ho: this.holdoff,          // Holdoff
+        dl: this.displayLevel,     // Display Level
+        vo: this.verticalOffset    // Vertical Offset
+      };
+    }
+  
+    setParameters(params) {
+      if (params.dt !== undefined) this.setDisplayTime(params.dt);
+      if (params.tm !== undefined) this.setTriggerMode(params.tm);
+      if (params.tl !== undefined) this.setTriggerLevel(params.tl);
+      if (params.te !== undefined) this.setTriggerEdge(params.te);
+      if (params.ho !== undefined) this.setHoldoff(params.ho);
+      if (params.dl !== undefined) this.setDisplayLevel(params.dl);
+      if (params.vo !== undefined) this.setVerticalOffset(params.vo);
+      this.updateParameters();
+    }
+
+    _setupMessageHandler() {
+      super._setupMessageHandler();
+      this.ensureDspTelemetrySubscription?.();
+    }
+
+    ensureDspTelemetrySubscription() {
+      const hub = window.dspTelemetryHub;
+      const tapId = this.id;
+      const validTapId = Number.isInteger(tapId) && tapId >= 0 && tapId <= 0xffffffff;
+      const validHub = hub && typeof hub.subscribe === 'function';
+
+      if (!validTapId || !validHub) {
+        if (this._dspTelemetryUnsubscribe &&
+            (hub !== this._dspTelemetryHub || tapId !== this._dspTelemetryTapId)) {
+          this.disposeDspTelemetrySubscription();
+        }
+        return false;
+      }
+      if (this._dspTelemetryUnsubscribe &&
+          hub === this._dspTelemetryHub && tapId === this._dspTelemetryTapId) {
+        return true;
+      }
+
+      this.disposeDspTelemetrySubscription();
+      try {
+        const unsubscribe = hub.subscribe(
+          tapId,
+          OSCILLOSCOPE_TAP_SCOPE_SNAPSHOT,
+          this._boundDspScopeTelemetry
+        );
+        if (typeof unsubscribe !== 'function') {
+          hub.unsubscribe?.(
+            tapId,
+            OSCILLOSCOPE_TAP_SCOPE_SNAPSHOT,
+            this._boundDspScopeTelemetry
+          );
+          return false;
+        }
+        this._dspTelemetryHub = hub;
+        this._dspTelemetryTapId = tapId;
+        this._dspTelemetryUnsubscribe = unsubscribe;
+        return true;
+      } catch (error) {
+        return false;
+      }
+    }
+
+    disposeDspTelemetrySubscription() {
+      const unsubscribe = this._dspTelemetryUnsubscribe;
+      this._dspTelemetryHub = null;
+      this._dspTelemetryTapId = null;
+      this._dspTelemetryUnsubscribe = null;
+      if (!unsubscribe) return;
+      try {
+        unsubscribe();
+      } catch (error) {
+        // Ignore stale telemetry subscription cleanup failures.
+      }
+    }
+
+    parseDspScopeTelemetryFrame(frame) {
+      if (frame?.frameType !== OSCILLOSCOPE_TAP_SCOPE_SNAPSHOT ||
+          frame.formatVersion !== OSCILLOSCOPE_TELEMETRY_VERSION) {
+        return null;
+      }
+      const payload = frame.payload;
+      if (!payload || typeof payload.getUint8 !== 'function' ||
+          typeof payload.getUint16 !== 'function' ||
+          typeof payload.getUint32 !== 'function' ||
+          typeof payload.getFloat32 !== 'function' ||
+          !Number.isInteger(payload.byteLength) ||
+          payload.byteLength < OSCILLOSCOPE_PAYLOAD_HEADER_BYTES + 4) {
+        return null;
+      }
+
+      const sampleRate = payload.getFloat32(0, true);
+      const captureSampleCount = payload.getUint32(4, true);
+      const triggerOffsetInSnapshot = payload.getUint32(8, true);
+      const bucketCount = payload.getUint16(12, true);
+      const encoding = payload.getUint8(14);
+      const flags = payload.getUint8(15);
+      if (!Number.isFinite(sampleRate) || sampleRate <= 0 ||
+          captureSampleCount < 1 || captureSampleCount > OSCILLOSCOPE_MAX_CAPTURE_SAMPLES ||
+          triggerOffsetInSnapshot >= captureSampleCount ||
+          (flags & ~OSCILLOSCOPE_TRIGGERED_FLAG) !== 0) {
+        return null;
+      }
+
+      if (encoding === OSCILLOSCOPE_ENCODING_RAW) {
+        if (bucketCount !== 0 || captureSampleCount > OSCILLOSCOPE_MAX_RAW_SAMPLES ||
+            payload.byteLength !== OSCILLOSCOPE_PAYLOAD_HEADER_BYTES + captureSampleCount * 4) {
+          return null;
+        }
+        const values = new Float32Array(captureSampleCount);
+        for (let index = 0; index < captureSampleCount; index++) {
+          const value = payload.getFloat32(
+            OSCILLOSCOPE_PAYLOAD_HEADER_BYTES + index * 4,
+            true
+          );
+          if (!Number.isFinite(value)) return null;
+          values[index] = value;
+        }
+        return {
+          sampleRate,
+          captureSampleCount,
+          triggerOffsetInSnapshot,
+          bucketCount,
+          encoding,
+          triggered: (flags & OSCILLOSCOPE_TRIGGERED_FLAG) !== 0,
+          sampleIndices: null,
+          values
+        };
+      }
+
+      if (encoding !== OSCILLOSCOPE_ENCODING_M4 ||
+          captureSampleCount <= OSCILLOSCOPE_MAX_RAW_SAMPLES ||
+          bucketCount !== OSCILLOSCOPE_M4_BUCKET_COUNT ||
+          payload.byteLength !==
+            OSCILLOSCOPE_PAYLOAD_HEADER_BYTES + bucketCount * OSCILLOSCOPE_M4_BUCKET_BYTES) {
+        return null;
+      }
+
+      const sampleIndices = new Uint32Array(bucketCount * 4);
+      const values = new Float32Array(bucketCount * 4);
+      let pointCount = 0;
+      const appendPoint = (sampleIndex, value) => {
+        if (pointCount > 0 && sampleIndices[pointCount - 1] === sampleIndex) {
+          return values[pointCount - 1] === value;
+        }
+        sampleIndices[pointCount] = sampleIndex;
+        values[pointCount] = value;
+        pointCount++;
+        return true;
+      };
+
+      for (let bucket = 0; bucket < bucketCount; bucket++) {
+        const begin = Math.floor(bucket * captureSampleCount / bucketCount);
+        const end = Math.floor((bucket + 1) * captureSampleCount / bucketCount);
+        const bucketLength = end - begin;
+        const offset = OSCILLOSCOPE_PAYLOAD_HEADER_BYTES +
+          bucket * OSCILLOSCOPE_M4_BUCKET_BYTES;
+        const first = payload.getFloat32(offset, true);
+        const minimum = payload.getFloat32(offset + 4, true);
+        const maximum = payload.getFloat32(offset + 8, true);
+        const last = payload.getFloat32(offset + 12, true);
+        const minimumOffset = payload.getUint8(offset + 16);
+        const maximumOffset = payload.getUint8(offset + 17);
+        if (!Number.isFinite(first) || !Number.isFinite(minimum) ||
+            !Number.isFinite(maximum) || !Number.isFinite(last) || minimum > maximum ||
+            first < minimum || first > maximum || last < minimum || last > maximum ||
+            minimumOffset >= bucketLength || maximumOffset >= bucketLength) {
+          return null;
+        }
+
+        const minimumIndex = begin + minimumOffset;
+        const maximumIndex = begin + maximumOffset;
+        if (!appendPoint(begin, first)) return null;
+        if (minimumIndex <= maximumIndex) {
+          if (!appendPoint(minimumIndex, minimum) ||
+              !appendPoint(maximumIndex, maximum)) return null;
+        } else if (!appendPoint(maximumIndex, maximum) ||
+                   !appendPoint(minimumIndex, minimum)) {
+          return null;
+        }
+        if (!appendPoint(end - 1, last)) return null;
+      }
+
+      return {
+        sampleRate,
+        captureSampleCount,
+        triggerOffsetInSnapshot,
+        bucketCount,
+        encoding,
+        triggered: (flags & OSCILLOSCOPE_TRIGGERED_FLAG) !== 0,
+        sampleIndices: sampleIndices.subarray(0, pointCount),
+        values: values.subarray(0, pointCount)
+      };
+    }
+
+    handleDspScopeTelemetry(frame) {
+      const snapshot = this.parseDspScopeTelemetryFrame(frame);
+      if (!snapshot || !this.enabled) return;
+      this.sampleRate = snapshot.sampleRate;
+      this.scopeSnapshot = snapshot;
+      this.frozenDisplayBuffer = snapshot.encoding === OSCILLOSCOPE_ENCODING_RAW
+        ? snapshot.values
+        : null;
+    }
+  
+    // ---------------------------
+    // onMessage: Receive messages from the Audio Worklet.
+    // ---------------------------
+    onMessage(message) {
+      this.ensureDspTelemetrySubscription();
+      // Check that measurements and buffer exist.
+      if (
+        message.type === 'processBuffer' &&
+        message.measurements &&
+        message.measurements.buffer
+      ) {
+        this.process(message.measurements.buffer, message);
+      }
+    }
+  
+    // ---------------------------
+    // process: Update the circular buffer and accumulate waveform samples after trigger.
+    //
+    // When a new trigger event is detected, a new accumulation is started.
+    // New samples from the circular buffer are appended (handling wrap-around)
+    // until the number of samples equals sampleRate * displayTime.
+    // Once captured, the frozen snapshot is kept until the next trigger.
+    // ---------------------------
+    process(audioBuffer, message) {
+      if (!audioBuffer || !message?.measurements?.buffer) {
+        return audioBuffer;
+      }
+      if (!this.enabled) {
+        return audioBuffer;
+      }
+      // Update sampleRate from measurements.
+      if (message.measurements.sampleRate) {
+        this.sampleRate = message.measurements.sampleRate;
+      }
+      // Use the provided buffer and determine its actual length.
+      const buffer = message.measurements.buffer;
+      const bufferLength = buffer.length;
+      // Resize waveformBuffer if necessary.
+      if (this.waveformBuffer.length !== bufferLength) {
+        this.waveformBuffer = new Float32Array(bufferLength);
+      }
+      // Update local circular buffer.
+      this.waveformBuffer.set(buffer);
+      const newTriggerIndex = message.measurements.triggerIndex;
+      const currentPos = message.measurements.currentPosition;
+  
+      // Only start a new accumulation if not already accumulating.
+      if (!this.accumulating && (this.lastProcessedTriggerIndex === null || this.lastProcessedTriggerIndex !== newTriggerIndex)) {
+        // New trigger: start accumulating.
+        this.lastProcessedTriggerIndex = newTriggerIndex;
+        this.accumulating = true;
+        const displaySamples = Math.floor(this.sampleRate * this.displayTime);
+        this.accumulationBuffer = new Float32Array(displaySamples);
+        this.accumulationBufferIndex = 0;
+        // Start accumulation from the trigger index.
+        this.lastAccumulationBufferPos = newTriggerIndex;
+        // Do NOT clear the previous frozen snapshot until new accumulation is complete.
+      }
+  
+      // If accumulating, append new samples from the circular buffer.
+      if (this.accumulating) {
+        const displaySamples = this.accumulationBuffer.length; // total samples to accumulate
+        let availableSpace = displaySamples - this.accumulationBufferIndex;
+        if (availableSpace > 0) {
+          if (currentPos >= this.lastAccumulationBufferPos) {
+            // No wrap-around.
+            let newSamples = buffer.subarray(this.lastAccumulationBufferPos, currentPos);
+            if (newSamples.length > availableSpace) {
+              newSamples = newSamples.subarray(0, availableSpace);
+            }
+            this.accumulationBuffer.set(newSamples, this.accumulationBufferIndex);
+            this.accumulationBufferIndex += newSamples.length;
+          } else {
+            // Wrap-around: first copy from lastAccumulationBufferPos to end.
+            let part1 = buffer.subarray(this.lastAccumulationBufferPos, bufferLength);
+            if (part1.length > availableSpace) {
+              part1 = part1.subarray(0, availableSpace);
+            }
+            this.accumulationBuffer.set(part1, this.accumulationBufferIndex);
+            this.accumulationBufferIndex += part1.length;
+            availableSpace = displaySamples - this.accumulationBufferIndex;
+            if (availableSpace > 0) {
+              let part2 = buffer.subarray(0, currentPos);
+              if (part2.length > availableSpace) {
+                part2 = part2.subarray(0, availableSpace);
+              }
+              this.accumulationBuffer.set(part2, this.accumulationBufferIndex);
+              this.accumulationBufferIndex += part2.length;
+            }
+          }
+          // Update the last processed position.
+          this.lastAccumulationBufferPos = currentPos;
+        }
+        // If we have accumulated enough samples, finalize the accumulation.
+        if (this.accumulationBufferIndex >= displaySamples) {
+          this.frozenDisplayBuffer = this.accumulationBuffer;
+          this.scopeSnapshot = null;
+          this.accumulating = false;
+        }
+      }
+  
+      // Until a new trigger occurs, frozenDisplayBuffer remains unchanged.
+      return audioBuffer;
+    }
+  
+    handleIntersect(entries) {
+      entries.forEach(entry => {
+            this.isVisible = entry.isIntersecting;
+            if (this.isVisible) {
+                if (this.canRunAnimation()) this.startAnimation();
+                else this.renderPowerUiOnce(() => this.drawWaveform());
+            } else {
+              this.stopAnimation();
+          }
+      });
+    }
+
+    startAnimation() {
+        if (this.animationFrameId) return;
+        if (!this.enabled || !this._sectionEnabled) return; // Skip if disabled or section is off.
+
+        const animate = () => {
+            if (!this.isVisible) {
+                this.stopAnimation();
+                return;
+            }
+            this.drawWaveform();
+            this.animationFrameId = this.requestPowerAnimationFrame(animate, 'analyzer');
+        };
+        animate();
+    }
+
+    stopAnimation() {
+        if (this.animationFrameId) {
+            cancelAnimationFrame(this.animationFrameId);
+            this.animationFrameId = null;
+        }
+    }
+    // ---------------------------
+    // drawWaveform: Render grid and waveform.
+    //
+    // The waveform is drawn as a continuous line (using linear interpolation)
+    // based on the frozen snapshot (accumulated Display Time samples).
+    // Until a frozen snapshot is available, only the grid is drawn.
+    // ---------------------------
+    drawWaveform() {
+      const { ctx, canvas } = this;
+      const { width, height } = canvas;
+      const dpr = this.graphDpr || 1;
+      const isNarrow = this.graphCssWidth < 500;
+  
+      // Clear the canvas.
+      ctx.fillStyle = '#000';
+      ctx.fillRect(0, 0, width, height);
+  
+      // Left margin for vertical axis labels.
+      const leftMargin = (isNarrow ? 52 : 80) * dpr;
+  
+      // Vertical scaling.
+      const factor = 1 / Math.pow(10, this.displayLevel / 20);
+      // Compute centerY based on Vertical Offset.
+      const centerY = height / 2 - (this.verticalOffset * height / 2);
+  
+      // ---------------------------
+      // Draw vertical grid and amplitude scale based on visible amplitude range.
+      // ---------------------------
+      ctx.strokeStyle = '#333';
+      ctx.lineWidth = dpr;
+      const tickFontSize = (isNarrow ? 11 : 12) * dpr;
+      ctx.font = `${tickFontSize}px Arial`;
+      ctx.textAlign = 'right';
+      ctx.fillStyle = '#666';
+      ctx.textBaseline = 'middle';
+  
+      // Compute visible amplitude range based on the mapping:
+      // y = centerY - (amp * factor) * (height/2)
+      // => amp = (centerY - y) / ((height/2) * factor)
+      const ampTop = centerY / ((height / 2) * factor);         // amplitude corresponding to y=0 (top)
+      const ampBottom = (centerY - height) / ((height / 2) * factor); // amplitude corresponding to y=height (bottom)
+      const visibleAmpMin = Math.min(ampTop, ampBottom);
+      const visibleAmpMax = Math.max(ampTop, ampBottom);
+  
+      const desiredTickCount = isNarrow ? 8 : 20;
+      const visibleAmpRange = visibleAmpMax - visibleAmpMin;
+      const rawStep = visibleAmpRange / desiredTickCount;
+      const exponent = Math.floor(Math.log10(rawStep));
+      const fraction = rawStep / Math.pow(10, exponent);
+      let niceFraction;
+      if (fraction < 1.5) {
+        niceFraction = 1;
+      } else if (fraction < 3) {
+        niceFraction = 2;
+      } else if (fraction < 7) {
+        niceFraction = 5;
+      } else {
+        niceFraction = 10;
+      }
+      const tickStep = niceFraction * Math.pow(10, exponent);
+  
+      // Calculate starting and ending tick values within the visible amplitude range.
+      const tickStart = Math.ceil(visibleAmpMin / tickStep) * tickStep;
+      const tickEnd = Math.floor(visibleAmpMax / tickStep) * tickStep;
+  
+      // Number of decimals for label formatting.
+      const decimals = exponent < 0 ? -exponent : 0;
+  
+      // Define a margin (in pixels) so that text drawn too near the top or bottom is omitted.
+      const textMargin = tickFontSize * 0.55;
+  
+      for (let tick = tickStart; tick <= tickEnd + tickStep * 0.5; tick += tickStep) {
+        const y = centerY - (tick * factor) * (height / 2);
+        ctx.beginPath();
+        ctx.moveTo(0, y);
+        ctx.lineTo(width, y);
+        ctx.stroke();
+        // Only draw text if it does not overlap the top or bottom edge.
+        if (y - textMargin >= 0 && y + textMargin <= height) {
+          ctx.fillText(tick.toFixed(decimals), leftMargin - (16 * dpr), y);
+        }
+      }
+  
+      // ---------------------------
+      // Draw horizontal grid and time scale.
+      // ---------------------------
+      ctx.strokeStyle = '#333';
+      ctx.lineWidth = dpr;
+      const timeDivisions = isNarrow ? 5 : 10;
+      for (let i = 0; i <= timeDivisions; i++) {
+        const x = leftMargin + ((width - leftMargin) * i) / timeDivisions;
+        ctx.beginPath();
+        ctx.moveTo(x, 0);
+        ctx.lineTo(x, height);
+        ctx.stroke();
+        if (i !== 0 && i !== timeDivisions) {
+          ctx.fillStyle = '#666';
+          ctx.font = `${tickFontSize}px Arial`;
+          ctx.textAlign = 'center';
+          const t_ms = (i / timeDivisions) * (this.displayTime * 1000);
+          ctx.fillText(t_ms.toFixed(2) + ' ms', x, height - ((isNarrow ? 30 : 40) * dpr));
+        }
+      }
+  
+      // Draw axis labels.
+      ctx.fillStyle = '#fff';
+      ctx.font = `${(isNarrow ? 12 : 14) * dpr}px Arial`;
+      ctx.textAlign = 'center';
+      ctx.fillText('Time (ms)', leftMargin + (width - leftMargin) / 2, height - (10 * dpr));
+      ctx.save();
+      ctx.translate((isNarrow ? 16 : 20) * dpr, height / 2);
+      ctx.rotate(-Math.PI / 2);
+      ctx.fillText('Amplitude', 0, 0);
+      ctx.restore();
+  
+      // ---------------------------
+      // Draw the waveform if a frozen snapshot is available.
+      // ---------------------------
+      const displayBuffer = this.scopeSnapshot?.values || this.frozenDisplayBuffer;
+      if (displayBuffer) {
+        const sampleIndices = this.scopeSnapshot?.sampleIndices;
+        const sampleCount = this.scopeSnapshot?.captureSampleCount || displayBuffer.length;
+        ctx.strokeStyle = '#0f0';
+        ctx.lineWidth = 2 * dpr;
+        ctx.beginPath();
+        const denominator = sampleCount > 1 ? sampleCount - 1 : 1;
+        for (let i = 0; i < displayBuffer.length; i++) {
+          const sampleIndex = sampleIndices ? sampleIndices[i] : i;
+          const x = leftMargin + (sampleIndex / denominator) * (width - leftMargin);
+          const sample = displayBuffer[i];
+          const y = centerY - (sample * factor) * (height / 2);
+          if (i === 0) {
+            ctx.moveTo(x, y);
+          } else {
+            ctx.lineTo(x, y);
+          }
+        }
+        ctx.stroke();
+      }
+    }
+  
+    // ---------------------------
+    // cleanup: Cancel the animation and remove event listeners.
+    // ---------------------------
+    cleanup() {
+      this.disposeDspTelemetrySubscription();
+      this.stopAnimation();
+      if (this.observer) {
+        if (this.canvas) {
+          this.observer.unobserve(this.canvas);
+        }
+        this.observer.disconnect();
+        this.observer = null;
+      }
+      if (this.resizeGraphDisposer) {
+        this.resizeGraphDisposer();
+        this.resizeGraphDisposer = null;
+      }
+      for (const [element, listener] of this.boundEventListeners) {
+        element.removeEventListener('change', listener);
+        element.removeEventListener('input', listener);
+      }
+      this.boundEventListeners.clear();
+      this.scopeSnapshot = null;
+      this.canvas = null;
+      this.ctx = null;
+      super.cleanup();
+    }
+  }
+  
+  // Register plugin globally (for browser environments)
+  if (typeof window !== 'undefined') {
+    window.OscilloscopePlugin = OscilloscopePlugin;
+  }

@@ -1,0 +1,11 @@
+/* Loudness Equalizer plugin specific styles */
+.loudness-equalizer-plugin-ui {
+    position: relative;
+}
+
+.loudness-equalizer-plugin-ui canvas {
+    margin: 10px auto;
+    display: block;
+    background: #222;
+}
+

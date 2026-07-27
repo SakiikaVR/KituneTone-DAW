@@ -1,0 +1,155 @@
+/* Multiband Compressor plugin specific styles */
+.multiband-compressor-container {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+}
+
+/* Frequency slider area */
+.multiband-compressor-frequency-sliders {
+    display: flex;
+    flex-direction: row;
+    flex-wrap: wrap;
+    gap: 10px;
+    padding: 10px;
+    background: #2d2d2d;
+    border-radius: 4px;
+}
+
+.multiband-compressor-frequency-slider {
+    flex: 1 1 180px;
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    min-width: 0;
+}
+
+.multiband-compressor-frequency-slider-top {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 10px;
+}
+
+/* Band settings area */
+.multiband-compressor-band-settings {
+    background: #2d2d2d;
+    border-radius: 4px;
+    padding: 10px;
+}
+
+.multiband-compressor-band-tabs {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 2px;
+    margin-bottom: 20px;
+}
+
+.multiband-compressor-band-tab {
+    padding: 8px 16px;
+    background: #333;
+    border: none;
+    cursor: pointer;
+    border-radius: 4px 4px 0 0;
+    color: #fff;
+}
+
+.multiband-compressor-band-tab.active {
+    background: #444;
+}
+
+.multiband-compressor-band-content {
+    display: none;
+}
+
+.multiband-compressor-band-content.active {
+    display: block;
+}
+
+/* Gain reduction graphs area */
+.multiband-compressor-graphs {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    justify-content: space-between;
+    padding: 10px;
+    background: #2d2d2d;
+    border-radius: 4px;
+}
+
+.multiband-compressor-band-graph {
+    flex: 1 1 150px;
+    position: relative;
+    background: #222;
+    border-radius: 4px;
+    padding: 10px;
+}
+
+.multiband-compressor-band-graph.active {
+    background: #333;
+}
+
+.multiband-compressor-band-graph canvas {
+    margin: 10px auto;
+    display: block;
+}
+
+.multiband-compressor-transfer-graph {
+    margin: 0 auto;
+}
+
+.multiband-compressor-band-graph-label {
+    text-align: center;
+    margin-top: 5px;
+}
+
+body.layout-mobile .multiband-compressor-container,
+body.layout-mobile .multiband-compressor-band-settings {
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    box-sizing: border-box;
+    overflow-x: hidden;
+    overflow-x: clip;
+}
+
+body.layout-mobile .multiband-compressor-graphs {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+}
+
+body.layout-mobile .multiband-compressor-band-graph {
+    flex: 0 1 calc(50% - 5px);
+    min-width: 0;
+    box-sizing: border-box;
+}
+
+body.layout-mobile .multiband-compressor-band-tabs {
+    flex-wrap: wrap;
+    gap: 4px;
+}
+
+body.layout-mobile .multiband-compressor-band-tab {
+    flex: 1 1 56px;
+    min-width: 0;
+    min-height: 40px;
+}
+
+body.layout-mobile .multiband-compressor-frequency-sliders {
+    flex-wrap: wrap;
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    box-sizing: border-box;
+}
+
+body.layout-mobile .multiband-compressor-frequency-slider {
+    flex: 1 1 var(--et-mobile-effect-slider-basis);
+    min-width: var(--et-mobile-effect-slider-min-width);
+}
+
+body.layout-mobile .multiband-compressor-frequency-slider-top {
+    flex-wrap: wrap;
+    gap: 4px;
+}

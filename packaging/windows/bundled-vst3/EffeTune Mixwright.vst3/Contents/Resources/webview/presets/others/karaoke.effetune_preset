@@ -1,0 +1,59 @@
+{
+  "pipeline": [
+    {
+      "name": "Mute",
+      "enabled": true,
+      "parameters": {},
+      "inputBus": 1,
+      "outputBus": 1
+    },
+    {
+      "name": "Mute",
+      "enabled": true,
+      "parameters": {},
+      "inputBus": 2,
+      "outputBus": 2
+    },
+    {
+      "name": "Narrow Range",
+      "enabled": true,
+      "parameters": {
+        "hf": 60,
+        "hs": 0,
+        "lf": 200,
+        "ls": -48
+      },
+      "outputBus": 2
+    },
+    {
+      "name": "Stereo Blend",
+      "enabled": true,
+      "parameters": {
+        "stereo": 200
+      },
+      "outputBus": 1
+    },
+    {
+      "name": "Polarity Inversion",
+      "enabled": true,
+      "parameters": {},
+      "inputBus": 1
+    },
+    {
+      "name": "Polarity Inversion",
+      "enabled": true,
+      "parameters": {},
+      "channel": "R"
+    },
+    {
+      "name": "Pitch Shifter",
+      "enabled": true,
+      "parameters": {
+        "ps": 0,
+        "ft": 0,
+        "ws": 150,
+        "xf": 35
+      }
+    }
+  ]
+}

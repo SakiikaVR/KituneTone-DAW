@@ -1,0 +1,311 @@
+.fifteen-band-peq-plugin-ui {
+    position: relative;
+}
+
+.fifteen-band-peq-plugin-ui .parameter-row {
+    margin-bottom: 20px;
+}
+
+.fifteen-band-peq-plugin-ui .fifteen-band-peq-radio-label {
+    margin-right: 10px;
+    cursor: pointer;
+}
+
+.fifteen-band-peq-plugin-ui .fifteen-band-peq-radio-label input {
+    margin-right: 4px;
+}
+
+.fifteen-band-peq-plugin-ui .fifteen-band-peq-graph {
+    position: relative;
+    width: 100%;
+    max-width: 1024px;
+    aspect-ratio: 1024 / 480;
+    background-color: #1a1a1a;
+}
+
+.fifteen-band-peq-plugin-ui .fifteen-band-peq-import-container {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    z-index: 10;
+    display: flex;
+    gap: 5px;
+}
+
+.fifteen-band-peq-plugin-ui .fifteen-band-peq-import-button {
+    background-color: #444;
+    color: #fff;
+    border: 1px solid #666;
+    border-radius: 4px;
+    cursor: pointer;
+    padding: 5px 10px;
+}
+
+.fifteen-band-peq-plugin-ui .fifteen-band-peq-inverse-button {
+    background-color: #444;
+    color: #fff;
+    border: 1px solid #666;
+    border-radius: 4px;
+    cursor: pointer;
+    padding: 5px 10px;
+}
+
+.fifteen-band-peq-plugin-ui .fifteen-band-peq-import-button:hover {
+    background-color: #444;
+    border-color: #555;
+}
+
+.fifteen-band-peq-plugin-ui .fifteen-band-peq-inverse-button:hover {
+    background-color: #444;
+    border-color: #555;
+}
+
+.fifteen-band-peq-plugin-ui .fifteen-band-peq-response {
+    position: absolute;
+    width: calc(100% - 40px);
+    height: calc(100% - 40px);
+    left: 20px;
+    top: 20px;
+    pointer-events: none;
+}
+
+.fifteen-band-peq-plugin-ui .fifteen-band-peq-marker {
+    position: absolute;
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    background-color: #4a4a4a;
+    border: 2px solid #666;
+    transform: translate(-50%, -50%);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 12px;
+    color: #fff;
+    user-select: none;
+    touch-action: none;
+}
+
+.fifteen-band-peq-plugin-ui .fifteen-band-peq-marker::before {
+    content: "";
+    position: absolute;
+    inset: -10px;
+}
+.fifteen-band-peq-plugin-ui .fifteen-band-peq-marker:hover,
+.fifteen-band-peq-plugin-ui .fifteen-band-peq-marker.active {
+    background-color: #666;
+    border-color: #999;
+}
+
+.fifteen-band-peq-plugin-ui .fifteen-band-peq-marker.disabled {
+    background-color: #333;
+    border-color: #444;
+    opacity: 0.6;
+}
+
+.fifteen-band-peq-plugin-ui .fifteen-band-peq-marker-text {
+    position: absolute;
+    display: flex;
+    flex-direction: column;
+    white-space: nowrap;
+    font-size: 11px;
+    color: #ccc;
+    pointer-events: none;
+    transform: translateX(-50%);
+    text-align: center;
+}
+
+.fifteen-band-peq-plugin-ui .fifteen-band-peq-marker-text.top {
+    bottom: calc(100% + 8px);
+}
+
+.fifteen-band-peq-plugin-ui .fifteen-band-peq-marker-text.bottom {
+    top: calc(100% + 8px);
+}
+
+.fifteen-band-peq-plugin-ui .fifteen-band-peq-band-settings {
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+    background: #2d2d2d;
+    border-radius: 4px;
+    overflow: hidden;
+    margin-top: 20px;
+}
+
+.fifteen-band-peq-plugin-ui .fifteen-band-peq-band-tabs {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 2px;
+    margin-bottom: 10px;
+    padding: 10px 10px 0;
+}
+
+.fifteen-band-peq-plugin-ui .fifteen-band-peq-band-tab {
+    padding: 8px 12px;
+    background: #333;
+    border: none;
+    cursor: pointer;
+    border-radius: 4px 4px 0 0;
+    color: #fff;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-bottom: 5px;
+}
+
+.fifteen-band-peq-plugin-ui .fifteen-band-peq-band-tab.active {
+    background: #444;
+}
+
+.fifteen-band-peq-plugin-ui .fifteen-band-peq-band-tab.disabled {
+    opacity: 0.5;
+}
+
+.fifteen-band-peq-plugin-ui .fifteen-band-peq-band-tab-checkbox {
+    margin-right: 5px;
+}
+
+.fifteen-band-peq-plugin-ui .fifteen-band-peq-band-contents {
+    padding-left: 15px;
+    padding-right: 15px;
+    background-color: #2d2d2d;
+}
+
+.fifteen-band-peq-plugin-ui .fifteen-band-peq-band-content {
+    display: none;
+}
+
+.fifteen-band-peq-plugin-ui .fifteen-band-peq-band-content.active {
+    display: flex;
+    flex-direction: column;
+}
+
+.fifteen-band-peq-plugin-ui .fifteen-band-peq-control-row {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-bottom: 10px;
+}
+
+.fifteen-band-peq-plugin-ui .fifteen-band-peq-q-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 10px;
+}
+
+.fifteen-band-peq-plugin-ui .fifteen-band-peq-q-label,
+.fifteen-band-peq-plugin-ui .fifteen-band-peq-type-label,
+.fifteen-band-peq-plugin-ui .fifteen-band-peq-freq-label,
+.fifteen-band-peq-plugin-ui .fifteen-band-peq-gain-label {
+    color: #ccc;
+    font-size: 12px;
+    white-space: nowrap;
+    min-width: 80px;
+}
+
+.fifteen-band-peq-plugin-ui .fifteen-band-peq-freq-label,
+.fifteen-band-peq-plugin-ui .fifteen-band-peq-gain-label {
+    margin-left: 5px;
+}
+
+.fifteen-band-peq-plugin-ui .fifteen-band-peq-q-slider {
+    flex: 1;
+    margin: 0;
+    height: 20px;
+    min-width: 0;
+    width: 100%;
+}
+
+.fifteen-band-peq-plugin-ui .fifteen-band-peq-q-text,
+.fifteen-band-peq-plugin-ui .fifteen-band-peq-freq-text,
+.fifteen-band-peq-plugin-ui .fifteen-band-peq-gain-text {
+    width: 80px;
+    padding: 4px;
+    background-color: #3d3d3d;
+    border: 1px solid #4d4d4d;
+    color: #ffffff;
+    border-radius: 4px;
+}
+
+.fifteen-band-peq-plugin-ui .fifteen-band-peq-filter-type {
+    width: 90px;
+    padding: 4px;
+    background-color: #222;
+    color: #ccc;
+    border: 1px solid #444;
+    border-radius: 3px;
+    font-size: 12px;
+}
+
+body.layout-mobile .fifteen-band-peq-plugin-ui .fifteen-band-peq-control-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    column-gap: 10px;
+    row-gap: 10px;
+}
+
+body.layout-mobile .fifteen-band-peq-plugin-ui .fifteen-band-peq-type-label,
+body.layout-mobile .fifteen-band-peq-plugin-ui .fifteen-band-peq-freq-label,
+body.layout-mobile .fifteen-band-peq-plugin-ui .fifteen-band-peq-gain-label {
+    justify-self: start;
+    min-width: 0;
+    margin-left: 0;
+}
+
+body.layout-mobile .fifteen-band-peq-plugin-ui .fifteen-band-peq-filter-type,
+body.layout-mobile .fifteen-band-peq-plugin-ui .fifteen-band-peq-freq-text,
+body.layout-mobile .fifteen-band-peq-plugin-ui .fifteen-band-peq-gain-text {
+    justify-self: end;
+}
+
+body.layout-mobile .fifteen-band-peq-plugin-ui .fifteen-band-peq-q-text,
+body.layout-mobile .fifteen-band-peq-plugin-ui .fifteen-band-peq-freq-text,
+body.layout-mobile .fifteen-band-peq-plugin-ui .fifteen-band-peq-gain-text {
+    /* 16px prevents iOS Safari from zooming the page when the input gains focus */
+    font-size: 16px;
+}
+
+body.layout-mobile .fifteen-band-peq-band-tabs {
+    flex-wrap: wrap;
+    gap: 4px;
+}
+
+body.layout-mobile .fifteen-band-peq-band-tab {
+    flex: 1 1 56px;
+    min-width: 0;
+    min-height: 40px;
+}
+
+body.layout-mobile .fifteen-band-peq-graph {
+    aspect-ratio: 4 / 3;
+}
+
+.fifteen-band-peq-plugin-ui .fifteen-band-peq-grid {
+    position: absolute;
+    width: calc(100% - 40px);
+    height: calc(100% - 40px);
+    left: 20px;
+    top: 20px;
+    pointer-events: none;
+}
+
+.fifteen-band-peq-plugin-ui .fifteen-band-peq-grid line {
+    stroke: #333;
+    stroke-width: 1;
+}
+
+.fifteen-band-peq-plugin-ui .fifteen-band-peq-grid text {
+    fill: #666;
+    font-size: 10px;
+}
+
+.fifteen-band-peq-plugin-ui .fifteen-band-peq-response path {
+    fill: none;
+    stroke: #4CAF50;
+    stroke-width: 2;
+    vector-effect: non-scaling-stroke;
+}

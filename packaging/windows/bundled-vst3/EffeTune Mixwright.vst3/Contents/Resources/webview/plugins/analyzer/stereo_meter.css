@@ -1,0 +1,7 @@
+.stereo-meter .graph-container {
+  margin: 1rem auto 0;
+}
+
+.stereo-meter canvas {
+  image-rendering: auto;
+}

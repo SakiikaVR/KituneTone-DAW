@@ -1,0 +1,67 @@
+/* Comb Filter plugin specific styles */
+.comb-filter-plugin-ui {
+    position: relative;
+}
+
+.comb-filter-plugin-ui canvas {
+    margin: 10px auto;
+    display: block;
+    background: #222;
+}
+
+.comb-filter-plugin-ui label {
+    min-width: 120px;
+}
+
+.comb-filter-plugin-ui .slope-select {
+    padding: 2px;
+    background: #333;
+    color: #ccc;
+    border: 1px solid #555;
+    border-radius: 3px;
+    font-size: 12px;
+    width: 90px;
+    cursor: pointer;
+}
+
+.comb-filter-plugin-ui .slope-select:focus {
+    outline: none;
+    border-color: #777;
+}
+
+.comb-filter-plugin-ui .slope-select option {
+    background: #333;
+    color: #ccc;
+    padding: 2px;
+}
+
+.comb-filter-plugin-ui .parameter-row {
+    display: flex;
+    align-items: center;
+}
+
+.comb-filter-plugin-ui .parameter-row input[type="range"] {
+    flex: 1;
+}
+
+.comb-filter-plugin-ui .parameter-row input[type="number"] {
+    width: 80px;
+    text-align: right;
+}
+
+.comb-filter-plugin-ui .radio-group {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    margin: 5px 0;
+}
+
+.comb-filter-plugin-ui .radio-group input[type="radio"] {
+    margin-right: 5px;
+}
+
+.comb-filter-plugin-ui .radio-group label {
+    min-width: auto;
+    margin-right: 15px;
+    cursor: pointer;
+} 

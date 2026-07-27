@@ -1,0 +1,50 @@
+/* Lo Pass Filter plugin specific styles */
+.lo-pass-filter-plugin-ui {
+    position: relative;
+}
+
+.lo-pass-filter-plugin-ui canvas {
+    margin: 10px auto;
+    display: block;
+    background: #222;
+}
+
+.lo-pass-filter-plugin-ui label {
+    min-width: 120px;
+}
+
+.lo-pass-filter-plugin-ui .slope-select {
+    padding: 2px;
+    background: #333;
+    color: #ccc;
+    border: 1px solid #555;
+    border-radius: 3px;
+    font-size: 12px;
+    width: 90px;
+    cursor: pointer;
+}
+
+.lo-pass-filter-plugin-ui .slope-select:focus {
+    outline: none;
+    border-color: #777;
+}
+
+.lo-pass-filter-plugin-ui .slope-select option {
+    background: #333;
+    color: #ccc;
+    padding: 2px;
+}
+
+.lo-pass-filter-plugin-ui .parameter-row {
+    display: flex;
+    align-items: center;
+}
+
+.lo-pass-filter-plugin-ui .parameter-row input[type="range"] {
+    flex: 1;
+}
+
+.lo-pass-filter-plugin-ui .parameter-row input[type="number"] {
+    width: 80px;
+    text-align: right;
+}

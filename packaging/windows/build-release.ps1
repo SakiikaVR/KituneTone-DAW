@@ -2,7 +2,7 @@
 param(
     [string]$BuildDir,
     [string]$OutputDir,
-    [string]$Version = "2.2.2",
+    [string]$Version = "2.3.0",
     [string]$MakeNsis
 )
 
@@ -70,6 +70,13 @@ $vst3Dir = Join-Path $appDir "VST3"
 New-Item -ItemType Directory -Path $vst3Dir | Out-Null
 Copy-Item -LiteralPath (Join-Path $build "plugins\TriangleSynth.vst3") -Destination $vst3Dir
 
+# Bundled third-party VST3 plug-ins (MIT-licensed; license copied below)
+$bundledVst3 = Join-Path $PSScriptRoot "bundled-vst3\EffeTune Mixwright.vst3"
+if (-not (Test-Path -LiteralPath $bundledVst3 -PathType Container)) {
+    throw "Bundled VST3 plug-in is missing: $bundledVst3"
+}
+Copy-Item -LiteralPath $bundledVst3 -Destination $vst3Dir -Recurse
+
 $dataDir = Join-Path $appDir "data"
 New-Item -ItemType Directory -Path $dataDir | Out-Null
 foreach ($directory in @("backgrounds", "fonts", "locale", "themes")) {
@@ -136,6 +143,7 @@ Copy-Item -LiteralPath (Join-Path $repoRoot "docs\USER_MANUAL.md") -Destination 
 $licensesDir = Join-Path $appDir "licenses"
 New-Item -ItemType Directory -Path $licensesDir | Out-Null
 $thirdPartyLicenses = @{
+    "EFFETUNE-MIXWRIGHT-LICENSE.txt" = "packaging\windows\bundled-vst3\EFFETUNE-MIXWRIGHT-LICENSE.txt"
     "VST3-SDK-LICENSE.txt" = "src\3rdparty\vst3sdk\LICENSE.txt"
     "VST3-PUBLIC-SDK-LICENSE.txt" = "src\3rdparty\vst3sdk\public.sdk\LICENSE.txt"
     "ARA-NOTICE.txt" = "src\3rdparty\ara\NOTICE.txt"
