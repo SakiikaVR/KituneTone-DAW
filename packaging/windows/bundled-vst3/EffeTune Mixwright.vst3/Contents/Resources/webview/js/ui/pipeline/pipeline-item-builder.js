@@ -231,11 +231,12 @@ export class PipelineItemBuilder {
     createPluginName(plugin) {
         const name = document.createElement('div');
         name.className = 'plugin-name';
-        const localizeName = window.kitsuneLocalizedPluginName || (n => n);
         if (plugin.name === 'Section' && plugin.cm && plugin.cm !== '') {
-            name.textContent = `${plugin.cm} ${localizeName('Section')}`;
+            name.textContent = `${plugin.cm} Section`;
+        } else if (window.kitsuneApplyPluginName) {
+            window.kitsuneApplyPluginName(name, plugin.name);
         } else {
-            name.textContent = localizeName(plugin.name);
+            name.textContent = plugin.name;
         }
         
         // Update the plugin name display state based on section status
@@ -665,11 +666,12 @@ export class PipelineItemBuilder {
                     if (pipelineItem) {
                         const nameElement = pipelineItem.querySelector('.plugin-name');
                         if (nameElement) {
-                            const localizeName = window.kitsuneLocalizedPluginName || (n => n);
                             if (this.cm && this.cm !== '') {
-                                nameElement.textContent = `${this.cm} ${localizeName('Section')}`;
+                                nameElement.textContent = `${this.cm} Section`;
+                            } else if (window.kitsuneApplyPluginName) {
+                                window.kitsuneApplyPluginName(nameElement, this.name);
                             } else {
-                                nameElement.textContent = localizeName(this.name);
+                                nameElement.textContent = this.name;
                             }
                         }
                     }

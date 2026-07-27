@@ -1,7 +1,8 @@
-// KitsuneTone addition: display-layer Japanese localization for effect and
-// category names. Serialized state, presets and drag&drop keep the original
-// English names (they act as state keys), so names are mapped at render time
-// only and only when the UI language is Japanese.
+// KitsuneTone addition: when the UI language is Japanese, effect and category
+// names keep their original English text and gain a small Japanese reading
+// above it (furigana-style, via <ruby>). Serialized state, presets and
+// drag&drop always use the plain English names (they act as state keys), so
+// this is a pure display-layer annotation.
 (function () {
     'use strict';
     const active = (navigator.language || '').toLowerCase().startsWith('ja');
@@ -83,7 +84,7 @@
         'Basics': '基本',
         'Delay': 'ディレイ',
         'Dynamics': 'ダイナミクス',
-        'EQ': 'EQ',
+        'EQ': 'イコライザー',
         'Lo-Fi': 'ローファイ',
         'Modulation': 'モジュレーション',
         'Others': 'その他',
@@ -93,10 +94,39 @@
         'Spatial': '空間系',
         'Control': '制御'
     };
-    window.kitsuneLocalizedPluginName = function (name) {
-        return (active && names[name]) || name;
+
+    // Build "<ruby>English<rt>日本語</rt></ruby>" inside the element, or plain
+    // English text when inactive/unknown. Returns nothing; replaces content.
+    function applyRuby(element, englishName, reading) {
+        while (element.firstChild) { element.removeChild(element.firstChild); }
+        if (active && reading) {
+            const ruby = document.createElement('ruby');
+            ruby.className = 'kitsune-name';
+            ruby.appendChild(document.createTextNode(englishName));
+            const rt = document.createElement('rt');
+            rt.textContent = reading;
+            ruby.appendChild(rt);
+            element.appendChild(ruby);
+        } else {
+            element.appendChild(document.createTextNode(englishName));
+        }
+    }
+
+    window.kitsuneApplyPluginName = function (element, name) {
+        applyRuby(element, name, names[name]);
     };
-    window.kitsuneLocalizedCategoryName = function (name) {
-        return (active && categories[name]) || name;
+    window.kitsuneApplyCategoryName = function (element, name) {
+        applyRuby(element, name, categories[name]);
     };
+    // Plain-text fallbacks (English) for code paths that need a string.
+    window.kitsuneLocalizedPluginName = function (name) { return name; };
+    window.kitsuneLocalizedCategoryName = function (name) { return name; };
+
+    if (active && document.head) {
+        const style = document.createElement('style');
+        style.textContent =
+            'ruby.kitsune-name { ruby-position: over; }\n' +
+            'ruby.kitsune-name rt { font-size: 55%; opacity: 0.8; line-height: 1; }\n';
+        document.head.appendChild(style);
+    }
 })();
